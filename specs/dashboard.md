@@ -9,70 +9,50 @@ Dashboard can run in two modes:
 1. **Project-scoped** (default when in a project directory):
    ```bash
    cd ~/workspace/coffee
-   orange dashboard      # Shows only coffee/* tasks
+   orange      # Shows only coffee tasks
    ```
 
 2. **Global** (when not in project, or with `--all`):
    ```bash
    cd ~
-   orange dashboard      # Shows all tasks
-   orange dashboard --all  # Explicit global view
+   orange      # Shows all tasks
+   orange --all  # Explicit global view
    ```
-
-When launched via `orange start`, the dashboard pane is project-scoped to match the orchestrator's context.
 
 ## Layout
 
-**Project-scoped view:**
+Table format with columns:
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│ coffee                                    2 tasks       │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│ ● coffee/login-fix                    [working]    2m  │
-│   Fix OAuth redirect loop on mobile                     │
-│   > Self-review: checking error handling...             │
-│                                                         │
-│ ◉ coffee/password-reset               [needs_human] 15m│
-│   Implement password reset with email verification      │
-│   > Ready for human review                              │
-│                                                         │
-├─────────────────────────────────────────────────────────┤
-│ j/k navigate │ Enter attach │ p peek │ m merge │ q quit │
-└─────────────────────────────────────────────────────────┘
+ Orange Dashboard (all) [active]
+ Task                          Status       Activity
+────────────────────────────────────────────────────────
+ ● coffee/login-fix            working       2m ago
+ └ Fix OAuth redirect loop on mobile
+ ◉ coffee/password-reset       needs_human  15m ago
+ ✓ orange/dark-mode            done          1h ago
+ ✗ orange/broken-feature       failed        2h ago
+────────────────────────────────────────────────────────
+ j/k:nav  Enter:attach  l:log  m:merge  x:cancel  d:del  f:filter  q:quit
 ```
 
-**Global view (all projects):**
-```
-┌─────────────────────────────────────────────────────────┐
-│ Orange Dashboard (all)                    4 tasks       │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│ ● coffee/login-fix                    [working]    2m  │
-│   Fix OAuth redirect loop on mobile                     │
-│   > Self-review: checking error handling...             │
-│                                                         │
-│ ● orange/dark-mode                    [working]    5m  │
-│   Add dark mode support with system preference...       │
-│   > Implementing ThemeContext provider...               │
-│                                                         │
-│ ◉ coffee/password-reset               [needs_human] 15m│
-│   Implement password reset with email verification      │
-│   > Ready for human review                              │
-│                                                         │
-├─────────────────────────────────────────────────────────┤
-│ j/k navigate │ Enter attach │ p peek │ m merge │ q quit │
-└─────────────────────────────────────────────────────────┘
-```
+**Columns:**
+- Task: status icon + project/branch (or just branch if project-scoped)
+- Status: working/needs_human/stuck/done/failed/pending
+- Activity: relative time since last update (2m ago, 3h ago)
 
-## Legend
+**Selected row** shows description underneath.
 
-- `●` = agent active (working)
-- `◉` = review passed, ready for human (needs_human)
-- `⚠` = agent stuck, needs help (stuck)
-- `○` = idle (done/failed)
-- `[status]` = current status
-- Last line = recent agent output (via tmux capture-pane)
+## Status Icons
+
+| Icon | Status |
+|------|--------|
+| ● | working - agent active |
+| ◉ | needs_human - ready for review |
+| ⚠ | stuck - agent needs help |
+| ○ | pending - waiting to spawn |
+| ✓ | done - merged |
+| ✗ | failed - cancelled/errored |
 
 ## Keybindings
 
@@ -80,123 +60,29 @@ When launched via `orange start`, the dashboard pane is project-scoped to match 
 |-----|--------|
 | j/k | Navigate tasks |
 | Enter | Attach to task's tmux session |
-| p | Peek - show more agent output |
+| l | View output log (works for any task with log) |
 | m | Merge task (local merge + cleanup) |
 | x | Cancel task (cleanup) |
-| d | Delete task (remove task folder, only for done/failed tasks) |
+| d | Delete task (only done/failed) |
 | o | Open PR in browser |
 | f | Filter by status (cycle: all → active → done) |
 | q | Quit dashboard |
 
-## Implementation (pi-tui)
+## Session Handling
 
-```typescript
-import { TUI, Component } from '@mariozechner/pi-tui';
+- **Active tasks** (working/needs_human/stuck): Have live tmux session
+  - `Enter` attaches to session
+  - If session died unexpectedly, error suggests using `l` to view log
 
-interface Task {
-  id: string;
-  project: string;
-  branch: string;
-  status: 'pending' | 'working' | 'needs_human' | 'stuck' | 'done' | 'failed';
-  description: string;
-  lastOutput?: string;
-}
+- **Completed tasks** (done/failed): Session killed
+  - `l` views output.log captured during session
+  - `d` deletes task folder
 
-class TaskRow implements Component {
-  constructor(private task: Task, private selected: boolean) {}
+## Output Logging
 
-  render(width: number): string[] {
-    const icon = this.task.status === 'needs_human' ? '◉' :
-                 this.task.status === 'stuck' ? '⚠' :
-                 this.task.status === 'working' ? '●' : '○';
-    const status = `[${this.task.status}]`;
-    const name = `${this.task.project}/${this.task.branch}`;
-
-    return [
-      `${this.selected ? '>' : ' '} ${icon} ${name.padEnd(30)} ${status}`,
-      `    ${this.task.description.slice(0, width - 6)}`,
-      `    > ${this.task.lastOutput || '...'}`,
-      ''
-    ];
-  }
-}
-
-class Dashboard implements Component {
-  tasks: Task[] = [];
-  cursor = 0;
-
-  render(width: number): string[] {
-    const lines = [`Orange Dashboard                    ${this.tasks.length} tasks`, '─'.repeat(width)];
-    for (let i = 0; i < this.tasks.length; i++) {
-      lines.push(...new TaskRow(this.tasks[i], i === this.cursor).render(width));
-    }
-    lines.push('─'.repeat(width));
-    lines.push('j/k navigate │ Enter attach │ p peek │ m merge │ q quit');
-    return lines;
-  }
-
-  handleInput(key: string) {
-    if (key === 'j') this.cursor = Math.min(this.cursor + 1, this.tasks.length - 1);
-    if (key === 'k') this.cursor = Math.max(this.cursor - 1, 0);
-    // ... other handlers
-  }
-}
-```
-
-## Async Operations
-
-Pi-tui's `handleInput()` is synchronous. For non-blocking git operations:
-
-1. **Fire-and-forget** in input handler
-2. **Show loader** with temporary UI state
-3. **Call `requestRender()`** on completion
-
-```typescript
-class Dashboard implements Component {
-  private tui: TUI;
-  private pending = new Set<string>();  // track in-progress ops
-
-  handleInput(key: string) {
-    if (key === 'm' && !this.pending.has(this.selectedTask.id)) {
-      this.handleMerge(this.selectedTask);  // fire-and-forget, returns immediately
-    }
-  }
-
-  private async handleMerge(task: Task) {
-    this.pending.add(task.id);
-    task.uiStatus = 'merging';  // temporary display state
-    this.tui.requestRender();
-
-    try {
-      await this.app.taskMerge(task.id);  // async git fetch, merge, push
-    } catch (err) {
-      task.uiStatus = 'error';
-      task.error = err.message;
-    } finally {
-      this.pending.delete(task.id);
-    }
-
-    await this.reloadTasks();
-    this.tui.requestRender();
-  }
-}
-```
-
-**Cancellation** (optional): Use `CancellableLoader` with `AbortController` for long operations.
+All terminal output is captured to `~/orange/tasks/<project>/<branch>/output.log` using the `script` command. This persists after session ends.
 
 ## Polling
 
-```typescript
-// Watch task folders for changes
-const watcher = chokidar.watch('~/orange/tasks', { persistent: true });
-watcher.on('change', () => this.reloadTasks());
-
-// Capture agent output periodically
-setInterval(() => {
-  for (const task of this.tasks.filter(t => t.status === 'working')) {
-    const output = execSync(`tmux capture-pane -t "${task.project}/${task.branch}" -p | tail -1`);
-    task.lastOutput = output.toString().trim();
-  }
-  this.tui.requestRender();
-}, 5000);
-```
+- File watcher on `~/orange/tasks/` for TASK.md changes
+- Periodic refresh of task list from SQLite

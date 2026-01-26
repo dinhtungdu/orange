@@ -16,15 +16,18 @@ git checkout -b $branch origin/$default_branch
 # 3. Write .orange-task file for hook integration
 echo '{"id":"$TASK_ID"}' > .orange-task
 
-# 4. Create tmux session for task
+# 4. Create tmux session with output logging
 session_name="$project/$branch"
+log_file="~/orange/tasks/$project/$branch/output.log"
 tmux new-session -d -s "$session_name" -c "$workspace" \
-  "claude --prompt '$AGENT_PROMPT'"
+  "script -q -a $log_file bash -c 'claude --prompt \"$AGENT_PROMPT\"; exec $SHELL'"
 
 # 5. Update task metadata
 # - TASK.md: workspace, tmux_session
 # - history.jsonl: agent.spawned event
 ```
+
+**Shell fallback:** When agent exits, drops to user's shell (via `exec $SHELL`) so humans can review output and run commands. Output captured to `output.log` for later review.
 
 ## 2. Agent Prompt
 
@@ -42,12 +45,7 @@ Instructions:
 2. Implement the task
 3. Run tests and lint
 4. Self-review by spawning a review subagent:
-   claude --print --prompt "Review the changes in this branch. Check:
-   - Correctness: Does the implementation match the task requirements?
-   - Tests: Are there adequate tests? Do they pass?
-   - Style: Does the code follow project conventions in CLAUDE.md?
-   - Edge cases: Are error cases handled appropriately?
-   Respond with PASSED or FAILED with explanation."
+   claude --print --prompt "Review the changes in this branch..."
 5. If review finds issues → fix them → re-review
 6. Max 3 review attempts. If still failing, mark as stuck.
 7. Before stopping, write outcome to .orange-task:
@@ -83,54 +81,48 @@ Agent handles review internally:
 └──────────────────────────────────────────────────┘
 ```
 
-Benefits:
-- Agent keeps full context across fix iterations
-- No external review orchestration
-- Agent responsible for own quality
-
 ## 4. Completion Hook
 
 Agent writes outcome before stopping:
 
 ```bash
-# Agent writes to .orange-task before exiting
 echo '{"id":"abc123","outcome":"passed"}' > .orange-task
-# or
-echo '{"id":"abc123","outcome":"stuck","reason":"failed 3 review attempts"}' > .orange-task
 ```
 
 Claude's stop hook notifies orange:
 
 ```bash
 # ~/.claude/hooks/stop.sh
-#!/bin/bash
-# Orange stop hook - notifies orange when agent completes
-# Installed by: orange install
-
 if [[ -f .orange-task ]]; then
-  # Parse JSON without jq dependency (pure bash)
   TASK_ID=$(grep -o '"id":"[^"]*"' .orange-task | cut -d'"' -f4)
   OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-task | cut -d'"' -f4)
 
-  if [[ -n "$TASK_ID" ]]; then
-    if [[ "$OUTCOME" == "passed" ]]; then
-      orange task complete "$TASK_ID"
-    else
-      orange task stuck "$TASK_ID"
-    fi
+  if [[ "$OUTCOME" == "passed" ]]; then
+    orange task complete "$TASK_ID"
+  else
+    orange task stuck "$TASK_ID"
   fi
 fi
 ```
 
-`orange task complete` → status = `needs_human` (◉ ready)
-`orange task stuck` → status = `stuck` (⚠ needs help)
+- `orange task complete` → status = `needs_human` (◉ ready)
+- `orange task stuck` → status = `stuck` (⚠ needs help)
 
 ## 5. Human Review
 
-1. Dashboard shows task with ◉ (needs attention)
-2. Human attaches to task session (`Enter` in dashboard or `tmux attach -t orange/dark-mode`)
+1. Dashboard shows task needing attention
+2. Human options:
+   - `Enter` - attach to session (if still active)
+   - `l` - view output log (if session died or completed)
 3. Reviews changes, interacts with agent if needed
-4. Two options:
-   - **Local merge**: `m` in dashboard → merges to main, releases workspace, kills session
-   - **PR workflow**: agent/human runs `gh pr create`, merge on GitHub, then `m` to cleanup
-5. Workspace returned to pool, session killed, ready for next task
+4. Merge options:
+   - `m` in dashboard → merges to main, releases workspace, kills session
+   - PR workflow: merge on GitHub, then `m` to cleanup
+5. Workspace returned to pool, session killed
+
+## 6. Output Logging
+
+All terminal output captured to `~/orange/tasks/<project>/<branch>/output.log`:
+- Uses `script` command for full terminal capture
+- Persists after session ends
+- View with `orange task log <id>` or `l` in dashboard

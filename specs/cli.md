@@ -12,11 +12,13 @@ orange project remove <name>
 orange task create <branch> <description>
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
-orange task peek <task_id> [--lines N]
+orange task attach <task_id>        # Attach to running session
+orange task log <task_id>           # View output log
 orange task complete <task_id>      # Called by hook → needs_human
 orange task stuck <task_id>         # Called by hook → stuck
 orange task merge <task_id> [--strategy ff|merge]
 orange task cancel <task_id>
+orange task delete <task_id>        # Delete task folder (done/failed only)
 
 # Workspaces (project inferred from cwd)
 orange workspace init               # Create worktrees for current project
@@ -67,18 +69,7 @@ orange start
    - Pane 1: Dashboard TUI (project-scoped)
 5. Working directory is the project repo (orchestrator has full context)
 
-**Dashboard pane setup:**
-- Uses `process.argv[1]` to find the orange script path dynamically
-- Works with both alias (`bun run ~/workspace/orange/src/index.ts`) and compiled binary
-
 **If session exists:** Just attaches (no duplicate sessions).
-
-**If not in git repo:**
-```bash
-cd ~/Downloads
-orange start
-# Error: Not a git repository. Run from a project directory.
-```
 
 ## orange (no args) / orange dashboard
 
@@ -88,53 +79,38 @@ orange start
 - `--all` flag → always shows all tasks
 - `--project <name>` flag → shows specific project's tasks
 
-```bash
-cd ~/workspace/coffee
-orange                    # Shows coffee/* tasks only
-
-cd ~
-orange                    # Shows all tasks (global)
-orange dashboard --all    # Shows all tasks (explicit)
-orange dashboard --project coffee  # Shows coffee/* tasks
-```
-
 ## Task Commands
 
-### orange task create <branch> <description>
+### orange task attach <task_id>
 
-Creates a task for the current project.
-
-```bash
-cd ~/workspace/coffee
-orange task create fix-login "Fix OAuth redirect loop on mobile"
-# Output: Created task abc123 (coffee/fix-login)
-```
-
-### orange task list
-
-Lists tasks for current project (or all with `--all`).
+Attach to a running task's tmux session. Only works for active tasks (working, needs_human, stuck).
 
 ```bash
-orange task list                    # Current project only
-orange task list --all              # All projects
-orange task list --status working   # Filter by status
+orange task attach abc123
+# Attaches to tmux session, press Ctrl+b d to detach
 ```
 
-### orange task spawn <task_id>
+### orange task log <task_id>
 
-Spawns an agent for the task. Creates worktree on-demand if needed.
+View the output log for a task. Works for any task with an output.log file.
 
 ```bash
-orange task spawn abc123
-# 1. Creates worktree if none available (lazy init)
-# 2. Acquires workspace from pool
-# 3. Creates branch, starts tmux session with Claude
+orange task log abc123           # Show full log
+orange task log abc123 --lines 50  # Show last 50 lines
 ```
 
-**Lazy workspace initialization:**
-- First spawn for a project creates worktrees on-demand
-- Progress shown: "Creating workspace coffee--1..."
-- Subsequent spawns use existing pool
+All terminal output is captured to `~/orange/tasks/<project>/<branch>/output.log` during the session.
+
+### orange task delete <task_id>
+
+Delete a completed task's folder and database entry. Only works for done/failed tasks.
+
+```bash
+orange task delete abc123
+# Removes ~/orange/tasks/<project>/<branch>/ and db entry
+```
+
+Active tasks must be cancelled first (to release workspace/session).
 
 ## Task Merge Flow
 
@@ -159,44 +135,8 @@ gh pr view <branch> --json state,mergedAt
 
 ## Skills Installation
 
-Orange skills are installed via symlinks for easy development (changes reflect immediately).
-
 ```bash
-orange install  # Discovers and symlinks all skills
+orange install  # Symlinks skills to ~/.claude/skills/
 ```
 
-**How it works:**
-1. Scans `skills/` directory for subfolders containing `SKILL.md`
-2. Creates symlinks: `~/.claude/skills/orange-<skill-name>` → `skills/<skill-name>/`
-3. Installs the stop hook for agent completion notifications
-
-**Current skills:**
-- `orange-orchestrator` - Orchestrates parallel development tasks
-
-The skill file reflects the CWD-aware design - orchestrator doesn't need to specify project:
-
-```markdown
-## CLI Commands
-
-- `orange task create <branch> "<description>"` - Create task (project from cwd)
-- `orange task spawn <task_id>` - Spawn agent
-- `orange task list` - List tasks for current project
-- `orange task peek <task_id>` - See agent's terminal output
-
-## Example
-
-User: "Add dark mode and fix the settings page"
-
-```bash
-orange task create add-dark-mode "Add dark mode with system preference detection"
-# Output: Created task abc123
-
-orange task create fix-settings "Fix settings page layout on mobile"
-# Output: Created task def456
-
-orange task spawn abc123
-orange task spawn def456
-```
-
-"I've spawned two agents for this project. Check the dashboard pane or attach to their sessions."
-```
+Creates symlinks for easy development (changes reflect immediately).
