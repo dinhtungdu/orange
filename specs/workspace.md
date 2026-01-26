@@ -19,10 +19,12 @@ orange task spawn abc123
 # If pool exhausted: creates coffee--N (up to pool_size)
 ```
 
-Each workspace is a git worktree of the source repo:
+Each workspace is a git worktree of the source repo, created with detached HEAD:
 ```bash
-git -C /path/to/source worktree add ~/orange/workspaces/coffee--1 main
+git -C /path/to/source worktree add --detach ~/orange/workspaces/coffee--1 origin/main
 ```
+
+**Why detached?** Git doesn't allow the same branch to be checked out in multiple worktrees. Since the user runs `orange start` from the project directory (which has `main` checked out), we can't create worktrees that also checkout `main`. Using `--detach` at `origin/main` avoids this limitation.
 
 ## Pool Status
 
@@ -71,8 +73,8 @@ async function acquireWorkspace(project: string): Promise<string> {
 async function releaseWorkspace(workspace: string): Promise<void> {
   const release = await lockfile.lock(POOL_LOCK);
   try {
-    // Clean workspace
-    execSync(`git -C ${workspacePath} checkout main && git -C ${workspacePath} clean -fd`);
+    // Clean workspace - return to detached HEAD at origin/main
+    execSync(`git -C ${workspacePath} checkout origin/main && git -C ${workspacePath} clean -fd`);
 
     const pool = JSON.parse(fs.readFileSync(POOL_FILE, 'utf8'));
     pool.workspaces[workspace].status = 'available';

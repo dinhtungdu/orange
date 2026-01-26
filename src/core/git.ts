@@ -58,12 +58,11 @@ export class RealGit implements GitExecutor {
     }
   }
 
-  async createBranch(cwd: string, branch: string): Promise<void> {
-    const { exitCode, stderr } = await exec(
-      "git",
-      ["checkout", "-b", branch],
-      cwd
-    );
+  async createBranch(cwd: string, branch: string, startPoint?: string): Promise<void> {
+    const args = startPoint
+      ? ["checkout", "-b", branch, startPoint]
+      : ["checkout", "-b", branch];
+    const { exitCode, stderr } = await exec("git", args, cwd);
     if (exitCode !== 0) {
       throw new Error(`git checkout -b '${branch}' failed: ${stderr}`);
     }
@@ -121,9 +120,12 @@ export class RealGit implements GitExecutor {
   }
 
   async addWorktree(cwd: string, path: string, branch: string): Promise<void> {
+    // Use --detach to avoid "branch already checked out" error when creating
+    // worktrees for the same branch that's checked out in the main repo.
+    // We point at origin/<branch> to get the latest remote state.
     const { exitCode, stderr } = await exec(
       "git",
-      ["worktree", "add", path, branch],
+      ["worktree", "add", "--detach", path, `origin/${branch}`],
       cwd
     );
     if (exitCode !== 0) {
@@ -168,9 +170,10 @@ export class MockGit implements GitExecutor {
 
   /**
    * Initialize a mock repository with a default branch.
+   * Also adds origin/<branch> ref for release operations.
    */
   initRepo(cwd: string, defaultBranch: string = "main"): void {
-    this.branches.set(cwd, new Set([defaultBranch]));
+    this.branches.set(cwd, new Set([defaultBranch, `origin/${defaultBranch}`]));
     this.currentBranches.set(cwd, defaultBranch);
   }
 
@@ -190,7 +193,7 @@ export class MockGit implements GitExecutor {
     // No-op in mock
   }
 
-  async createBranch(cwd: string, branch: string): Promise<void> {
+  async createBranch(cwd: string, branch: string, _startPoint?: string): Promise<void> {
     let repoBranches = this.branches.get(cwd);
     if (!repoBranches) {
       repoBranches = new Set(["main"]);
@@ -240,10 +243,15 @@ export class MockGit implements GitExecutor {
     await mkdir(path, { recursive: true });
     this.worktrees.set(path, branch);
     
-    // Copy branches from source repo to worktree path
+    // Copy branches from source repo to worktree path, including origin refs
     const srcBranches = this.branches.get(cwd);
     if (srcBranches) {
-      this.branches.set(path, new Set(srcBranches));
+      const worktreeBranches = new Set(srcBranches);
+      // Add origin/ refs for any local branches
+      for (const b of srcBranches) {
+        worktreeBranches.add(`origin/${b}`);
+      }
+      this.branches.set(path, worktreeBranches);
       this.currentBranches.set(path, branch);
     }
   }

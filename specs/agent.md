@@ -8,12 +8,10 @@
 # 1. Acquire workspace from pool
 workspace=$(acquire_workspace $project)  # e.g., orange--1
 
-# 2. Reset workspace to base branch + create task branch
+# 2. Fetch and create task branch from origin
 cd $workspace
 git fetch origin
-git checkout $default_branch
-git reset --hard origin/$default_branch
-git checkout -b $branch
+git checkout -b $branch origin/$default_branch
 
 # 3. Write .orange-task file for hook integration
 echo '{"id":"$TASK_ID"}' > .orange-task

@@ -85,9 +85,9 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   log.debug("Setting up git branch", { workspacePath, branch: task.branch });
 
   await deps.git.fetch(workspacePath);
-  await deps.git.checkout(workspacePath, project.default_branch);
-  await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
-  await deps.git.createBranch(workspacePath, task.branch);
+  // Create feature branch directly from origin/<default_branch>
+  // Workspace is in detached HEAD state, so no need to checkout first
+  await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
 
   // Write .orange-task file for hook integration
   const orangeTaskFile = join(workspacePath, ".orange-task");

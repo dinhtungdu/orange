@@ -244,11 +244,12 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
     const workspacePath = join(getWorkspacesDir(deps), workspace);
     log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
-    // Try to checkout main, fall back to master if needed
+    // Checkout detached HEAD at origin/main (or origin/master)
+    // Worktrees are created detached, so there's no local main branch
     try {
-      await deps.git.checkout(workspacePath, "main");
+      await deps.git.checkout(workspacePath, "origin/main");
     } catch {
-      await deps.git.checkout(workspacePath, "master");
+      await deps.git.checkout(workspacePath, "origin/master");
     }
 
     await deps.git.clean(workspacePath);

@@ -102,8 +102,8 @@ export interface GitExecutor {
   checkout(cwd: string, branch: string): Promise<void>;
   /** Reset hard to a ref */
   resetHard(cwd: string, ref: string): Promise<void>;
-  /** Create a new branch from current HEAD */
-  createBranch(cwd: string, branch: string): Promise<void>;
+  /** Create a new branch, optionally from a start point (defaults to HEAD) */
+  createBranch(cwd: string, branch: string, startPoint?: string): Promise<void>;
   /** Delete a branch (local) */
   deleteBranch(cwd: string, branch: string): Promise<void>;
   /** Delete a remote branch */
