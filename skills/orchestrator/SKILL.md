@@ -80,6 +80,41 @@ orange task spawn ghi789
 - `done` - Task merged
 - `failed` - Task cancelled or errored
 
+## Handling Common Scenarios
+
+### Task gets stuck
+If a task shows `stuck` status, the agent gave up after 3 review attempts:
+```bash
+orange task peek <task_id> --lines 100  # See what went wrong
+```
+Inform the user and suggest: attach to session, help the agent, or cancel and retry.
+
+### Workspace pool exhausted
+If `orange task spawn` fails with "No available workspace", check pool status:
+```bash
+orange workspace list
+```
+Wait for a working task to complete, or ask user to increase pool_size.
+
+### Dependent tasks
+For tasks that MUST run sequentially (B depends on A):
+1. Create and spawn task A
+2. Wait for A to reach `needs_human` or `done`
+3. Then create and spawn task B
+
+### Canceling tasks
+```bash
+orange task cancel <task_id>  # Cancel single task
+```
+This releases the workspace and kills the tmux session.
+
+## Best Practices
+
+- **Start with 2-3 tasks** - Don't overwhelm the workspace pool (default size: 2)
+- **Check status regularly** - Use `orange task list` to monitor progress
+- **Keep user informed** - Report when tasks complete or need attention
+- **Read CLAUDE.md first** - Understand the project before breaking down tasks
+
 ## Notes
 
 - You are running in the project directory - you have access to CLAUDE.md, the codebase, etc.
@@ -87,3 +122,4 @@ orange task spawn ghi789
 - You don't need to orchestrate reviews - just monitor status
 - When tasks show `needs_human`, the user should review in the dashboard
 - The dashboard pane next to you shows tasks for this project
+- Use `orange task peek <id>` to see what an agent is doing without attaching
