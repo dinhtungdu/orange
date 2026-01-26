@@ -440,7 +440,7 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tmuxSession = `${task.project}/${task.branch}`;
   const { buildAgentPrompt } = await import("../../core/agent.js");
   const prompt = buildAgentPrompt(task, workspacePath);
-  const command = `claude --permission-mode bypassPermissions "${prompt.replace(/"/g, '\\"')}"`;
+  const command = `claude --dangerously-skip-permissions "${prompt.replace(/"/g, '\\"')}"`;
   const taskDir = getTaskDir(deps, task.project, task.branch);
   const logFile = join(taskDir, "output.log");
 
