@@ -20,7 +20,10 @@
 import { mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
+
+// Custom alphabet without - to avoid CLI parsing issues
+const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 8);
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
 import {
@@ -169,7 +172,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   const now = deps.clock.now();
-  const id = nanoid(8);
+  const id = nanoid();
 
   log.info("Creating task", { taskId: id, project: projectName, branch, description });
 
