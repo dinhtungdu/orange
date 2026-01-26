@@ -485,33 +485,25 @@ export class DashboardComponent implements Component {
         const color = STATUS_COLOR[task.status];
         const lastOutput = this.state.lastOutput.get(task.id) ?? "";
 
-        // Build the task line, truncating to fit width
-        const taskName = `${task.project}/${task.branch}`;
-        const prefix = ` ${icon} `;
-        const suffix = pending ? " [processing...]" : "";
-        const maxNameLen = width - prefix.length - suffix.length;
-        const truncatedName = taskName.length > maxNameLen
-          ? taskName.slice(0, maxNameLen - 1) + "…"
-          : taskName;
-
-        let line = prefix + truncatedName + suffix;
+        let line = ` ${icon} ${task.project}/${task.branch}`;
         line = color(line);
 
         if (pending) {
-          // suffix already added above, just need to color it
-          line = color(prefix + truncatedName) + chalk.yellow(suffix);
+          line += chalk.yellow(" [processing...]");
         }
 
         if (selected) {
-          // Pad to full width to make inverse look consistent
-          line = chalk.inverse(line.padEnd(width)) + chalk.reset("");
+          line = chalk.inverse(line);
         }
 
         lines.push(line);
 
         // Show description and last output for selected task
         if (selected) {
-          lines.push(chalk.gray(`   ${task.description}`));
+          const desc = task.description.length > width - 3
+            ? task.description.slice(0, width - 4) + "…"
+            : task.description;
+          lines.push(chalk.gray(`   ${desc}`));
           if (lastOutput) {
             lines.push(chalk.dim(`   > ${lastOutput.slice(0, width - 6)}`));
           }
@@ -522,11 +514,8 @@ export class DashboardComponent implements Component {
     // Footer with keybindings
     lines.push("");
     lines.push(chalk.dim("─".repeat(width)));
-    lines.push(
-      chalk.gray(
-        " j/k:navigate  Enter:attach  p:peek  m:merge  x:cancel  o:PR  f:filter  q:quit"
-      )
-    );
+    const keys = " j/k:nav  Enter:attach  p:peek  m:merge  x:cancel  f:filter  q:quit";
+    lines.push(chalk.gray(keys.length > width ? keys.slice(0, width - 1) + "…" : keys));
 
     return lines;
   }
