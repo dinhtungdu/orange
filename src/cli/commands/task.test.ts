@@ -1041,3 +1041,256 @@ describe("MockTmux availability", () => {
     expect(output).toContain("line 2");
   });
 });
+
+describe("task log command", () => {
+  let tempDir: string;
+  let deps: Deps;
+  let mockGit: MockGit;
+  let mockTmux: MockTmux;
+  let consoleLogs: string[];
+  let consoleErrors: string[];
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-test-"));
+    mockGit = new MockGit();
+    mockTmux = new MockTmux();
+
+    deps = {
+      tmux: mockTmux,
+      git: mockGit,
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      dataDir: tempDir,
+      logger: new NullLogger(),
+    };
+
+    const project: Project = {
+      name: "testproj",
+      path: "/path/to/testproj",
+      default_branch: "main",
+      pool_size: 2,
+    };
+    await saveProjects(deps, [project]);
+    await initWorkspacePool(deps, project);
+    mockGit.initRepo(join(tempDir, "workspaces", "testproj--1"), "main");
+
+    consoleLogs = [];
+    consoleErrors = [];
+    originalLog = console.log;
+    originalError = console.error;
+    originalExit = process.exit;
+    originalHome = process.env.HOME;
+    process.env.HOME = tempDir;
+    console.log = (...args: unknown[]) => {
+      consoleLogs.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      consoleErrors.push(args.map(String).join(" "));
+    };
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit;
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.log = originalLog;
+    console.error = originalError;
+    process.exit = originalExit;
+    process.env.HOME = originalHome;
+  });
+
+  async function setupClaudeHistory(branch: string, entries: object[]) {
+    const workspacePath = join(tempDir, "workspaces", "testproj--1");
+    const claudeProjectName = "-" + workspacePath.slice(1).replace(/\//g, "-");
+    const claudeDir = join(tempDir, ".claude", "projects", claudeProjectName);
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(claudeDir, { recursive: true });
+
+    const sessionId = "test-session-123";
+    const sessionsIndex = {
+      version: 1,
+      entries: [{
+        sessionId,
+        gitBranch: branch,
+        modified: "2024-01-15T10:00:00.000Z",
+      }],
+    };
+    await writeFile(join(claudeDir, "sessions-index.json"), JSON.stringify(sessionsIndex));
+    await writeFile(join(claudeDir, `${sessionId}.jsonl`), entries.map(e => JSON.stringify(e)).join("\n"));
+  }
+
+  test("displays user messages", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-test", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-test");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-test", [
+      { type: "user", message: { role: "user", content: "Hello, please help me with this task" } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0]).toContain("[user]");
+    expect(consoleLogs[0]).toContain("Hello, please help me with this task");
+  });
+
+  test("displays assistant text messages", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-assistant", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-assistant");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-assistant", [
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "I will help you with that" }] } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0]).toContain("[assistant]");
+    expect(consoleLogs[0]).toContain("I will help you with that");
+  });
+
+  test("displays tool calls with name and description", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-tool", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-tool");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-tool", [
+      { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Read", input: { file_path: "/src/index.ts" } }] } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0]).toContain("[tool]");
+    expect(consoleLogs[0]).toContain("Read");
+    expect(consoleLogs[0]).toContain("/src/index.ts");
+  });
+
+  test("skips queue-operation entries", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-skip", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-skip");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-skip", [
+      { type: "queue-operation", operation: "dequeue" },
+      { type: "user", message: { role: "user", content: "Real message" } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0]).not.toContain("queue-operation");
+    expect(consoleLogs[0]).toContain("[user]");
+  });
+
+  test("skips thinking blocks", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-thinking", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-thinking");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-thinking", [
+      { type: "assistant", message: { role: "assistant", content: [{ type: "thinking", thinking: "Let me think..." }] } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Here is my response" }] } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0]).not.toContain("thinking");
+    expect(consoleLogs[0]).toContain("Here is my response");
+  });
+
+  test("truncates long messages", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-truncate", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-truncate");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    const longMessage = "A".repeat(200);
+    await setupClaudeHistory("log-truncate", [
+      { type: "user", message: { role: "user", content: longMessage } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps);
+
+    expect(consoleLogs[0].length).toBeLessThan(100);
+    expect(consoleLogs[0]).toContain("...");
+  });
+
+  test("respects --lines option", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-lines", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-lines");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    await setupClaudeHistory("log-lines", [
+      { type: "user", message: { role: "user", content: "First message" } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Second message" }] } },
+      { type: "user", message: { role: "user", content: "Third message" } },
+    ]);
+    consoleLogs = [];
+
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId, "--lines", "2"]), deps);
+
+    expect(consoleLogs[0]).not.toContain("First message");
+    expect(consoleLogs[0]).toContain("Second message");
+    expect(consoleLogs[0]).toContain("Third message");
+  });
+
+  test("errors when task has no workspace", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-noworkspace", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-noworkspace");
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("no workspace");
+  });
+
+  test("errors when no Claude history found", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-nohistory", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "log-nohistory");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("No Claude conversation history found");
+  });
+});
