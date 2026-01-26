@@ -14,7 +14,7 @@ import type { Task } from "./types.js";
  * 1. Read CLAUDE.md for project context
  * 2. Implement the task
  * 3. Run tests and lint
- * 4. Self-review using claude --print subagent
+ * 4. Self-review using claude --print "prompt" subagent
  * 5. Fix issues and re-review (max 3 attempts)
  * 6. Write outcome to .orange-task before stopping
  */
@@ -32,7 +32,7 @@ Instructions:
 3. Implement the task as described
 4. Run tests and lint to verify your changes
 5. When complete, self-review by running a review subagent:
-   claude --print --prompt "Review the changes in this branch. Check:
+   claude --print "Review the changes in this branch. Check:
    - Correctness: Does the implementation match the task requirements?
    - Tests: Are there adequate tests? Do they pass?
    - Style: Does the code follow project conventions in CLAUDE.md?
@@ -81,7 +81,7 @@ If .orange-task shows outcome "stuck" or doesn't exist:
   2. Read CLAUDE.md for project context
   3. Implement/fix the task
   4. Run tests and lint
-  5. Self-review using: claude --print --prompt "Review the changes..."
+  5. Self-review using: claude --print "Review the changes..."
   6. Fix issues and re-review (max 3 attempts total)
   7. Write outcome to .orange-task before stopping
 
