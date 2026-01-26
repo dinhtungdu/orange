@@ -83,6 +83,7 @@ When launched via `orange start`, the dashboard pane is project-scoped to match 
 | p | Peek - show more agent output |
 | m | Merge task (local merge + cleanup) |
 | x | Cancel task (cleanup) |
+| d | Delete task (remove task folder, only for done/failed tasks) |
 | o | Open PR in browser |
 | f | Filter by status (cycle: all → active → done) |
 | q | Quit dashboard |

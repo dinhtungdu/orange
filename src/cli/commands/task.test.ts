@@ -793,6 +793,156 @@ describe("task cancel command", () => {
   });
 });
 
+describe("task delete command", () => {
+  let tempDir: string;
+  let deps: Deps;
+  let mockGit: MockGit;
+  let mockTmux: MockTmux;
+  let consoleLogs: string[];
+  let consoleErrors: string[];
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-test-"));
+    mockGit = new MockGit();
+    mockTmux = new MockTmux();
+
+    deps = {
+      tmux: mockTmux,
+      git: mockGit,
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      dataDir: tempDir,
+      logger: new NullLogger(),
+    };
+
+    const project: Project = {
+      name: "testproj",
+      path: "/path/to/testproj",
+      default_branch: "main",
+      pool_size: 2,
+    };
+    await saveProjects(deps, [project]);
+    await initWorkspacePool(deps, project);
+    mockGit.initRepo(join(tempDir, "workspaces", "testproj--1"), "main");
+    mockGit.initRepo("/path/to/testproj", "main");
+
+    consoleLogs = [];
+    consoleErrors = [];
+    originalLog = console.log;
+    originalError = console.error;
+    originalExit = process.exit;
+    console.log = (...args: unknown[]) => {
+      consoleLogs.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      consoleErrors.push(args.map(String).join(" "));
+    };
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit;
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.log = originalLog;
+    console.error = originalError;
+    process.exit = originalExit;
+  });
+
+  test("deletes done task, removes folder and db entry", async () => {
+    // Simulate branch being pushed to origin (add branch to source repo)
+    mockGit.branches.get("/path/to/testproj")!.add("delete-done");
+    // Create and complete a task
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "delete-done", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "delete-done");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "merge", taskId]), deps);
+    consoleLogs = [];
+
+    // Verify task exists before delete
+    let task = await loadTask(deps, "testproj", "delete-done");
+    expect(task).not.toBeNull();
+    expect(task!.status).toBe("done");
+
+    // Delete the task
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "delete", taskId]),
+      deps
+    );
+
+    // Verify task folder is gone
+    task = await loadTask(deps, "testproj", "delete-done");
+    expect(task).toBeNull();
+
+    // Verify task is removed from db
+    const tasks = await listTasks(deps, {});
+    expect(tasks.find(t => t.id === taskId)).toBeUndefined();
+
+    expect(consoleLogs[0]).toContain("deleted");
+  });
+
+  test("deletes failed task", async () => {
+    // Create and cancel a task (makes it failed)
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "delete-failed", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "delete-failed");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId]), deps);
+    consoleLogs = [];
+
+    // Delete the task
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "delete", taskId]),
+      deps
+    );
+
+    // Verify task is gone
+    const task = await loadTask(deps, "testproj", "delete-failed");
+    expect(task).toBeNull();
+    expect(consoleLogs[0]).toContain("deleted");
+  });
+
+  test("errors when deleting working task", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "delete-working", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "delete-working");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("Cannot delete");
+    expect(consoleErrors[0]).toContain("working");
+  });
+
+  test("errors when deleting pending task", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "delete-pending", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "delete-pending");
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("Cannot delete");
+    expect(consoleErrors[0]).toContain("pending");
+  });
+});
+
 describe("task peek command", () => {
   let tempDir: string;
   let deps: Deps;

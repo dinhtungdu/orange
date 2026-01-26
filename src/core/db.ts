@@ -191,6 +191,18 @@ export async function getTaskById(deps: Deps, id: string): Promise<Task | null> 
 }
 
 /**
+ * Delete a task from the database.
+ */
+export async function deleteTaskFromDb(deps: Deps, id: string): Promise<void> {
+  const db = await ensureDb(deps);
+
+  const stmt = db.prepare("DELETE FROM tasks WHERE id = $id");
+  stmt.run({ $id: id });
+
+  db.close();
+}
+
+/**
  * Internal rebuild function (used by ensureDb for auto-recovery).
  */
 async function rebuildDbInternal(deps: Deps): Promise<void> {

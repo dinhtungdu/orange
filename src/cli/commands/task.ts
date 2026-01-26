@@ -14,7 +14,7 @@
  * - orange task cancel <task_id>
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
@@ -24,7 +24,7 @@ import {
   appendHistory,
   getTaskDir,
 } from "../../core/state.js";
-import { listTasks, updateTaskInDb } from "../../core/db.js";
+import { listTasks, updateTaskInDb, deleteTaskFromDb } from "../../core/db.js";
 import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
@@ -108,12 +108,16 @@ export async function runTaskCommand(
       await cancelTask(parsed, deps);
       break;
 
+    case "delete":
+      await deleteTask(parsed, deps);
+      break;
+
     default:
       console.error(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|peek|complete|stuck|merge|cancel>"
+        "Usage: orange task <create|list|spawn|peek|complete|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -577,4 +581,48 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   log.info("Task cancelled", { taskId, from: previousStatus });
   console.log(`Task ${taskId} cancelled`);
+}
+
+/**
+ * Delete task permanently.
+ * Only allowed for done/failed tasks - active tasks must be cancelled first.
+ */
+async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task delete <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  log.info("Deleting task", { taskId });
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error("Task not found for delete", { taskId });
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Only allow deleting done/failed tasks
+  if (task.status !== "done" && task.status !== "failed") {
+    log.error("Cannot delete active task", { taskId, status: task.status });
+    console.error(`Cannot delete task '${taskId}' with status '${task.status}'`);
+    console.error("Only done or failed tasks can be deleted. Use 'orange task cancel' first.");
+    process.exit(1);
+  }
+
+  // Delete task folder
+  const taskDir = getTaskDir(deps, task.project, task.branch);
+  await rm(taskDir, { recursive: true, force: true });
+
+  // Remove from database
+  await deleteTaskFromDb(deps, taskId);
+
+  log.info("Task deleted", { taskId, project: task.project, branch: task.branch });
+  console.log(`Task ${taskId} deleted`);
 }

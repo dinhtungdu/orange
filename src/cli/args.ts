@@ -106,6 +106,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "stuck",
       "merge",
       "cancel",
+      "delete",
     ],
     workspace: ["init", "list"],
   };
@@ -151,6 +152,7 @@ Task Management (project inferred from cwd):
   orange task merge <task_id> [options] Merge and cleanup
     --strategy <ff|merge>             Merge strategy (default: ff)
   orange task cancel <task_id>        Cancel task
+  orange task delete <task_id>        Delete task (only done/failed tasks)
 
 Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project

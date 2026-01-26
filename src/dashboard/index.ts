@@ -301,6 +301,10 @@ export class DashboardComponent implements Component {
         this.cancelTask();
         break;
 
+      case "d":
+        this.deleteTask();
+        break;
+
       case "o":
         this.openPR();
         break;
@@ -436,6 +440,36 @@ export class DashboardComponent implements Component {
     });
   }
 
+  private deleteTask(): void {
+    const task = this.state.tasks[this.state.cursor];
+    if (!task || this.state.pendingOps.has(task.id)) return;
+
+    // Only allow deleting done/failed tasks
+    if (task.status !== "done" && task.status !== "failed") {
+      this.state.error = `Cannot delete task with status '${task.status}'. Use cancel first.`;
+      this.tui?.requestRender();
+      return;
+    }
+
+    this.state.pendingOps.add(task.id);
+
+    // Fire async delete
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "delete", task.id]), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.state.pendingOps.delete(task.id);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.state.error = `Delete failed: ${stderr.trim() || "Unknown error"}`;
+      }
+      await this.refreshTasks();
+      this.tui?.requestRender();
+    });
+  }
+
   private openPR(): void {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
@@ -514,7 +548,7 @@ export class DashboardComponent implements Component {
     // Footer with keybindings
     lines.push("");
     lines.push(chalk.dim("─".repeat(width)));
-    const keys = " j/k:nav  Enter:attach  p:peek  m:merge  x:cancel  f:filter  q:quit";
+    const keys = " j/k:nav  Enter:attach  p:peek  m:merge  x:cancel  d:delete  f:filter  q:quit";
     lines.push(chalk.gray(keys.length > width ? keys.slice(0, width - 1) + "…" : keys));
 
     return lines;
