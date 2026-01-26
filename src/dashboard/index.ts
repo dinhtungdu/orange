@@ -485,15 +485,26 @@ export class DashboardComponent implements Component {
         const color = STATUS_COLOR[task.status];
         const lastOutput = this.state.lastOutput.get(task.id) ?? "";
 
-        let line = ` ${icon} ${task.project}/${task.branch}`;
+        // Build the task line, truncating to fit width
+        const taskName = `${task.project}/${task.branch}`;
+        const prefix = ` ${icon} `;
+        const suffix = pending ? " [processing...]" : "";
+        const maxNameLen = width - prefix.length - suffix.length;
+        const truncatedName = taskName.length > maxNameLen
+          ? taskName.slice(0, maxNameLen - 1) + "…"
+          : taskName;
+
+        let line = prefix + truncatedName + suffix;
         line = color(line);
 
         if (pending) {
-          line += chalk.yellow(" [processing...]");
+          // suffix already added above, just need to color it
+          line = color(prefix + truncatedName) + chalk.yellow(suffix);
         }
 
         if (selected) {
-          line = chalk.inverse(line) + chalk.reset("");
+          // Pad to full width to make inverse look consistent
+          line = chalk.inverse(line.padEnd(width)) + chalk.reset("");
         }
 
         lines.push(line);
