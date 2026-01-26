@@ -7,9 +7,8 @@
  * - orange task create <branch> <description>
  * - orange task list [--status <status>] [--all]
  * - orange task spawn <task_id>
- * - orange task peek <task_id> [--lines N]  (quick view of running session)
  * - orange task attach <task_id>            (attach to running session)
- * - orange task log <task_id> [--lines N]   (view completed task output)
+ * - orange task log <task_id> [--lines N]   (view task output log)
  * - orange task complete <task_id>
  * - orange task stuck <task_id>
  * - orange task merge <task_id> [--strategy ff|merge]
@@ -93,10 +92,6 @@ export async function runTaskCommand(
       await spawnTask(parsed, deps);
       break;
 
-    case "peek":
-      await peekTask(parsed, deps);
-      break;
-
     case "complete":
       await completeTask(parsed, deps);
       break;
@@ -130,7 +125,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|peek|attach|log|complete|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|attach|log|complete|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -284,42 +279,6 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
-}
-
-/**
- * Peek at agent output.
- */
-async function peekTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange task peek <task_id> [--lines N]");
-    process.exit(1);
-  }
-
-  const taskId = parsed.args[0];
-  const lines = parseInt(parsed.options.lines as string) || 50;
-
-  // Find task
-  const tasks = await listTasks(deps, {});
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task) {
-    console.error(`Task '${taskId}' not found`);
-    process.exit(1);
-  }
-
-  if (!task.tmux_session) {
-    console.error(`Task '${taskId}' has no active session`);
-    process.exit(1);
-  }
-
-  // Use safe capture to handle case where session may have disappeared
-  const output = await deps.tmux.capturePaneSafe(task.tmux_session, lines);
-  if (output === null) {
-    console.error(`Session '${task.tmux_session}' no longer exists`);
-    console.error("The task's tmux session may have been terminated");
-    process.exit(1);
-  }
-
-  console.log(output);
 }
 
 /**

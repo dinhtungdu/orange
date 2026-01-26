@@ -289,10 +289,6 @@ export class DashboardComponent implements Component {
         this.attachToTask();
         break;
 
-      case "p":
-        this.peekTask();
-        break;
-
       case "m":
         this.mergeTask();
         break;
@@ -362,28 +358,6 @@ export class DashboardComponent implements Component {
       }
       this.tui?.start();
     });
-  }
-
-  private peekTask(): void {
-    const task = this.state.tasks[this.state.cursor];
-    if (!task?.tmux_session) return;
-
-    // Fire async peek using safe capture
-    this.deps.tmux.capturePaneSafe(task.tmux_session, 50)
-      .then((output) => {
-        if (output === null) {
-          this.state.error = `Session '${task.tmux_session}' no longer exists`;
-          this.tui?.requestRender();
-          return;
-        }
-        // Show in a temporary view
-        console.clear();
-        console.log(chalk.bold(`Task: ${task.project}/${task.branch}`));
-        console.log(chalk.dim("─".repeat(60)));
-        console.log(output);
-        console.log(chalk.dim("─".repeat(60)));
-        console.log(chalk.gray("Press any key to return..."));
-      });
   }
 
   /**
@@ -576,7 +550,7 @@ export class DashboardComponent implements Component {
     // Footer with keybindings
     lines.push("");
     lines.push(chalk.dim("─".repeat(width)));
-    const keys = " j/k:nav  Enter:attach  p:peek  l:log  m:merge  x:cancel  d:del  f:filter  q:quit";
+    const keys = " j/k:nav  Enter:attach  l:log  m:merge  x:cancel  d:del  f:filter  q:quit";
     lines.push(chalk.gray(keys.length > width ? keys.slice(0, width - 1) + "…" : keys));
 
     return lines;
