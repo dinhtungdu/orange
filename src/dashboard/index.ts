@@ -305,6 +305,10 @@ export class DashboardComponent implements Component {
         this.deleteTask();
         break;
 
+      case "l":
+        this.viewLog();
+        break;
+
       case "o":
         this.openPR();
         break;
@@ -470,6 +474,35 @@ export class DashboardComponent implements Component {
     });
   }
 
+  private viewLog(): void {
+    const task = this.state.tasks[this.state.cursor];
+    if (!task) return;
+
+    // Only show log for completed tasks
+    const completedStatuses: TaskStatus[] = ["done", "failed"];
+    if (!completedStatuses.includes(task.status)) {
+      this.state.error = `Task is ${task.status}. Use 'p' to peek or Enter to attach to active tasks.`;
+      this.tui?.requestRender();
+      return;
+    }
+
+    // Exit TUI and show log using less
+    this.tui?.stop();
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "log", task.id]), {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+
+    proc.exited.then(async () => {
+      // Restart TUI after viewing
+      if (this.tui) {
+        await this.init(this.tui, { project: this.state.projectFilter ?? undefined });
+        this.tui.start();
+      }
+    });
+  }
+
   private openPR(): void {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
@@ -548,7 +581,7 @@ export class DashboardComponent implements Component {
     // Footer with keybindings
     lines.push("");
     lines.push(chalk.dim("─".repeat(width)));
-    const keys = " j/k:nav  Enter:attach  p:peek  m:merge  x:cancel  d:delete  f:filter  q:quit";
+    const keys = " j/k:nav  Enter:attach  p:peek  l:log  m:merge  x:cancel  d:del  f:filter  q:quit";
     lines.push(chalk.gray(keys.length > width ? keys.slice(0, width - 1) + "…" : keys));
 
     return lines;

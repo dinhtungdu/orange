@@ -7,14 +7,19 @@
  * - orange task create <branch> <description>
  * - orange task list [--status <status>] [--all]
  * - orange task spawn <task_id>
- * - orange task peek <task_id> [--lines N]
+ * - orange task peek <task_id> [--lines N]  (quick view of running session)
+ * - orange task attach <task_id>            (attach to running session)
+ * - orange task log <task_id> [--lines N]   (view completed task output)
  * - orange task complete <task_id>
  * - orange task stuck <task_id>
  * - orange task merge <task_id> [--strategy ff|merge]
  * - orange task cancel <task_id>
+ * - orange task delete <task_id>
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
@@ -112,12 +117,20 @@ export async function runTaskCommand(
       await deleteTask(parsed, deps);
       break;
 
+    case "attach":
+      await attachTask(parsed, deps);
+      break;
+
+    case "log":
+      await logTask(parsed, deps);
+      break;
+
     default:
       console.error(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|peek|complete|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|peek|attach|log|complete|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -307,6 +320,99 @@ async function peekTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   console.log(output);
+}
+
+/**
+ * Attach to task's tmux session.
+ * Only works for active tasks (working, needs_human, stuck).
+ */
+async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task attach <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Check task has an active session
+  const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+  if (!activeStatuses.includes(task.status)) {
+    console.error(`Task '${taskId}' is ${task.status}, not active`);
+    console.error("Use 'orange task log <id>' to view completed task output");
+    process.exit(1);
+  }
+
+  if (!task.tmux_session) {
+    console.error(`Task '${taskId}' has no session`);
+    process.exit(1);
+  }
+
+  // Check session exists
+  const exists = await deps.tmux.sessionExists(task.tmux_session);
+  if (!exists) {
+    console.error(`Session '${task.tmux_session}' no longer exists`);
+    process.exit(1);
+  }
+
+  // Attach to session - this replaces the current process
+  const proc = Bun.spawn(["tmux", "attach-session", "-t", task.tmux_session], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  await proc.exited;
+}
+
+/**
+ * View task's output log.
+ * Works for completed/cancelled tasks where session is no longer active.
+ */
+async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task log <task_id> [--lines N]");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+  const lines = parseInt(parsed.options.lines as string) || 0; // 0 means all
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Get log file path
+  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const logFile = join(taskDir, "output.log");
+
+  if (!existsSync(logFile)) {
+    console.error(`No output log found for task '${taskId}'`);
+    console.error(`Expected: ${logFile}`);
+    process.exit(1);
+  }
+
+  // Read and output
+  const content = await readFile(logFile, "utf-8");
+  
+  if (lines > 0) {
+    // Show last N lines
+    const allLines = content.split("\n");
+    const lastLines = allLines.slice(-lines);
+    console.log(lastLines.join("\n"));
+  } else {
+    console.log(content);
+  }
 }
 
 /**

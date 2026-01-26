@@ -198,7 +198,7 @@ describe("Dashboard Component", () => {
     // Check footer has key hints
     expect(output).toContain("j/k");
     expect(output).toContain("Enter");
-    expect(output).toContain("quit");
+    expect(output).toContain("q:");
   });
 
   test("cursor navigation with j/k keys", async () => {

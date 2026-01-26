@@ -145,8 +145,11 @@ Task Management (project inferred from cwd):
     --status <status>                 Filter by status
     --all                             Show all projects' tasks
   orange task spawn <task_id>         Spawn agent for task
-  orange task peek <task_id> [options] Show agent output
+  orange task peek <task_id> [options] Quick view of running task output
     --lines <n>                       Number of lines (default: 50)
+  orange task attach <task_id>        Attach to task's tmux session
+  orange task log <task_id> [options] View completed task's output log
+    --lines <n>                       Last N lines (default: all)
   orange task complete <task_id>      Mark task complete (hook)
   orange task stuck <task_id>         Mark task stuck (hook)
   orange task merge <task_id> [options] Merge and cleanup
