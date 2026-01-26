@@ -43,6 +43,10 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async newSession(name: string, cwd: string, command: string): Promise<void> {
+    // Wrap command to keep pane open after exit, so humans can review agent output.
+    // Uses bash -c with trap to ensure remain-on-exit is set before command runs.
+    const wrappedCommand = `bash -c 'tmux set-option remain-on-exit on; ${command.replace(/'/g, "'\\''")}'`;
+
     const { exitCode, stderr } = await exec("tmux", [
       "new-session",
       "-d",
@@ -50,7 +54,7 @@ export class RealTmux implements TmuxExecutor {
       name,
       "-c",
       cwd,
-      command,
+      wrappedCommand,
     ]);
 
     if (exitCode !== 0) {
