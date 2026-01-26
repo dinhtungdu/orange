@@ -29,6 +29,19 @@ import { acquireWorkspace, releaseWorkspace } from "../../core/workspace.js";
 import { buildAgentPrompt } from "../../core/agent.js";
 
 /**
+ * Escape a string for use in a shell double-quoted context.
+ * Handles: " $ ` \ and newlines
+ */
+function shellEscape(str: string): string {
+  return str
+    .replace(/\\/g, "\\\\")  // Escape backslashes first
+    .replace(/"/g, '\\"')     // Escape double quotes
+    .replace(/\$/g, "\\$")    // Escape dollar signs
+    .replace(/`/g, "\\`")     // Escape backticks
+    .replace(/\n/g, "\\n");   // Escape newlines
+}
+
+/**
  * Run a task subcommand.
  */
 export async function runTaskCommand(
@@ -220,7 +233,7 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Create tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
   const prompt = buildAgentPrompt(task, workspacePath);
-  const command = `claude --prompt "${prompt.replace(/"/g, '\\"')}"`;
+  const command = `claude --prompt "${shellEscape(prompt)}"`;
 
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
 

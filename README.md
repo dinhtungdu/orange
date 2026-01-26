@@ -63,7 +63,7 @@ orange workspace list
 ### Session Management
 ```bash
 orange start    # Start orchestrator session
-orange install  # Install orchestrator skill
+orange install  # Install orchestrator skill and stop hook
 ```
 
 ## Task Status Flow

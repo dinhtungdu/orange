@@ -203,15 +203,20 @@ class DashboardComponent implements Component {
     if (!task?.tmux_session) return;
 
     // Fire async peek
-    this.deps.tmux.capturePane(task.tmux_session, 50).then((output) => {
-      // Show in a temporary view
-      console.clear();
-      console.log(chalk.bold(`Task: ${task.project}/${task.branch}`));
-      console.log(chalk.dim("─".repeat(60)));
-      console.log(output);
-      console.log(chalk.dim("─".repeat(60)));
-      console.log(chalk.gray("Press any key to return..."));
-    });
+    this.deps.tmux.capturePane(task.tmux_session, 50)
+      .then((output) => {
+        // Show in a temporary view
+        console.clear();
+        console.log(chalk.bold(`Task: ${task.project}/${task.branch}`));
+        console.log(chalk.dim("─".repeat(60)));
+        console.log(output);
+        console.log(chalk.dim("─".repeat(60)));
+        console.log(chalk.gray("Press any key to return..."));
+      })
+      .catch((err) => {
+        this.state.error = `Failed to peek: ${err.message}`;
+        this.tui?.requestRender();
+      });
   }
 
   private mergeTask(): void {
@@ -226,9 +231,14 @@ class DashboardComponent implements Component {
       stderr: "pipe",
     });
 
-    proc.exited.then(() => {
+    proc.exited.then(async (exitCode) => {
       this.state.pendingOps.delete(task.id);
-      this.refreshTasks().then(() => this.tui?.requestRender());
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.state.error = `Merge failed: ${stderr.trim() || "Unknown error"}`;
+      }
+      await this.refreshTasks();
+      this.tui?.requestRender();
     });
   }
 
@@ -244,9 +254,14 @@ class DashboardComponent implements Component {
       stderr: "pipe",
     });
 
-    proc.exited.then(() => {
+    proc.exited.then(async (exitCode) => {
       this.state.pendingOps.delete(task.id);
-      this.refreshTasks().then(() => this.tui?.requestRender());
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.state.error = `Cancel failed: ${stderr.trim() || "Unknown error"}`;
+      }
+      await this.refreshTasks();
+      this.tui?.requestRender();
     });
   }
 
