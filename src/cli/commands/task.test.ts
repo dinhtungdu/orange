@@ -12,7 +12,13 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Deps, Project } from "../../core/types.js";
+import type {
+  Deps,
+  Project,
+  TaskCreatedEvent,
+  StatusChangedEvent,
+  AgentStoppedEvent,
+} from "../../core/types.js";
 import { MockGit } from "../../core/git.js";
 import { MockTmux } from "../../core/tmux.js";
 import { MockClock } from "../../core/clock.js";
@@ -133,8 +139,9 @@ describe("task create command", () => {
     const history = await loadHistory(deps, "testproj", "feature-y");
     expect(history).toHaveLength(1);
     expect(history[0].type).toBe("task.created");
-    expect((history[0] as any).project).toBe("testproj");
-    expect((history[0] as any).branch).toBe("feature-y");
+    const createdEvent = history[0] as TaskCreatedEvent;
+    expect(createdEvent.project).toBe("testproj");
+    expect(createdEvent.branch).toBe("feature-y");
   });
 
   test("adds task to SQLite index", async () => {
@@ -402,7 +409,7 @@ describe("task spawn command", () => {
     const history = await loadHistory(deps, "testproj", "spawn-history");
     expect(history.length).toBeGreaterThanOrEqual(3); // created + spawned + status.changed
     expect(history.some(e => e.type === "agent.spawned")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as any).to === "working")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "working")).toBe(true);
   });
 
   test("errors when task not found", async () => {
@@ -512,8 +519,8 @@ describe("task complete command", () => {
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "complete", taskId]), deps);
 
     const history = await loadHistory(deps, "testproj", "complete-history");
-    expect(history.some(e => e.type === "agent.stopped" && (e as any).outcome === "passed")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as any).to === "needs_human")).toBe(true);
+    expect(history.some(e => e.type === "agent.stopped" && (e as AgentStoppedEvent).outcome === "passed")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "needs_human")).toBe(true);
   });
 });
 
@@ -687,7 +694,7 @@ describe("task merge command", () => {
 
     const history = await loadHistory(deps, "testproj", "merge-history");
     expect(history.some(e => e.type === "task.merged")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as any).to === "done")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "done")).toBe(true);
   });
 });
 
@@ -774,7 +781,7 @@ describe("task cancel command", () => {
 
     const history = await loadHistory(deps, "testproj", "cancel-history");
     expect(history.some(e => e.type === "task.cancelled")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as any).to === "failed")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "failed")).toBe(true);
   });
 });
 
