@@ -106,6 +106,8 @@ export interface GitExecutor {
   addWorktree(cwd: string, path: string, branch: string): Promise<void>;
   /** Remove worktree */
   removeWorktree(cwd: string, path: string): Promise<void>;
+  /** Get current commit hash (short or full) */
+  getCommitHash(cwd: string, short?: boolean): Promise<string>;
 }
 
 /**

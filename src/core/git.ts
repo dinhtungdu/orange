@@ -126,6 +126,17 @@ export class RealGit implements GitExecutor {
       throw new Error(`git worktree remove failed: ${stderr}`);
     }
   }
+
+  async getCommitHash(cwd: string, short: boolean = true): Promise<string> {
+    const args = short
+      ? ["rev-parse", "--short", "HEAD"]
+      : ["rev-parse", "HEAD"];
+    const { stdout, exitCode, stderr } = await exec("git", args, cwd);
+    if (exitCode !== 0) {
+      throw new Error(`git rev-parse HEAD failed: ${stderr}`);
+    }
+    return stdout.trim();
+  }
 }
 
 /**
@@ -211,6 +222,11 @@ export class MockGit implements GitExecutor {
 
   async removeWorktree(_cwd: string, path: string): Promise<void> {
     this.worktrees.delete(path);
+  }
+
+  async getCommitHash(_cwd: string, short: boolean = true): Promise<string> {
+    // Return a mock commit hash
+    return short ? "abc1234" : "abc1234567890abcdef1234567890abcdef12345";
   }
 
   /**

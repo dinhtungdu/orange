@@ -392,8 +392,8 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   await deps.git.checkout(project.path, project.default_branch);
   await deps.git.merge(project.path, task.branch);
 
-  // Get commit hash (mock for now)
-  const commitHash = "abc123"; // TODO: Get actual commit hash
+  // Get commit hash after merge
+  const commitHash = await deps.git.getCommitHash(project.path);
 
   // Release workspace
   if (task.workspace) {
