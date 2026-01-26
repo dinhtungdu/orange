@@ -205,6 +205,10 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   log.info("Task created", { taskId: id, project: projectName, branch });
   console.log(`Created task ${id} (${projectName}/${branch})`);
+
+  // Auto-spawn agent
+  await spawnTaskById(deps, id);
+  console.log(`Spawned agent in ${projectName}/${branch}`);
 }
 
 /**
