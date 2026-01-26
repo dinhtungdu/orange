@@ -15,17 +15,18 @@ git checkout $default_branch
 git reset --hard origin/$default_branch
 git checkout -b $branch
 
-# 3. Create tmux session for task
+# 3. Write .orange-task file for hook integration
+echo '{"id":"$TASK_ID"}' > .orange-task
+
+# 4. Create tmux session for task
 session_name="$project/$branch"
 tmux new-session -d -s "$session_name" -c "$workspace" \
   "claude --prompt '$AGENT_PROMPT'"
 
-# 4. Update task metadata
+# 5. Update task metadata
 # - TASK.md: workspace, tmux_session
 # - history.jsonl: agent.spawned event
 ```
-
-Writes `.orange-task` file in workspace with task ID for hook.
 
 ## 2. Agent Prompt
 
@@ -42,17 +43,24 @@ Instructions:
 1. Read CLAUDE.md for project context
 2. Implement the task
 3. Run tests and lint
-4. Self-review using Task tool:
-   - Spawn subagent with: subagent_type="Explore" or custom reviewer
-   - Prompt: "Review changes on this branch. Check: tests pass, no bugs, code style, matches requirements."
+4. Self-review by spawning a review subagent:
+   claude --print --prompt "Review the changes in this branch. Check:
+   - Correctness: Does the implementation match the task requirements?
+   - Tests: Are there adequate tests? Do they pass?
+   - Style: Does the code follow project conventions in CLAUDE.md?
+   - Edge cases: Are error cases handled appropriately?
+   Respond with PASSED or FAILED with explanation."
 5. If review finds issues → fix them → re-review
 6. Max 3 review attempts. If still failing, mark as stuck.
 7. Before stopping, write outcome to .orange-task:
-   - Passed: echo '{"id":"$TASK_ID","outcome":"passed"}' > .orange-task
-   - Stuck: echo '{"id":"$TASK_ID","outcome":"stuck","reason":"..."}' > .orange-task
+   - Passed: {"id":"$TASK_ID","outcome":"passed"}
+   - Stuck: {"id":"$TASK_ID","outcome":"stuck","reason":"..."}
 8. Only stop when review passes OR you're stuck.
 
-Do not stop until review passes or you've exhausted attempts.
+Important:
+- Commit changes with descriptive messages
+- Do not push - merge handled by orchestrator
+- Write .orange-task BEFORE stopping so hook can read outcome
 ```
 
 ## 3. Self-Review Loop
@@ -98,13 +106,20 @@ Claude's stop hook notifies orange:
 ```bash
 # ~/.claude/hooks/stop.sh
 #!/bin/bash
+# Orange stop hook - notifies orange when agent completes
+# Installed by: orange install
+
 if [[ -f .orange-task ]]; then
-  TASK_ID=$(jq -r .id .orange-task)
-  OUTCOME=$(jq -r .outcome .orange-task)
-  if [[ "$OUTCOME" == "passed" ]]; then
-    orange task complete "$TASK_ID"
-  else
-    orange task stuck "$TASK_ID"
+  # Parse JSON without jq dependency (pure bash)
+  TASK_ID=$(grep -o '"id":"[^"]*"' .orange-task | cut -d'"' -f4)
+  OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-task | cut -d'"' -f4)
+
+  if [[ -n "$TASK_ID" ]]; then
+    if [[ "$OUTCOME" == "passed" ]]; then
+      orange task complete "$TASK_ID"
+    else
+      orange task stuck "$TASK_ID"
+    fi
   fi
 fi
 ```

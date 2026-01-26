@@ -394,7 +394,20 @@ Per specs/architecture.md:
 
 ## Known Issues
 
-None currently.
+### Issue 1: Stop hook requires `jq` (Fixed)
+- **Problem**: Stop hook used `jq` to parse JSON but `jq` may not be installed
+- **Solution**: Use pure bash JSON parsing with grep/cut
+- **Status**: 🟢 Fixed in specs, pending code update
+
+### Issue 2: Hardcoded path in start.ts (Fixed)
+- **Problem**: Dashboard pane command used hardcoded `~/workspace/orange/src/index.ts`
+- **Solution**: Use `process.argv[1]` to get the actual script path dynamically
+- **Status**: 🟢 Fixed in specs, pending code update
+
+### Issue 3: Agent prompt references non-existent "Task tool" (Fixed)
+- **Problem**: Prompt told agent to use "Task tool" for review subagent, which doesn't exist
+- **Solution**: Use `claude --print --prompt "..."` to spawn review subagent
+- **Status**: 🟢 Fixed in specs, pending code update
 
 ---
 
@@ -408,3 +421,4 @@ All planned tasks complete! ✅
 4. ~~End-to-end testing with real git repos~~ ✅
 5. ~~Dashboard rendering tests~~ ✅
 6. ~~Performance optimizations~~ ✅
+7. 🟡 **Fix known issues** - Stop hook, hardcoded path, agent prompt

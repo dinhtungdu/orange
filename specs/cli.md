@@ -59,12 +59,17 @@ orange start
 ```
 
 **What happens:**
-1. Detects git root, infers project name from folder
-2. Auto-registers project in `projects.json` if not exists (pool_size=2)
-3. Creates/attaches tmux session `coffee-orchestrator`
+1. Checks tmux is available (with helpful install instructions if not)
+2. Detects git root, infers project name from folder
+3. Auto-registers project in `projects.json` if not exists (pool_size=2)
+4. Creates/attaches tmux session `coffee-orchestrator`
    - Pane 0: Claude Code (with orange skill)
    - Pane 1: Dashboard TUI (project-scoped)
-4. Working directory is the project repo (orchestrator has full context)
+5. Working directory is the project repo (orchestrator has full context)
+
+**Dashboard pane setup:**
+- Uses `process.argv[1]` to find the orange script path dynamically
+- Works with both alias (`bun run ~/workspace/orange/src/index.ts`) and compiled binary
 
 **If session exists:** Just attaches (no duplicate sessions).
 

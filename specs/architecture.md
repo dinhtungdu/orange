@@ -195,7 +195,7 @@ orange start
 | Package | Purpose |
 |---------|---------|
 | `@mariozechner/pi-tui` | TUI framework |
-| `better-sqlite3` | SQLite index cache |
+| `bun:sqlite` | SQLite index cache (Bun built-in) |
 | `chokidar` | File watching (task folders) |
 | `chalk` | Terminal colors |
 | `gray-matter` | TASK.md frontmatter parsing |
