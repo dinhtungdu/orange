@@ -50,14 +50,53 @@ Important:
 }
 
 /**
+ * Build the respawn prompt for a task.
+ *
+ * Different from initial spawn - instructs agent to:
+ * 1. Check current state (.orange-task file)
+ * 2. If already passed review, escalate to human
+ * 3. Otherwise continue from where it left off
+ */
+export function buildRespawnPrompt(task: Task, workspacePath: string): string {
+  return `You are resuming work on task: ${task.description}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Worktree: ${workspacePath}
+
+FIRST: Check current state by reading .orange-task file.
+
+If .orange-task shows outcome "passed":
+- The task already passed agent review
+- Write {"id":"${task.id}","outcome":"needs_human","reason":"Passed review, ready for human"} to .orange-task
+- Stop immediately - human will review and merge
+
+If .orange-task shows outcome "stuck" or doesn't exist:
+- Continue with the task implementation
+- Follow the standard workflow:
+  1. Read CLAUDE.md for project context
+  2. Implement/fix the task
+  3. Run tests and lint
+  4. Self-review using: claude --print --prompt "Review the changes..."
+  5. Fix issues and re-review (max 3 attempts total)
+  6. Write outcome to .orange-task before stopping
+
+Important:
+- Commit changes with descriptive messages
+- Keep commits atomic and focused
+- Do not push - merge handled by orchestrator
+- Write .orange-task BEFORE stopping`;
+}
+
+/**
  * Parse the agent task outcome from .orange-task file content.
  */
 export function parseAgentOutcome(
   content: string
-): { id: string; outcome: "passed" | "stuck"; reason?: string } | null {
+): { id: string; outcome: "passed" | "stuck" | "needs_human"; reason?: string } | null {
   try {
     const data = JSON.parse(content);
-    if (typeof data.id === "string" && (data.outcome === "passed" || data.outcome === "stuck")) {
+    if (typeof data.id === "string" && (data.outcome === "passed" || data.outcome === "stuck" || data.outcome === "needs_human")) {
       return {
         id: data.id,
         outcome: data.outcome,
