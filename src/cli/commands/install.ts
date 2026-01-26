@@ -9,7 +9,7 @@ import { mkdir, symlink, writeFile, chmod, readFile, unlink, lstat } from "node:
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
-const SKILLS_SOURCE = join(import.meta.dir, "../../../skills");
+const SKILLS_SOURCE = join(import.meta.dir, "../../../skills/orchestrator");
 const SKILL_DEST = join(homedir(), ".claude/skills/orange");
 const SKILL_DEST_DIR = dirname(SKILL_DEST);
 
