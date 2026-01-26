@@ -157,13 +157,21 @@ gh pr view <branch> --json state,mergedAt
 #     - history.jsonl: task.merged event
 ```
 
-## Orchestrator Skill
+## Skills Installation
 
-Installed globally via symlink.
+Orange skills are installed via symlinks for easy development (changes reflect immediately).
 
 ```bash
-orange install  # Symlinks skills/ → ~/.claude/skills/orange
+orange install  # Discovers and symlinks all skills
 ```
+
+**How it works:**
+1. Scans `skills/` directory for subfolders containing `SKILL.md`
+2. Creates symlinks: `~/.claude/skills/orange-<skill-name>` → `skills/<skill-name>/`
+3. Installs the stop hook for agent completion notifications
+
+**Current skills:**
+- `orange-orchestrator` - Orchestrates parallel development tasks
 
 The skill file reflects the CWD-aware design - orchestrator doesn't need to specify project:
 

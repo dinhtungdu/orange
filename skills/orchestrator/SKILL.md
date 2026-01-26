@@ -1,5 +1,5 @@
 ---
-name: orchestrator
+name: orange-orchestrator
 description: Orchestrates parallel development tasks using Orange. Use when breaking down complex software requests into independent tasks, spawning worker agents, or monitoring task progress across branches.
 ---
 

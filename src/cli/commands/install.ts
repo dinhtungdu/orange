@@ -1,17 +1,20 @@
 /**
- * Install command - installs the orchestrator skill and stop hook.
+ * Install command - installs Orange skills and stop hook.
  *
- * - Symlinks the skills folder to ~/.claude/skills/orange (dev changes reflect immediately)
+ * - Symlinks each skill folder to ~/.claude/skills/<skill-name> (dev changes reflect immediately)
  * - Installs the stop hook to ~/.claude/hooks/stop.sh
+ *
+ * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
+ * is symlinked as a separate skill (e.g., skills/orchestrator -> ~/.claude/skills/orange-orchestrator).
  */
 
-import { mkdir, symlink, writeFile, chmod, readFile, unlink, lstat } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { mkdir, symlink, writeFile, chmod, readFile, unlink, lstat, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 
-const SKILLS_SOURCE = join(import.meta.dir, "../../../skills/orchestrator");
-const SKILL_DEST = join(homedir(), ".claude/skills/orange");
-const SKILL_DEST_DIR = dirname(SKILL_DEST);
+const SKILLS_DIR = join(import.meta.dir, "../../../skills");
+const SKILLS_DEST_DIR = join(homedir(), ".claude/skills");
 
 const HOOKS_DIR = join(homedir(), ".claude/hooks");
 const STOP_HOOK_PATH = join(HOOKS_DIR, "stop.sh");
@@ -42,25 +45,53 @@ fi
 `;
 
 /**
- * Run the install command.
+ * Install a single skill by creating a symlink.
  */
-export async function runInstallCommand(): Promise<void> {
-  // Create destination directories
-  await mkdir(SKILL_DEST_DIR, { recursive: true });
-  await mkdir(HOOKS_DIR, { recursive: true });
+async function installSkill(skillName: string, sourcePath: string): Promise<void> {
+  const destPath = join(SKILLS_DEST_DIR, `orange-${skillName}`);
 
   // Remove existing symlink/file if it exists
   try {
-    const stats = await lstat(SKILL_DEST);
-    // Remove existing file or symlink
-    await unlink(SKILL_DEST);
+    await lstat(destPath);
+    await unlink(destPath);
   } catch {
     // File doesn't exist, that's fine
   }
 
-  // Create symlink to skills folder
-  await symlink(SKILLS_SOURCE, SKILL_DEST, "dir");
-  console.log(`Symlinked skills folder to ${SKILL_DEST}`);
+  // Create symlink
+  await symlink(sourcePath, destPath, "dir");
+  console.log(`Installed skill: orange-${skillName}`);
+}
+
+/**
+ * Run the install command.
+ */
+export async function runInstallCommand(): Promise<void> {
+  // Create destination directories
+  await mkdir(SKILLS_DEST_DIR, { recursive: true });
+  await mkdir(HOOKS_DIR, { recursive: true });
+
+  // Discover and install all skills
+  const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
+  let skillCount = 0;
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const skillPath = join(SKILLS_DIR, entry.name);
+      const skillFile = join(skillPath, "SKILL.md");
+
+      if (existsSync(skillFile)) {
+        await installSkill(entry.name, skillPath);
+        skillCount++;
+      }
+    }
+  }
+
+  if (skillCount === 0) {
+    console.log("No skills found to install");
+  } else {
+    console.log(`Installed ${skillCount} skill(s) to ${SKILLS_DEST_DIR}`);
+  }
 
   // Check if stop hook already exists and has content
   let existingContent = "";

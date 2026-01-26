@@ -56,7 +56,7 @@ tmux sessions (per-project orchestrators):
 | Component | Binary/File | Description |
 |-----------|-------------|-------------|
 | CLI + Dashboard | `orange` | TypeScript - unified binary (pi-tui) |
-| Skill | `skills/orchestrator.md` | Orchestrator context (installed to ~/.claude/skills/) |
+| Skills | `skills/<name>/SKILL.md` | Claude skills (installed to ~/.claude/skills/orange-<name>) |
 
 **Single TypeScript binary** - CLI commands and dashboard in one.
 
@@ -89,7 +89,8 @@ src/
     └── index.ts
 
 skills/
-└── orchestrator.md    # Skill file (symlinked by `orange install`)
+└── orchestrator/
+    └── SKILL.md       # Orchestrator skill (symlinked to ~/.claude/skills/orange-orchestrator)
 
 package.json
 tsconfig.json
