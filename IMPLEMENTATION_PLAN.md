@@ -149,8 +149,10 @@
 
 - 🟢 **CLI tests**
   - args.test.ts: Argument parsing (15 tests)
+  - project.test.ts: Project add/list commands (16 tests)
+  - task.test.ts: Full task lifecycle (20 tests)
 
-**Total: 51 tests passing**
+**Total: 87 tests passing**
 
 ---
 
@@ -183,9 +185,9 @@
 - 🔴 **Integration tests with real git repos**
   - Create temp repos for end-to-end testing
 
-- 🔴 **CLI command integration tests**
-  - project.test.ts: Add/list projects
-  - task.test.ts: Create/spawn/complete/merge lifecycle
+- 🟢 **CLI command integration tests**
+  - project.test.ts: Add/list projects (16 tests)
+  - task.test.ts: Create/spawn/complete/merge lifecycle (20 tests)
 
 ---
 
