@@ -14,7 +14,7 @@ import type { Task } from "./types.js";
  * 1. Read CLAUDE.md for project context
  * 2. Implement the task
  * 3. Run tests and lint
- * 4. Self-review using a subagent
+ * 4. Self-review using claude --print subagent
  * 5. Fix issues and re-review (max 3 attempts)
  * 6. Write outcome to .orange-task before stopping
  */
@@ -29,23 +29,18 @@ Instructions:
 1. Read CLAUDE.md for project context and coding standards
 2. Implement the task as described
 3. Run tests and lint to verify your changes
-4. When complete, spawn a review subagent using the Task tool to review your changes
+4. When complete, self-review by running a review subagent:
+   claude --print --prompt "Review the changes in this branch. Check:
+   - Correctness: Does the implementation match the task requirements?
+   - Tests: Are there adequate tests? Do they pass?
+   - Style: Does the code follow project conventions in CLAUDE.md?
+   - Edge cases: Are error cases handled appropriately?
+   Respond with PASSED or FAILED with explanation."
 5. If review finds issues, fix them and re-review (max 3 attempts)
 6. Before stopping, write your outcome to .orange-task:
    - If review passed: {"id":"${task.id}","outcome":"passed"}
    - If stuck after 3 attempts: {"id":"${task.id}","outcome":"stuck","reason":"..."}
 7. Only stop when review passes or you've exhausted 3 attempts
-
-Review subagent prompt:
-"Review the changes in this branch. Check for:
-- Correctness: Does the implementation match the task requirements?
-- Tests: Are there adequate tests? Do they pass?
-- Style: Does the code follow project conventions in CLAUDE.md?
-- Edge cases: Are error cases handled appropriately?
-
-Respond with either:
-- PASSED: Brief explanation of why the changes look good
-- FAILED: Specific issues that need to be fixed"
 
 Important:
 - Commit your changes with descriptive messages

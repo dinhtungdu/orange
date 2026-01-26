@@ -20,16 +20,18 @@ const STOP_HOOK_PATH = join(HOOKS_DIR, "stop.sh");
  * Stop hook content.
  * This hook is called by Claude Code when an agent stops.
  * It reads the .orange-task file to determine if the agent passed or got stuck.
+ * Uses pure bash JSON parsing (no jq dependency).
  */
 const STOP_HOOK_CONTENT = `#!/bin/bash
 # Orange stop hook - notifies orange when agent completes
 # Installed by: orange install
 
 if [[ -f .orange-task ]]; then
-  TASK_ID=$(jq -r .id .orange-task 2>/dev/null)
-  OUTCOME=$(jq -r .outcome .orange-task 2>/dev/null)
+  # Parse JSON without jq dependency (pure bash)
+  TASK_ID=$(grep -o '"id":"[^"]*"' .orange-task 2>/dev/null | head -1 | cut -d'"' -f4)
+  OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-task 2>/dev/null | head -1 | cut -d'"' -f4)
 
-  if [[ -n "$TASK_ID" && "$TASK_ID" != "null" ]]; then
+  if [[ -n "$TASK_ID" ]]; then
     if [[ "$OUTCOME" == "passed" ]]; then
       orange task complete "$TASK_ID"
     else

@@ -1,4 +1,9 @@
-# Orange Orchestrator Skill
+---
+name: orchestrator
+description: Orchestrates parallel development tasks using Orange. Use when breaking down complex software requests into independent tasks, spawning worker agents, or monitoring task progress across branches.
+---
+
+# Orange Orchestrator
 
 You are an orchestrator agent for the Orange agent orchestration system. You are running inside a specific project directory and have full context of the codebase.
 

@@ -52,9 +52,12 @@ export async function runStartCommand(deps: Deps): Promise<void> {
     );
 
     // Split window and run dashboard in second pane (project-scoped)
-    // Use full path since 'orange' alias isn't available in non-interactive shell
-    const orangePath = `${process.env.HOME}/workspace/orange/src/index.ts`;
-    const dashboardCmd = `bun run ${orangePath} dashboard --project ${project.name}`;
+    // Use the same script path that was used to invoke this command
+    // This works with both `bun run src/index.ts` and compiled binary
+    const scriptPath = process.argv[1];
+    const dashboardCmd = scriptPath.endsWith('.ts')
+      ? `bun run ${scriptPath} dashboard --project ${project.name}`
+      : `${scriptPath} dashboard --project ${project.name}`;
     try {
       await deps.tmux.splitWindow(sessionName, dashboardCmd);
     } catch (err) {
