@@ -3,12 +3,16 @@
  *
  * Manages git worktrees as a reusable resource pool.
  * Uses file locking to prevent race conditions.
+ *
+ * Supports lazy initialization - worktrees are created on-demand
+ * when task spawn requests a workspace and none are available.
  */
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import type { Deps, Project, PoolState, WorkspaceEntry } from "./types.js";
+import { loadProjects } from "./state.js";
 
 /**
  * Get the path to the workspaces directory.
@@ -58,8 +62,53 @@ async function ensureWorkspacesDir(deps: Deps): Promise<void> {
 }
 
 /**
+ * Count existing workspaces for a project.
+ */
+function countProjectWorkspaces(poolState: PoolState, projectName: string): number {
+  const prefix = `${projectName}--`;
+  return Object.keys(poolState.workspaces).filter((name) =>
+    name.startsWith(prefix)
+  ).length;
+}
+
+/**
+ * Get the next workspace number for a project.
+ */
+function getNextWorkspaceNumber(poolState: PoolState, projectName: string): number {
+  const prefix = `${projectName}--`;
+  const numbers = Object.keys(poolState.workspaces)
+    .filter((name) => name.startsWith(prefix))
+    .map((name) => parseInt(name.slice(prefix.length), 10))
+    .filter((n) => !isNaN(n));
+
+  if (numbers.length === 0) return 1;
+  return Math.max(...numbers) + 1;
+}
+
+/**
+ * Create a single worktree for a project.
+ * Returns the workspace name.
+ */
+async function createWorktree(
+  deps: Deps,
+  project: Project,
+  poolState: PoolState
+): Promise<string> {
+  const number = getNextWorkspaceNumber(poolState, project.name);
+  const name = `${project.name}--${number}`;
+  const worktreePath = join(getWorkspacesDir(deps), name);
+
+  console.log(`Creating workspace ${name}...`);
+  await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
+
+  return name;
+}
+
+/**
  * Initialize workspace pool for a project.
  * Creates worktrees based on pool_size.
+ *
+ * This is optional - workspaces can be created lazily on first spawn.
  */
 export async function initWorkspacePool(deps: Deps, project: Project): Promise<void> {
   await ensureWorkspacesDir(deps);
@@ -88,10 +137,13 @@ export async function initWorkspacePool(deps: Deps, project: Project): Promise<v
 /**
  * Acquire an available workspace for a project.
  * Uses file locking to prevent race conditions.
+ *
+ * If no workspace is available but pool_size allows, creates a new worktree (lazy init).
+ * If pool is exhausted (all workspaces bound and at pool_size), throws an error.
  */
 export async function acquireWorkspace(
   deps: Deps,
-  project: string,
+  projectName: string,
   task: string
 ): Promise<string> {
   await ensureWorkspacesDir(deps);
@@ -107,18 +159,37 @@ export async function acquireWorkspace(
     const poolState = await loadPoolState(deps);
 
     // Find first available workspace for this project
-    const prefix = `${project}--`;
+    const prefix = `${projectName}--`;
     const available = Object.entries(poolState.workspaces).find(
       ([name, entry]) => name.startsWith(prefix) && entry.status === "available"
     );
 
-    if (!available) {
-      throw new Error(`No available workspace for project '${project}'`);
+    if (available) {
+      // Use existing available workspace
+      const [name] = available;
+      poolState.workspaces[name] = { status: "bound", task };
+      await savePoolState(deps, poolState);
+      return name;
     }
 
-    const [name] = available;
+    // No available workspace - try lazy init
+    const projects = await loadProjects(deps);
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      throw new Error(`Project '${projectName}' not found`);
+    }
 
-    // Mark as bound
+    const existingCount = countProjectWorkspaces(poolState, projectName);
+    if (existingCount >= project.pool_size) {
+      throw new Error(
+        `No available workspace for project '${projectName}' (pool exhausted: ${existingCount}/${project.pool_size})`
+      );
+    }
+
+    // Create new worktree (lazy init)
+    const name = await createWorktree(deps, project, poolState);
+
+    // Mark as bound immediately
     poolState.workspaces[name] = { status: "bound", task };
     await savePoolState(deps, poolState);
 
@@ -183,4 +254,31 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
  */
 export function getWorkspacePath(deps: Deps, workspace: string): string {
   return join(getWorkspacesDir(deps), workspace);
+}
+
+/**
+ * Get pool statistics for a project.
+ */
+export async function getPoolStats(
+  deps: Deps,
+  projectName: string
+): Promise<{ total: number; available: number; bound: number; poolSize: number }> {
+  const poolState = await loadPoolState(deps);
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === projectName);
+
+  const prefix = `${projectName}--`;
+  const workspaces = Object.entries(poolState.workspaces).filter(([name]) =>
+    name.startsWith(prefix)
+  );
+
+  const available = workspaces.filter(([, entry]) => entry.status === "available").length;
+  const bound = workspaces.filter(([, entry]) => entry.status === "bound").length;
+
+  return {
+    total: workspaces.length,
+    available,
+    bound,
+    poolSize: project?.pool_size ?? 0,
+  };
 }

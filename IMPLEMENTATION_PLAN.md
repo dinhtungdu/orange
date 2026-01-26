@@ -162,7 +162,7 @@
   - project.test.ts: Project add/list commands (16 tests)
   - task.test.ts: Full task lifecycle (27 tests - includes tmux availability and safe method tests)
 
-**Total: 115 tests passing** (after Phase 11)
+**Total: 121 tests passing** (after Phase 11 + lazy init)
 
 ---
 
@@ -265,11 +265,11 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
 
 ### 11.4 Workspace Lazy Init
 
-- 🔴 **On-demand worktree creation** (`src/core/workspace.ts`)
+- 🟢 **On-demand worktree creation** (`src/core/workspace.ts`)
   - `acquireWorkspace()`: if no workspace exists, create one (up to pool_size)
   - Show progress: "Creating workspace coffee--1..."
   - `orange workspace init` becomes optional (pre-warming)
-  - (Deferred to future phase - current implementation requires explicit init)
+  - Added `getPoolStats()` helper for statistics
 
 ### 11.5 Test Updates
 
@@ -386,7 +386,7 @@ Per specs/architecture.md:
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
 | `workspace.md` | 🟢 Complete | Lazy init deferred to future |
 | `dashboard.md` | 🟢 Complete | Project scoping, --all flag |
-| `testing.md` | 🟢 Complete | DI pattern, mocks, 115 tests |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 121 tests |
 
 ---
 
@@ -400,6 +400,6 @@ None currently.
 
 1. ~~**Implement Phase 11** - CWD-aware refactor~~ ✅
 2. ~~Update tests for new command signatures~~ ✅
-3. End-to-end testing with real tmux/git
-4. Dashboard rendering tests (VirtualTerminal from pi-tui)
-5. Lazy workspace initialization (deferred from Phase 11)
+3. ~~Lazy workspace initialization~~ ✅
+4. End-to-end testing with real tmux/git
+5. Dashboard rendering tests (VirtualTerminal from pi-tui)
