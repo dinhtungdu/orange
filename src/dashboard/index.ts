@@ -483,9 +483,63 @@ export class DashboardComponent implements Component {
     });
   }
 
+  /**
+   * Format relative time (e.g., "2m ago", "3h ago")
+   */
+  private formatRelativeTime(isoDate: string): string {
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    return `${diffDay}d ago`;
+  }
+
+  /**
+   * Pad or truncate string to exact width
+   */
+  private fitWidth(str: string, w: number, align: "left" | "right" = "left"): string {
+    // Strip ANSI codes for length calculation
+    const plainLen = str.replace(/\x1b\[[0-9;]*m/g, "").length;
+    if (plainLen > w) {
+      // Truncate (need to be careful with ANSI codes)
+      let visible = 0;
+      let result = "";
+      let i = 0;
+      while (i < str.length && visible < w - 1) {
+        if (str[i] === "\x1b") {
+          // ANSI escape - copy until 'm'
+          const end = str.indexOf("m", i);
+          if (end !== -1) {
+            result += str.slice(i, end + 1);
+            i = end + 1;
+            continue;
+          }
+        }
+        result += str[i];
+        visible++;
+        i++;
+      }
+      return result + "…";
+    }
+    const padding = " ".repeat(w - plainLen);
+    return align === "right" ? padding + str : str + padding;
+  }
+
   render(width: number): string[] {
     this.state.width = width;
     const lines: string[] = [];
+
+    // Column widths (adjust based on terminal width)
+    const colActivity = 9;  // "12h ago" + padding
+    const colStatus = 12;   // "needs_human" is longest
+    const colTask = Math.max(20, width - colStatus - colActivity - 4); // rest for task
 
     // Header with project and filter indicator
     const statusLabel = this.state.statusFilter === "all"
@@ -495,6 +549,13 @@ export class DashboardComponent implements Component {
       ? `Orange Dashboard (all)${statusLabel}`
       : `${this.state.projectLabel}${statusLabel}`;
     lines.push(chalk.bold.cyan(` ${header}`));
+    
+    // Column headers
+    const headerLine = " " + 
+      this.fitWidth(chalk.dim("Task"), colTask) +
+      this.fitWidth(chalk.dim("Status"), colStatus) +
+      this.fitWidth(chalk.dim("Activity"), colActivity, "right");
+    lines.push(headerLine);
     lines.push(chalk.dim("─".repeat(width)));
 
     // Error message
@@ -519,30 +580,39 @@ export class DashboardComponent implements Component {
 
         const icon = STATUS_ICON[task.status];
         const color = STATUS_COLOR[task.status];
-        const lastOutput = this.state.lastOutput.get(task.id) ?? "";
+        const activity = this.formatRelativeTime(task.updated_at);
 
-        let line = ` ${icon} ${task.project}/${task.branch}`;
-        line = color(line);
-
+        // Task column: icon + branch (or project/branch if showing all)
+        const taskName = this.state.projectFilter 
+          ? task.branch 
+          : `${task.project}/${task.branch}`;
+        const taskCol = `${icon} ${taskName}`;
+        
+        // Status column
+        let statusCol: string = task.status;
         if (pending) {
-          line += chalk.yellow(" [processing...]");
+          statusCol = "processing…";
         }
 
+        // Build the row
+        let row = " " +
+          this.fitWidth(color(taskCol), colTask) +
+          this.fitWidth(color(statusCol), colStatus) +
+          this.fitWidth(chalk.dim(activity), colActivity, "right");
+
         if (selected) {
-          line = chalk.inverse(line);
+          row = chalk.inverse(row);
         }
 
-        lines.push(line);
+        lines.push(row);
 
-        // Show description and last output for selected task
+        // Show description for selected task
         if (selected) {
-          const desc = task.description.length > width - 3
-            ? task.description.slice(0, width - 4) + "…"
+          const descMaxLen = width - 4;
+          const desc = task.description.length > descMaxLen
+            ? task.description.slice(0, descMaxLen - 1) + "…"
             : task.description;
-          lines.push(chalk.gray(`   ${desc}`));
-          if (lastOutput) {
-            lines.push(chalk.dim(`   > ${lastOutput.slice(0, width - 6)}`));
-          }
+          lines.push(chalk.gray(` └ ${desc}`));
         }
       }
     }
