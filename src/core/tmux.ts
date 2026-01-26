@@ -42,10 +42,18 @@ export class RealTmux implements TmuxExecutor {
     return this.tmuxAvailable;
   }
 
-  async newSession(name: string, cwd: string, command: string): Promise<void> {
+  async newSession(name: string, cwd: string, command: string, logFile?: string): Promise<void> {
     // Wrap command to drop into shell after exit, so humans can review output and run commands.
     // Uses $SHELL to respect user's default shell (zsh, fish, etc).
-    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
+    // If logFile is provided, uses `script` to capture all terminal output.
+    let wrappedCommand: string;
+    if (logFile) {
+      // Use script to capture output. -q for quiet, -a to append.
+      // The inner command runs then drops to shell, all captured to logFile.
+      wrappedCommand = `script -q -a "${logFile}" bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
+    } else {
+      wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
+    }
 
     const { exitCode, stderr } = await exec("tmux", [
       "new-session",
@@ -201,7 +209,7 @@ export class MockTmux implements TmuxExecutor {
     this.available = available;
   }
 
-  async newSession(name: string, cwd: string, command: string): Promise<void> {
+  async newSession(name: string, cwd: string, command: string, _logFile?: string): Promise<void> {
     if (this.sessions.has(name)) {
       throw new Error(`Session '${name}' already exists`);
     }

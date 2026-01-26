@@ -69,8 +69,8 @@ export interface Project {
 export interface TmuxExecutor {
   /** Check if tmux is installed and available */
   isAvailable(): Promise<boolean>;
-  /** Create a new tmux session */
-  newSession(name: string, cwd: string, command: string): Promise<void>;
+  /** Create a new tmux session. If logFile provided, captures all output to that file. */
+  newSession(name: string, cwd: string, command: string, logFile?: string): Promise<void>;
   /** Kill an existing tmux session */
   killSession(name: string): Promise<void>;
   /** Kill a session, ignoring errors if session doesn't exist */

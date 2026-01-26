@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import type { Deps, Task, Project, Logger } from "./types.js";
-import { loadProjects, saveTask, appendHistory } from "./state.js";
+import { loadProjects, saveTask, appendHistory, getTaskDir } from "./state.js";
 import { listTasks, updateTaskInDb } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
@@ -93,13 +93,15 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   const orangeTaskFile = join(workspacePath, ".orange-task");
   await writeFile(orangeTaskFile, JSON.stringify({ id: task.id }), "utf-8");
 
-  // Create tmux session
+  // Create tmux session with output logging
   const tmuxSession = `${task.project}/${task.branch}`;
   const prompt = buildAgentPrompt(task, workspacePath);
   const command = `claude --prompt "${shellEscape(prompt)}"`;
+  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const logFile = join(taskDir, "output.log");
 
-  log.debug("Creating tmux session", { session: tmuxSession });
-  await deps.tmux.newSession(tmuxSession, workspacePath, command);
+  log.debug("Creating tmux session", { session: tmuxSession, logFile });
+  await deps.tmux.newSession(tmuxSession, workspacePath, command, logFile);
 
   // Update task
   const now = deps.clock.now();
