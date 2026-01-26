@@ -40,15 +40,14 @@ pending → working → needs_human → done
 ## Rules
 
 - No `any`
-- `bun run check` before commit
-- Integration tests preferred
 - Commits: `type(scope): msg`
+- Just run `git commit` — pre-commit hook runs `bun run check` (tsc + tests)
+- Don't run tests twice (no need for `bun run check` before commit)
 
 ## Testing
 
 - Bun test runner, colocated unit tests (`*.test.ts`)
 - Dependency injection for mocking (tmux, git, clock)
-- `bun run check` = tsc + tests
 
 ## Parallel Agents
 
