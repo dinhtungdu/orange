@@ -1,6 +1,6 @@
 # Orange Implementation Plan
 
-## Status: Phase 1-9 Complete - MVP Ready
+## Status: Phase 1-10 Complete
 
 **Goal**: Agent orchestration system - Chat with orchestrator → agents work in parallel → auto-review → human review
 
@@ -166,6 +166,36 @@
 
 ---
 
+## Phase 10: Spec Refinements (1bdc20a) - Complete
+
+- 🟢 **Symlink skill install** (`src/cli/commands/install.ts`)
+  - Changed from copy to symlink: `ln -s skills/ ~/.claude/skills/orange`
+  - Dev changes reflect immediately without re-install
+
+- 🟢 **Auto-attach start** (`src/cli/commands/start.ts`)
+  - Added `attachOrCreate` method to TmuxExecutor interface
+  - `orange start` now attaches if session exists, creates if not
+  - Uses `tmux new-session -A` for seamless attach-or-create
+
+- 🟢 **PR detection in merge** (`src/cli/commands/task.ts`)
+  - Before local merge, checks: `gh pr view <branch> --json state,mergeCommit`
+  - If PR merged → skips local merge, uses PR's merge commit
+  - If no PR or PR open → does local merge as before
+  - Message shows "merged via PR" or "merged locally"
+
+- 🟢 **Auto-spawn next pending** (`src/core/spawn.ts`, `src/core/workspace.ts`)
+  - Extracted spawn logic to reusable `spawnTaskById()` function
+  - Added `spawnNextPending()` that queries pending tasks and spawns oldest (FIFO)
+  - `releaseWorkspace()` now auto-spawns next pending task for the project
+
+- 🟢 **Dashboard status filter** (`src/dashboard/index.ts`)
+  - Added `f` keybind: cycles filter (all → active → done)
+  - Active = pending, working, needs_human, stuck
+  - Done = done, failed
+  - Header shows current filter: "Orange Dashboard (active)"
+
+---
+
 ## Post-MVP Enhancements (P2-P5)
 
 ### P2 - Polish
@@ -183,9 +213,8 @@
 - 🔴 **Multiple orchestrator instances**
   - Support multiple independent orchestrator sessions
 
-- 🔴 **Task filtering in dashboard**
-  - Filter by project
-  - Filter by status
+- 🔴 **Project filtering in dashboard**
+  - Filter by project (status filter moved to Phase 10)
 
 ### P5 - Test Coverage
 
@@ -246,13 +275,13 @@ Per specs/architecture.md:
 
 | Spec | Status | Notes |
 |------|--------|-------|
-| `architecture.md` | 🟢 Complete | Full implementation done |
-| `cli.md` | 🟢 Complete | All commands implemented |
+| `architecture.md` | 🟢 Complete | Symlink install, auto-attach start implemented |
+| `cli.md` | 🟢 Complete | PR detection in merge implemented |
 | `data.md` | 🟢 Complete | projects.json, TASK.md, history.jsonl, index.db |
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
-| `workspace.md` | 🟢 Complete | Pool management with locking |
-| `dashboard.md` | 🟢 Complete | pi-tui implementation |
-| `testing.md` | 🟢 Complete | DI pattern, mocks, 51 tests |
+| `workspace.md` | 🟢 Complete | Auto-spawn next pending implemented |
+| `dashboard.md` | 🟢 Complete | Status filter (`f` key) implemented |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 87 tests |
 
 ---
 
@@ -266,3 +295,4 @@ None currently.
 
 1. End-to-end testing with real tmux/git
 2. Add more comprehensive CLI command tests
+3. Dashboard rendering tests (VirtualTerminal from pi-tui)

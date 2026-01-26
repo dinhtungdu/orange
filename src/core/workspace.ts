@@ -131,6 +131,7 @@ export async function acquireWorkspace(
 /**
  * Release a workspace back to the pool.
  * Cleans git state before making it available.
+ * After release, auto-spawns the next pending task for this project.
  */
 export async function releaseWorkspace(deps: Deps, workspace: string): Promise<void> {
   await ensureWorkspacesDir(deps);
@@ -138,6 +139,9 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
   // Create lock file if it doesn't exist
   const lockPath = getLockPath(deps);
   await writeFile(lockPath, "", { flag: "a" });
+
+  // Extract project name before lock (needed for auto-spawn)
+  const projectName = workspace.split("--")[0];
 
   // Acquire lock
   const release = await lock(lockPath, { retries: 5 });
@@ -151,9 +155,6 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
 
     // Clean workspace
     const workspacePath = join(getWorkspacesDir(deps), workspace);
-
-    // Get project default branch from workspace name
-    const projectName = workspace.split("--")[0];
 
     // Try to checkout main, fall back to master if needed
     try {
@@ -170,6 +171,11 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
   } finally {
     await release();
   }
+
+  // Auto-spawn next pending task for this project (outside lock)
+  // Imported dynamically to avoid circular dependency
+  const { spawnNextPending } = await import("./spawn.js");
+  await spawnNextPending(deps, projectName);
 }
 
 /**

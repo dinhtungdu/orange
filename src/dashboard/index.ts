@@ -39,15 +39,35 @@ const STATUS_COLOR: Record<TaskStatus, (s: string) => string> = {
 };
 
 /**
+ * Status filter type for dashboard.
+ * - all: Show all tasks
+ * - active: Show pending, working, needs_human, stuck tasks
+ * - done: Show done and failed tasks
+ */
+type StatusFilter = "all" | "active" | "done";
+
+/**
+ * Active statuses for filtering.
+ */
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "working", "needs_human", "stuck"];
+
+/**
+ * Done statuses for filtering.
+ */
+const DONE_STATUSES: TaskStatus[] = ["done", "failed"];
+
+/**
  * Dashboard state.
  */
 interface DashboardState {
   tasks: Task[];
+  allTasks: Task[];  // Unfiltered tasks
   cursor: number;
   lastOutput: Map<string, string>;
   pendingOps: Set<string>;
   error: string | null;
   width: number;
+  statusFilter: StatusFilter;
 }
 
 /**
@@ -56,11 +76,13 @@ interface DashboardState {
 class DashboardComponent implements Component {
   private state: DashboardState = {
     tasks: [],
+    allTasks: [],
     cursor: 0,
     lastOutput: new Map(),
     pendingOps: new Set(),
     error: null,
     width: 80,
+    statusFilter: "all",
   };
 
   private deps: Deps;
@@ -106,7 +128,8 @@ class DashboardComponent implements Component {
 
   private async refreshTasks(): Promise<void> {
     try {
-      this.state.tasks = await listTasks(this.deps, {});
+      this.state.allTasks = await listTasks(this.deps, {});
+      this.applyFilter();
       this.state.error = null;
 
       // Clamp cursor
@@ -117,6 +140,37 @@ class DashboardComponent implements Component {
       this.state.error =
         err instanceof Error ? err.message : "Failed to load tasks";
     }
+  }
+
+  private applyFilter(): void {
+    switch (this.state.statusFilter) {
+      case "active":
+        this.state.tasks = this.state.allTasks.filter((t) =>
+          ACTIVE_STATUSES.includes(t.status)
+        );
+        break;
+      case "done":
+        this.state.tasks = this.state.allTasks.filter((t) =>
+          DONE_STATUSES.includes(t.status)
+        );
+        break;
+      default:
+        this.state.tasks = [...this.state.allTasks];
+    }
+  }
+
+  private cycleFilter(): void {
+    const filters: StatusFilter[] = ["all", "active", "done"];
+    const currentIndex = filters.indexOf(this.state.statusFilter);
+    this.state.statusFilter = filters[(currentIndex + 1) % filters.length];
+    this.applyFilter();
+
+    // Clamp cursor after filter change
+    if (this.state.cursor >= this.state.tasks.length) {
+      this.state.cursor = Math.max(0, this.state.tasks.length - 1);
+    }
+
+    this.tui?.requestRender();
   }
 
   private async captureOutputs(): Promise<void> {
@@ -169,6 +223,10 @@ class DashboardComponent implements Component {
 
       case "o":
         this.openPR();
+        break;
+
+      case "f":
+        this.cycleFilter();
         break;
 
       case "q":
@@ -280,8 +338,11 @@ class DashboardComponent implements Component {
     this.state.width = width;
     const lines: string[] = [];
 
-    // Header
-    lines.push(chalk.bold.cyan(" Orange Dashboard"));
+    // Header with filter indicator
+    const filterLabel = this.state.statusFilter === "all"
+      ? ""
+      : ` (${this.state.statusFilter})`;
+    lines.push(chalk.bold.cyan(` Orange Dashboard${filterLabel}`));
     lines.push(chalk.dim("─".repeat(width)));
 
     // Error message
@@ -333,7 +394,7 @@ class DashboardComponent implements Component {
     lines.push(chalk.dim("─".repeat(width)));
     lines.push(
       chalk.gray(
-        " j/k:navigate  Enter:attach  p:peek  m:merge  x:cancel  o:PR  q:quit"
+        " j/k:navigate  Enter:attach  p:peek  m:merge  x:cancel  o:PR  f:filter  q:quit"
       )
     );
 

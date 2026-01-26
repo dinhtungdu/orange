@@ -114,6 +114,16 @@ export class RealTmux implements TmuxExecutor {
       );
     }
   }
+
+  async attachOrCreate(name: string, cwd: string): Promise<void> {
+    // Use Bun.spawn with inherited stdio for interactive attach
+    const proc = Bun.spawn(["tmux", "new-session", "-A", "-s", name, "-c", cwd], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    await proc.exited;
+  }
 }
 
 /**
@@ -158,6 +168,14 @@ export class MockTmux implements TmuxExecutor {
       throw new Error(`Session '${session}' not found`);
     }
     sessionData.output.push(`[keys: ${keys}]`);
+  }
+
+  async attachOrCreate(name: string, cwd: string): Promise<void> {
+    // For testing, we just create the session if it doesn't exist
+    if (!this.sessions.has(name)) {
+      this.sessions.set(name, { cwd, command: "", output: [] });
+    }
+    // In mock, there's no actual attach - just simulate the session exists
   }
 
   /**

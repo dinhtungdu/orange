@@ -79,6 +79,8 @@ export interface TmuxExecutor {
   capturePane(session: string, lines: number): Promise<string>;
   /** Send keys to a session */
   sendKeys(session: string, keys: string): Promise<void>;
+  /** Attach to session if exists, create and attach if not (tmux new-session -A) */
+  attachOrCreate(name: string, cwd: string): Promise<void>;
 }
 
 /**

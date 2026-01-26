@@ -13,7 +13,7 @@
  */
 
 import { join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus } from "../../core/types.js";
@@ -25,20 +25,46 @@ import {
   getTaskDir,
 } from "../../core/state.js";
 import { listTasks, updateTaskInDb } from "../../core/db.js";
-import { acquireWorkspace, releaseWorkspace } from "../../core/workspace.js";
-import { buildAgentPrompt } from "../../core/agent.js";
+import { releaseWorkspace } from "../../core/workspace.js";
+import { spawnTaskById } from "../../core/spawn.js";
 
 /**
- * Escape a string for use in a shell double-quoted context.
- * Handles: " $ ` \ and newlines
+ * Check if a PR exists for a branch and whether it's merged.
+ * Returns: { exists: false } | { exists: true, merged: boolean }
  */
-function shellEscape(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")  // Escape backslashes first
-    .replace(/"/g, '\\"')     // Escape double quotes
-    .replace(/\$/g, "\\$")    // Escape dollar signs
-    .replace(/`/g, "\\`")     // Escape backticks
-    .replace(/\n/g, "\\n");   // Escape newlines
+async function checkPRStatus(
+  cwd: string,
+  branch: string
+): Promise<{ exists: boolean; merged: boolean; mergeCommit?: string }> {
+  try {
+    const proc = Bun.spawn(
+      ["gh", "pr", "view", branch, "--json", "state,mergeCommit"],
+      {
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
+
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      // No PR exists for this branch
+      return { exists: false, merged: false };
+    }
+
+    const stdout = await new Response(proc.stdout).text();
+    const data = JSON.parse(stdout);
+
+    const merged = data.state === "MERGED";
+    return {
+      exists: true,
+      merged,
+      mergeCommit: merged ? data.mergeCommit?.oid : undefined,
+    };
+  } catch {
+    // gh CLI not available or other error - assume no PR
+    return { exists: false, merged: false };
+  }
 }
 
 /**
@@ -194,72 +220,17 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const taskId = parsed.args[0];
 
-  // Find task by ID
-  const tasks = await listTasks(deps, {});
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task) {
-    console.error(`Task '${taskId}' not found`);
+  try {
+    await spawnTaskById(deps, taskId);
+
+    // Fetch the task again to get the tmux session name
+    const tasks = await listTasks(deps, {});
+    const task = tasks.find((t) => t.id === taskId);
+    console.log(`Spawned agent for task ${taskId} in ${task?.tmux_session ?? "unknown"}`);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
-
-  if (task.status !== "pending") {
-    console.error(`Task '${taskId}' is not pending (status: ${task.status})`);
-    process.exit(1);
-  }
-
-  // Get project for workspace
-  const projects = await loadProjects(deps);
-  const project = projects.find((p) => p.name === task.project);
-  if (!project) {
-    console.error(`Project '${task.project}' not found`);
-    process.exit(1);
-  }
-
-  // Acquire workspace
-  const workspace = await acquireWorkspace(deps, task.project, `${task.project}/${task.branch}`);
-
-  // Setup git branch in workspace
-  const workspacePath = join(deps.dataDir, "workspaces", workspace);
-  await deps.git.fetch(workspacePath);
-  await deps.git.checkout(workspacePath, project.default_branch);
-  await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
-  await deps.git.createBranch(workspacePath, task.branch);
-
-  // Write .orange-task file for hook integration
-  // Agent will update this file when done; hook reads it to call orange task complete/stuck
-  const orangeTaskFile = join(workspacePath, ".orange-task");
-  await writeFile(orangeTaskFile, JSON.stringify({ id: task.id }), "utf-8");
-
-  // Create tmux session
-  const tmuxSession = `${task.project}/${task.branch}`;
-  const prompt = buildAgentPrompt(task, workspacePath);
-  const command = `claude --prompt "${shellEscape(prompt)}"`;
-
-  await deps.tmux.newSession(tmuxSession, workspacePath, command);
-
-  // Update task
-  const now = deps.clock.now();
-  task.status = "working";
-  task.workspace = workspace;
-  task.tmux_session = tmuxSession;
-  task.updated_at = now;
-
-  await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
-    type: "agent.spawned",
-    timestamp: now,
-    workspace,
-    tmux_session: tmuxSession,
-  });
-  await appendHistory(deps, task.project, task.branch, {
-    type: "status.changed",
-    timestamp: now,
-    from: "pending",
-    to: "working",
-  });
-  await updateTaskInDb(deps, task);
-
-  console.log(`Spawned agent for task ${taskId} in ${tmuxSession}`);
 }
 
 /**
@@ -375,6 +346,12 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * Merge task and cleanup.
+ *
+ * Auto-detects workflow:
+ * 1. Check if PR exists and is merged via `gh pr view`
+ * 2. If PR merged → skip local merge, use PR's merge commit
+ * 3. If no PR or PR open → do local merge
+ * 4. Cleanup: release workspace, delete remote branch, kill tmux session
  */
 async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (parsed.args.length < 1) {
@@ -406,17 +383,33 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Merge branch in source repo
-  await deps.git.checkout(project.path, project.default_branch);
-  await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
+  let commitHash: string;
+  let mergeVia: "local" | "pr" = "local";
 
-  // Get commit hash after merge
-  const commitHash = await deps.git.getCommitHash(project.path);
+  // Check if PR exists and is already merged
+  const prStatus = await checkPRStatus(project.path, task.branch);
+
+  if (prStatus.merged && prStatus.mergeCommit) {
+    // PR was merged on GitHub - skip local merge, use PR's merge commit
+    console.log(`PR for ${task.branch} already merged on GitHub`);
+    commitHash = prStatus.mergeCommit;
+    mergeVia = "pr";
+
+    // Fetch to get the latest changes from merged PR
+    await deps.git.fetch(project.path);
+    await deps.git.checkout(project.path, project.default_branch);
+    await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
+  } else {
+    // No PR or PR not merged - do local merge
+    await deps.git.checkout(project.path, project.default_branch);
+    await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
+    commitHash = await deps.git.getCommitHash(project.path);
+  }
 
   // Delete remote branch
   try {
     await deps.git.deleteRemoteBranch(project.path, task.branch);
-  } catch (_) {
+  } catch {
     // Ignore errors - remote branch may not exist
   }
 
@@ -443,7 +436,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     type: "task.merged",
     timestamp: now,
     commit_hash: commitHash,
-    strategy: strategy as "ff" | "merge",
+    strategy: mergeVia === "pr" ? "merge" : (strategy as "ff" | "merge"),
   });
   await appendHistory(deps, task.project, task.branch, {
     type: "status.changed",
@@ -453,7 +446,8 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
   await updateTaskInDb(deps, task);
 
-  console.log(`Task ${taskId} merged and cleaned up`);
+  const mergeMsg = mergeVia === "pr" ? "via PR" : "locally";
+  console.log(`Task ${taskId} merged ${mergeMsg} and cleaned up`);
 }
 
 /**

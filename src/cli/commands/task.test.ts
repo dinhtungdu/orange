@@ -675,7 +675,7 @@ describe("task merge command", () => {
     const sessions = await mockTmux.listSessions();
     expect(sessions).not.toContain("testproj/merge-feature");
 
-    expect(consoleLogs[0]).toContain("merged and cleaned up");
+    expect(consoleLogs[0]).toMatch(/merged.*and cleaned up/);
   });
 
   test("creates task.merged history event", async () => {
