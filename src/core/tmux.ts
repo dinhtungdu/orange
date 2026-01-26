@@ -44,8 +44,8 @@ export class RealTmux implements TmuxExecutor {
 
   async newSession(name: string, cwd: string, command: string): Promise<void> {
     // Wrap command to drop into shell after exit, so humans can review output and run commands.
-    // The shell inherits the working directory and environment.
-    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec bash'`;
+    // Uses $SHELL to respect user's default shell (zsh, fish, etc).
+    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
 
     const { exitCode, stderr } = await exec("tmux", [
       "new-session",
@@ -149,8 +149,8 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async splitWindow(session: string, command: string): Promise<void> {
-    // Wrap command to drop into shell after exit
-    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec bash'`;
+    // Wrap command to drop into shell after exit, using user's default shell
+    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
 
     const { exitCode, stderr } = await exec("tmux", [
       "split-window",
