@@ -22,7 +22,7 @@ All commands operate on the current project (inferred from your working director
 ```bash
 # Task management
 orange task create <branch> <description>
-orange task list [--status <status>]
+orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task peek <task_id> [--lines N]
 orange task merge <task_id> [--strategy ff|merge]
@@ -30,7 +30,7 @@ orange task cancel <task_id>
 
 # Workspace management
 orange workspace init    # Pre-create worktrees (optional, lazy init on spawn)
-orange workspace list    # Show pool status
+orange workspace list [--all]    # Show pool status
 ```
 
 ## Workflow
@@ -90,11 +90,11 @@ orange task peek <task_id> --lines 100  # See what went wrong
 Inform the user and suggest: attach to session, help the agent, or cancel and retry.
 
 ### Workspace pool exhausted
-If `orange task spawn` fails with "No available workspace", check pool status:
+If `orange task spawn` fails with "No available workspace for project ... (pool exhausted)", check pool status:
 ```bash
 orange workspace list
 ```
-Wait for a working task to complete, or ask user to increase pool_size.
+Wait for a working task to complete, or ask user to increase pool_size in `projects.json`.
 
 ### Dependent tasks
 For tasks that MUST run sequentially (B depends on A):
