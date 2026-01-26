@@ -96,8 +96,10 @@ export interface GitExecutor {
   createBranch(cwd: string, branch: string): Promise<void>;
   /** Delete a branch (local) */
   deleteBranch(cwd: string, branch: string): Promise<void>;
+  /** Delete a remote branch */
+  deleteRemoteBranch(cwd: string, branch: string, remote?: string): Promise<void>;
   /** Merge a branch into current branch */
-  merge(cwd: string, branch: string): Promise<void>;
+  merge(cwd: string, branch: string, strategy?: "ff" | "merge"): Promise<void>;
   /** Get current branch name */
   currentBranch(cwd: string): Promise<string>;
   /** Clean untracked files */

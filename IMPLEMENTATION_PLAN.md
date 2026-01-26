@@ -44,8 +44,11 @@
 
 - 🟢 **Git abstraction** (`src/core/git.ts`)
   - GitExecutor interface: fetch, checkout, resetHard, createBranch, deleteBranch, merge, currentBranch, clean, addWorktree, removeWorktree
+  - Added: getCommitHash(cwd, short?) to get actual commit hash after merge
+  - Added: deleteRemoteBranch(cwd, branch, remote?) for cleanup
+  - Updated: merge(cwd, branch, strategy?) supports ff (--ff-only) and merge (--no-ff) strategies
   - RealGit class implementing GitExecutor
-  - MockGit class for testing
+  - MockGit class for testing (now creates directory on filesystem for consistency)
 
 - 🟢 **Clock abstraction** (`src/core/clock.ts`)
   - Clock interface: now()
@@ -93,6 +96,7 @@
   - `orange task create <project> <branch> <description>` - Create task folder, TASK.md, history.jsonl
   - `orange task list [--project] [--status]` - List from SQLite index
   - `orange task spawn <task_id>` - Acquire workspace, create branch, start tmux session with Claude
+    - Now writes `.orange-task` file with task ID during spawn for hook integration
 
 ### Phase 6: Agent Integration
 
@@ -107,11 +111,17 @@
   - `orange task complete <task_id>` - Called by hook → needs_human
   - `orange task stuck <task_id>` - Called by hook → stuck
   - `orange task merge <task_id> [--strategy]` - Merge branch, release workspace, kill session
+    - Now uses actual commit hash instead of placeholder
+    - Implements proper merge strategies (ff-only vs merge)
+    - Deletes remote branch after successful merge
   - `orange task cancel <task_id>` - Cancel task, release workspace, kill session
 
 - 🟢 **Orchestrator skill** (`skills/orchestrator.md`)
   - Created skill file per specs/cli.md
   - `orange install` command to copy to ~/.claude/skills/orange/
+  - Installs stop hook to `~/.claude/hooks/stop.sh`
+  - Hook handles Claude Code integration to auto-call `orange task complete/stuck`
+  - Respects existing hooks and provides manual instructions if custom hook exists
 
 ### Phase 7: Dashboard TUI
 
@@ -256,4 +266,3 @@ None currently.
 
 1. End-to-end testing with real tmux/git
 2. Add more comprehensive CLI command tests
-3. Consider adding hook support for agent completion detection

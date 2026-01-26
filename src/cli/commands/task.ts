@@ -13,7 +13,7 @@
  */
 
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus } from "../../core/types.js";
@@ -212,6 +212,11 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
   await deps.git.createBranch(workspacePath, task.branch);
 
+  // Write .orange-task file for hook integration
+  // Agent will update this file when done; hook reads it to call orange task complete/stuck
+  const orangeTaskFile = join(workspacePath, ".orange-task");
+  await writeFile(orangeTaskFile, JSON.stringify({ id: task.id }), "utf-8");
+
   // Create tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
   const prompt = buildAgentPrompt(task, workspacePath);
@@ -390,10 +395,17 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Merge branch in source repo
   await deps.git.checkout(project.path, project.default_branch);
-  await deps.git.merge(project.path, task.branch);
+  await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
 
   // Get commit hash after merge
   const commitHash = await deps.git.getCommitHash(project.path);
+
+  // Delete remote branch
+  try {
+    await deps.git.deleteRemoteBranch(project.path, task.branch);
+  } catch (_) {
+    // Ignore errors - remote branch may not exist
+  }
 
   // Release workspace
   if (task.workspace) {

@@ -5,6 +5,7 @@
  * All operations are async and work with a specified working directory.
  */
 
+import { mkdir } from "node:fs/promises";
 import type { GitExecutor } from "./types.js";
 
 /**
@@ -79,8 +80,22 @@ export class RealGit implements GitExecutor {
     }
   }
 
-  async merge(cwd: string, branch: string): Promise<void> {
-    const { exitCode, stderr } = await exec("git", ["merge", branch], cwd);
+  async deleteRemoteBranch(cwd: string, branch: string, remote: string = "origin"): Promise<void> {
+    const { exitCode, stderr } = await exec(
+      "git",
+      ["push", remote, "--delete", branch],
+      cwd
+    );
+    if (exitCode !== 0) {
+      throw new Error(`git push --delete '${branch}' failed: ${stderr}`);
+    }
+  }
+
+  async merge(cwd: string, branch: string, strategy: "ff" | "merge" = "ff"): Promise<void> {
+    const args = strategy === "ff"
+      ? ["merge", "--ff-only", branch]
+      : ["merge", "--no-ff", branch];
+    const { exitCode, stderr } = await exec("git", args, cwd);
     if (exitCode !== 0) {
       throw new Error(`git merge '${branch}' failed: ${stderr}`);
     }
@@ -196,7 +211,11 @@ export class MockGit implements GitExecutor {
     repoBranches.delete(branch);
   }
 
-  async merge(cwd: string, branch: string): Promise<void> {
+  async deleteRemoteBranch(_cwd: string, _branch: string, _remote: string = "origin"): Promise<void> {
+    // No-op in mock - remote branches not tracked
+  }
+
+  async merge(cwd: string, branch: string, _strategy: "ff" | "merge" = "ff"): Promise<void> {
     const repoBranches = this.branches.get(cwd);
     if (!repoBranches?.has(branch)) {
       throw new Error(`Branch '${branch}' not found`);
@@ -217,6 +236,8 @@ export class MockGit implements GitExecutor {
   }
 
   async addWorktree(_cwd: string, path: string, branch: string): Promise<void> {
+    // Create the directory to simulate real git worktree behavior
+    await mkdir(path, { recursive: true });
     this.worktrees.set(path, branch);
   }
 
