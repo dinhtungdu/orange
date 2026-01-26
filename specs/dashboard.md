@@ -100,6 +100,47 @@ class Dashboard implements Component {
 }
 ```
 
+## Async Operations
+
+Pi-tui's `handleInput()` is synchronous. For non-blocking git operations:
+
+1. **Fire-and-forget** in input handler
+2. **Show loader** with temporary UI state
+3. **Call `requestRender()`** on completion
+
+```typescript
+class Dashboard implements Component {
+  private tui: TUI;
+  private pending = new Set<string>();  // track in-progress ops
+
+  handleInput(key: string) {
+    if (key === 'm' && !this.pending.has(this.selectedTask.id)) {
+      this.handleMerge(this.selectedTask);  // fire-and-forget, returns immediately
+    }
+  }
+
+  private async handleMerge(task: Task) {
+    this.pending.add(task.id);
+    task.uiStatus = 'merging';  // temporary display state
+    this.tui.requestRender();
+
+    try {
+      await this.app.taskMerge(task.id);  // async git fetch, merge, push
+    } catch (err) {
+      task.uiStatus = 'error';
+      task.error = err.message;
+    } finally {
+      this.pending.delete(task.id);
+    }
+
+    await this.reloadTasks();
+    this.tui.requestRender();
+  }
+}
+```
+
+**Cancellation** (optional): Use `CancellableLoader` with `AbortController` for long operations.
+
 ## Polling
 
 ```typescript
@@ -113,6 +154,6 @@ setInterval(() => {
     const output = execSync(`tmux capture-pane -t "${task.project}/${task.branch}" -p | tail -1`);
     task.lastOutput = output.toString().trim();
   }
-  this.tui.invalidate();
+  this.tui.requestRender();
 }, 5000);
 ```

@@ -2,6 +2,10 @@
 
 Agent orchestration. TS + pi-tui + tmux + SQLite.
 
+## Related Projects
+
+- pi-tui: `~/workspace/pi-mono/packages/tui/` — TUI framework
+
 ## Setup
 
 1. Read `specs/architecture.md`
