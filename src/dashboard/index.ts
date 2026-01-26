@@ -378,6 +378,18 @@ export class DashboardComponent implements Component {
       });
   }
 
+  /**
+   * Get the command to run orange CLI.
+   * Works with both `bun run src/index.ts` and compiled binary.
+   */
+  private getOrangeCommand(args: string[]): string[] {
+    const scriptPath = process.argv[1];
+    if (scriptPath.endsWith('.ts')) {
+      return ["bun", "run", scriptPath, ...args];
+    }
+    return [scriptPath, ...args];
+  }
+
   private mergeTask(): void {
     const task = this.state.tasks[this.state.cursor];
     if (!task || this.state.pendingOps.has(task.id)) return;
@@ -385,7 +397,7 @@ export class DashboardComponent implements Component {
     this.state.pendingOps.add(task.id);
 
     // Fire async merge
-    const proc = Bun.spawn(["orange", "task", "merge", task.id], {
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "merge", task.id]), {
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -408,7 +420,7 @@ export class DashboardComponent implements Component {
     this.state.pendingOps.add(task.id);
 
     // Fire async cancel
-    const proc = Bun.spawn(["orange", "task", "cancel", task.id], {
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id]), {
       stdout: "pipe",
       stderr: "pipe",
     });
