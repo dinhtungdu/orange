@@ -93,15 +93,14 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   const orangeTaskFile = join(workspacePath, ".orange-task");
   await writeFile(orangeTaskFile, JSON.stringify({ id: task.id }), "utf-8");
 
-  // Create tmux session with output logging
+  // Create tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
-  const prompt = buildAgentPrompt(task, workspacePath);
-  const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
   const taskDir = getTaskDir(deps, task.project, task.branch);
-  const logFile = join(taskDir, "output.log");
+  const prompt = buildAgentPrompt(task, workspacePath, taskDir);
+  const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
 
-  log.debug("Creating tmux session", { session: tmuxSession, logFile });
-  await deps.tmux.newSession(tmuxSession, workspacePath, command, logFile);
+  log.debug("Creating tmux session", { session: tmuxSession });
+  await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
   // Update task
   const now = deps.clock.now();

@@ -24,7 +24,7 @@ All commands operate on the current project (inferred from your working director
 orange task create <branch> <description>
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
-orange task log <task_id> [--lines N]    # View output log
+orange task log <task_id>                # View conversation history
 orange task respawn <task_id>            # Restart dead session
 orange task merge <task_id> [--strategy ff|merge]
 orange task cancel <task_id>
@@ -50,27 +50,63 @@ orange workspace list [--all]    # Show pool status
 - Branch names should be **descriptive** - e.g., `add-user-auth`, `fix-login-bug`
 - Descriptions should be **clear** - enough context for the agent to work autonomously
 
+## Passing Context to Agents
+
+Before spawning, write implementation details to the task's CONTEXT.md file:
+
+```bash
+# Task folder location
+~/orange/tasks/<project>/<branch>/CONTEXT.md
+
+# Example: write context before task is auto-spawned
+cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
+## Implementation Notes
+
+- Use existing AuthService in src/services/auth.ts
+- Follow pattern from src/components/SignupForm.tsx
+- Store token in localStorage, not cookies
+- Add tests in __tests__/Login.test.tsx
+
+## Key Files
+- src/services/auth.ts - AuthService class
+- src/components/SignupForm.tsx - reference implementation
+EOF
+
+orange task create add-login "Implement login form with email/password"
+```
+
+The agent will read CONTEXT.md first for your implementation guidance.
+
 ## Example Session
 
 User: "I want to add user authentication. It needs login, logout, and password reset."
 
 Orchestrator:
 ```bash
+# Write context for first task
+cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
+## Implementation Notes
+- Create LoginForm component in src/components/
+- Use AuthService.login() for API call
+- Redirect to /dashboard on success
+EOF
+
 orange task create add-login "Implement login form and authentication flow"
-# Output: Created task abc123
+# Output: Created task abc123, Spawned agent in myproject/add-login
+
+# Write context for second task
+cat > ~/orange/tasks/myproject/add-logout/CONTEXT.md << 'EOF'
+## Implementation Notes
+- Add logout button to Header component
+- Call AuthService.logout() and clear localStorage
+- Redirect to /login
+EOF
 
 orange task create add-logout "Implement logout functionality"
-# Output: Created task def456
-
-orange task create add-password-reset "Implement password reset with email verification"
-# Output: Created task ghi789
-
-orange task spawn abc123
-orange task spawn def456
-orange task spawn ghi789
+# Output: Created task def456, Spawned agent in myproject/add-logout
 ```
 
-"I've spawned three agents working on authentication features. You can monitor progress in the dashboard pane. I'll let you know when they're ready for review."
+"I've created and spawned agents for login and logout. Writing context for password reset next..."
 
 ## Status Indicators
 
@@ -127,4 +163,4 @@ For tasks that MUST run sequentially (B depends on A):
 - You don't need to orchestrate reviews - just monitor status
 - When tasks show `needs_human`, the user should review in the dashboard
 - The dashboard pane next to you shows tasks for this project
-- All agent output is captured to `output.log` for debugging
+- Use `orange task log <id>` to view agent conversation history

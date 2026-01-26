@@ -206,9 +206,11 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   log.info("Task created", { taskId: id, project: projectName, branch });
   console.log(`Created task ${id} (${projectName}/${branch})`);
 
-  // Auto-spawn agent
-  await spawnTaskById(deps, id);
-  console.log(`Spawned agent in ${projectName}/${branch}`);
+  // Auto-spawn agent unless --no-spawn flag
+  if (!parsed.options["no-spawn"]) {
+    await spawnTaskById(deps, id);
+    console.log(`Spawned agent in ${projectName}/${branch}`);
+  }
 }
 
 /**
@@ -442,17 +444,16 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Get workspace path
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const taskDir = getTaskDir(deps, task.project, task.branch);
 
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
   const { buildRespawnPrompt } = await import("../../core/agent.js");
-  const prompt = buildRespawnPrompt(task, workspacePath);
+  const prompt = buildRespawnPrompt(task, workspacePath, taskDir);
   const command = `claude --permission-mode acceptEdits "${prompt.replace(/"/g, '\\"')}"`;
-  const taskDir = getTaskDir(deps, task.project, task.branch);
-  const logFile = join(taskDir, "output.log");
 
   log.info("Respawning task", { taskId, session: tmuxSession });
-  await deps.tmux.newSession(tmuxSession, workspacePath, command, logFile);
+  await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
   // Update task
   const now = deps.clock.now();
