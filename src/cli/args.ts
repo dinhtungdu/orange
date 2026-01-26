@@ -156,5 +156,15 @@ Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project
   orange workspace list [options]     Show workspace pool status
     --all                             Show all projects' workspaces
+
+Logging:
+  orange log [options]                View application logs
+    --level <level>                   Filter by level (error|warn|info|debug)
+    --component <name>                Filter by component
+    --grep <pattern>                  Search for pattern
+    --lines <n>                       Show last N lines (default: follow mode)
+
+Environment Variables:
+  ORANGE_LOG_LEVEL                    Set log level (default: info)
 `);
 }

@@ -13,12 +13,25 @@ import { runTaskCommand } from "./cli/commands/task.js";
 import { runWorkspaceCommand } from "./cli/commands/workspace.js";
 import { runStartCommand } from "./cli/commands/start.js";
 import { runInstallCommand } from "./cli/commands/install.js";
+import { runLogCommand } from "./cli/commands/log.js";
 import { runDashboard } from "./dashboard/index.js";
 import { createDeps } from "./core/deps.js";
 
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv);
   const deps = createDeps();
+  const log = deps.logger.child("cli");
+
+  // Log command start (except for log command to avoid noise)
+  if (parsed.command !== "log") {
+    log.info("Command start", {
+      command: parsed.command,
+      subcommand: parsed.subcommand,
+      args: parsed.args,
+    });
+  }
+
+  const startTime = Date.now();
 
   try {
     switch (parsed.command) {
@@ -49,6 +62,10 @@ async function main(): Promise<void> {
         await runInstallCommand();
         break;
 
+      case "log":
+        await runLogCommand(parsed, deps);
+        break;
+
       case "help":
       case "--help":
       case "-h":
@@ -60,7 +77,25 @@ async function main(): Promise<void> {
         printUsage();
         process.exit(1);
     }
+
+    // Log command end (except for log command and dashboard which runs indefinitely)
+    if (parsed.command !== "log" && parsed.command !== "dashboard") {
+      log.info("Command end", {
+        command: parsed.command,
+        subcommand: parsed.subcommand,
+        durationMs: Date.now() - startTime,
+        exitCode: 0,
+      });
+    }
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    log.error("Command failed", {
+      command: parsed.command,
+      subcommand: parsed.subcommand,
+      error: errorMsg,
+      durationMs: Date.now() - startTime,
+    });
+
     if (error instanceof Error) {
       console.error(`Error: ${error.message}`);
     } else {

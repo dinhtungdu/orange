@@ -12,6 +12,7 @@ import type { Deps, Task, Project } from "./types.js";
 import { MockGit } from "./git.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
+import { NullLogger } from "./logger.js";
 import {
   loadProjects,
   saveProjects,
@@ -33,6 +34,7 @@ describe("Projects state", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
   });
 
@@ -89,6 +91,7 @@ describe("Task state (TASK.md)", () => {
       git: new MockGit(),
       clock: mockClock,
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
   });
 
@@ -182,6 +185,7 @@ describe("History (history.jsonl)", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
   });
 

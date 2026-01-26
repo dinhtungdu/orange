@@ -13,6 +13,7 @@ import type { Deps } from "../../core/types.js";
 import { MockGit } from "../../core/git.js";
 import { MockTmux } from "../../core/tmux.js";
 import { MockClock } from "../../core/clock.js";
+import { NullLogger } from "../../core/logger.js";
 import { parseArgs } from "../args.js";
 import { runProjectCommand } from "./project.js";
 import { loadProjects } from "../../core/state.js";
@@ -61,6 +62,7 @@ describe("project add command", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Capture console output
@@ -210,6 +212,7 @@ describe("project list command", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     consoleLogs = [];
@@ -294,6 +297,7 @@ describe("project remove command", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     consoleLogs = [];
@@ -374,6 +378,7 @@ describe("project command error handling", () => {
       git: new MockGit(),
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     consoleErrors = [];

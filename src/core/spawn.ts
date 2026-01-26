@@ -8,7 +8,7 @@
 
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
-import type { Deps, Task, Project } from "./types.js";
+import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory } from "./state.js";
 import { listTasks, updateTaskInDb } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
@@ -41,35 +41,49 @@ function shellEscape(str: string): string {
  * @throws Error if tmux not available, task not found, not pending, or no workspace available
  */
 export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
+  const log = deps.logger.child("spawn");
+
+  log.info("Spawning task", { taskId });
+
   // Check if tmux is available before spawning
   const tmuxAvailable = await deps.tmux.isAvailable();
   if (!tmuxAvailable) {
+    log.error("tmux not available");
     throw new Error("tmux is not installed or not in PATH. Install tmux to spawn agents.");
   }
 
   // Find task by ID
+  log.debug("Loading task", { taskId });
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found", { taskId });
     throw new Error(`Task '${taskId}' not found`);
   }
 
   if (task.status !== "pending") {
+    log.error("Task not pending", { taskId, status: task.status });
     throw new Error(`Task '${taskId}' is not pending (status: ${task.status})`);
   }
+
+  log.debug("Task loaded", { taskId, project: task.project, branch: task.branch });
 
   // Get project for workspace
   const projects = await loadProjects(deps);
   const project = projects.find((p) => p.name === task.project);
   if (!project) {
+    log.error("Project not found", { project: task.project });
     throw new Error(`Project '${task.project}' not found`);
   }
 
   // Acquire workspace
   const workspace = await acquireWorkspace(deps, task.project, `${task.project}/${task.branch}`);
+  log.debug("Workspace acquired", { workspace, project: task.project });
 
   // Setup git branch in workspace
   const workspacePath = join(deps.dataDir, "workspaces", workspace);
+  log.debug("Setting up git branch", { workspacePath, branch: task.branch });
+
   await deps.git.fetch(workspacePath);
   await deps.git.checkout(workspacePath, project.default_branch);
   await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
@@ -84,6 +98,7 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   const prompt = buildAgentPrompt(task, workspacePath);
   const command = `claude --prompt "${shellEscape(prompt)}"`;
 
+  log.debug("Creating tmux session", { session: tmuxSession });
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
   // Update task
@@ -107,6 +122,8 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     to: "working",
   });
   await updateTaskInDb(deps, task);
+
+  log.info("Task spawned", { taskId, workspace, session: tmuxSession });
 }
 
 /**
@@ -116,6 +133,8 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
  * Silently returns if no pending tasks or spawn fails.
  */
 export async function spawnNextPending(deps: Deps, projectName: string): Promise<void> {
+  const log = deps.logger.child("spawn");
+
   try {
     // Get pending tasks for this project
     const pendingTasks = await listTasks(deps, {
@@ -124,17 +143,21 @@ export async function spawnNextPending(deps: Deps, projectName: string): Promise
     });
 
     if (pendingTasks.length === 0) {
+      log.debug("No pending tasks to auto-spawn", { project: projectName });
       return;
     }
 
     // Tasks are ordered by created_at DESC, so last one is oldest (FIFO)
     const nextTask = pendingTasks[pendingTasks.length - 1];
 
+    log.info("Auto-spawning next pending task", { taskId: nextTask.id, project: projectName, branch: nextTask.branch });
     await spawnTaskById(deps, nextTask.id);
     console.log(`Auto-spawned pending task ${nextTask.id} (${projectName}/${nextTask.branch})`);
   } catch (err) {
     // Silently ignore errors - auto-spawn is best-effort
     // Common case: no available workspace (already in use by another task)
-    console.error(`Auto-spawn failed for ${projectName}:`, err instanceof Error ? err.message : err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    log.warn("Auto-spawn failed", { project: projectName, error: errorMsg });
+    console.error(`Auto-spawn failed for ${projectName}:`, errorMsg);
   }
 }

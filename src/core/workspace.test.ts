@@ -12,6 +12,7 @@ import type { Deps, Project } from "./types.js";
 import { MockGit } from "./git.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
+import { NullLogger } from "./logger.js";
 import {
   initWorkspacePool,
   acquireWorkspace,
@@ -42,6 +43,7 @@ describe("Workspace Pool", () => {
       git: mockGit,
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Register project (needed for lazy init pool_size check)
@@ -201,6 +203,7 @@ describe("Lazy Workspace Initialization", () => {
       git: mockGit,
       clock: new MockClock(),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Register the project (required for lazy init to find pool_size)

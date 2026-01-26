@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
-import type { Deps, Project, PoolState, WorkspaceEntry } from "./types.js";
+import type { Deps, Project, PoolState, WorkspaceEntry, Logger } from "./types.js";
 import { loadProjects } from "./state.js";
 
 /**
@@ -146,6 +146,9 @@ export async function acquireWorkspace(
   projectName: string,
   task: string
 ): Promise<string> {
+  const log = deps.logger.child("workspace");
+
+  log.debug("Acquiring workspace", { project: projectName, task });
   await ensureWorkspacesDir(deps);
 
   // Create lock file if it doesn't exist
@@ -153,6 +156,7 @@ export async function acquireWorkspace(
   await writeFile(lockPath, "", { flag: "a" });
 
   // Acquire lock
+  log.debug("Acquiring pool lock");
   const release = await lock(lockPath, { retries: 5 });
 
   try {
@@ -169,32 +173,39 @@ export async function acquireWorkspace(
       const [name] = available;
       poolState.workspaces[name] = { status: "bound", task };
       await savePoolState(deps, poolState);
+      log.info("Workspace acquired", { workspace: name, project: projectName, task });
       return name;
     }
 
     // No available workspace - try lazy init
+    log.debug("No available workspace, attempting lazy init", { project: projectName });
     const projects = await loadProjects(deps);
     const project = projects.find((p) => p.name === projectName);
     if (!project) {
+      log.error("Project not found for lazy init", { project: projectName });
       throw new Error(`Project '${projectName}' not found`);
     }
 
     const existingCount = countProjectWorkspaces(poolState, projectName);
     if (existingCount >= project.pool_size) {
+      log.warn("Pool exhausted", { project: projectName, existing: existingCount, poolSize: project.pool_size });
       throw new Error(
         `No available workspace for project '${projectName}' (pool exhausted: ${existingCount}/${project.pool_size})`
       );
     }
 
     // Create new worktree (lazy init)
+    log.info("Creating new worktree (lazy init)", { project: projectName });
     const name = await createWorktree(deps, project, poolState);
 
     // Mark as bound immediately
     poolState.workspaces[name] = { status: "bound", task };
     await savePoolState(deps, poolState);
 
+    log.info("Workspace acquired (new)", { workspace: name, project: projectName, task });
     return name;
   } finally {
+    log.debug("Releasing pool lock");
     await release();
   }
 }
@@ -205,6 +216,9 @@ export async function acquireWorkspace(
  * After release, auto-spawns the next pending task for this project.
  */
 export async function releaseWorkspace(deps: Deps, workspace: string): Promise<void> {
+  const log = deps.logger.child("workspace");
+
+  log.debug("Releasing workspace", { workspace });
   await ensureWorkspacesDir(deps);
 
   // Create lock file if it doesn't exist
@@ -215,17 +229,20 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
   const projectName = workspace.split("--")[0];
 
   // Acquire lock
+  log.debug("Acquiring pool lock for release");
   const release = await lock(lockPath, { retries: 5 });
 
   try {
     const poolState = await loadPoolState(deps);
 
     if (!poolState.workspaces[workspace]) {
+      log.error("Workspace not found in pool", { workspace });
       throw new Error(`Workspace '${workspace}' not found in pool`);
     }
 
     // Clean workspace
     const workspacePath = join(getWorkspacesDir(deps), workspace);
+    log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
     // Try to checkout main, fall back to master if needed
     try {
@@ -239,7 +256,10 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
     // Mark as available
     poolState.workspaces[workspace] = { status: "available" };
     await savePoolState(deps, poolState);
+
+    log.info("Workspace released", { workspace, project: projectName });
   } finally {
+    log.debug("Releasing pool lock");
     await release();
   }
 

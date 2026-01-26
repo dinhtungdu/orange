@@ -11,6 +11,7 @@ Agent orchestration system in TypeScript. Chat with orchestrator → agents work
 - [Dashboard](./dashboard.md) — TUI, keybindings
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
 - [Workspace Pool](./workspace.md) — worktree management
+- [Logging](./logging.md) — structured logging, debugging
 - [Testing](./testing.md) — setup, strategy
 
 ## Overview

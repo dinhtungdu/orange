@@ -22,6 +22,7 @@ import type {
 import { MockGit } from "../../core/git.js";
 import { MockTmux } from "../../core/tmux.js";
 import { MockClock } from "../../core/clock.js";
+import { NullLogger } from "../../core/logger.js";
 import { parseArgs } from "../args.js";
 import { runTaskCommand } from "./task.js";
 import { runProjectCommand } from "./project.js";
@@ -56,6 +57,7 @@ describe("task create command", () => {
       git: new MockGit(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Initialize database
@@ -187,6 +189,7 @@ describe("task list command", () => {
       git: new MockGit(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -325,6 +328,7 @@ describe("task spawn command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -457,6 +461,7 @@ describe("task complete command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -543,6 +548,7 @@ describe("task stuck command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -613,6 +619,7 @@ describe("task merge command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -717,6 +724,7 @@ describe("task cancel command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -806,6 +814,7 @@ describe("task peek command", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     // Database is created lazily via ensureDb()
@@ -916,6 +925,7 @@ describe("MockTmux availability", () => {
       git: mockGit,
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
+      logger: new NullLogger(),
     };
 
     const project: Project = {

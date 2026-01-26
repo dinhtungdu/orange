@@ -17,7 +17,7 @@
 import { mkdir } from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
-import type { Deps, Task, TaskStatus } from "../../core/types.js";
+import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
 import {
   loadProjects,
   saveTask,
@@ -124,6 +124,8 @@ export async function runTaskCommand(
  * Project is inferred from current working directory, or can be specified with --project.
  */
 async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 2) {
     console.error("Usage: orange task create <branch> <description>");
     process.exit(1);
@@ -140,6 +142,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     const projects = await loadProjects(deps);
     const project = projects.find((p) => p.name === projectName);
     if (!project) {
+      log.error("Project not found", { project: projectName });
       console.error(`Project '${projectName}' not found`);
       process.exit(1);
     }
@@ -150,6 +153,8 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const now = deps.clock.now();
   const id = nanoid(8);
+
+  log.info("Creating task", { taskId: id, project: projectName, branch, description });
 
   const task: Task = {
     id,
@@ -181,6 +186,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Update SQLite index
   await updateTaskInDb(deps, task);
 
+  log.info("Task created", { taskId: id, project: projectName, branch });
   console.log(`Created task ${id} (${projectName}/${branch})`);
 }
 
@@ -303,6 +309,8 @@ async function peekTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Mark task as complete (called by hook).
  */
 async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task complete <task_id>");
     process.exit(1);
@@ -314,6 +322,7 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found for complete", { taskId });
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
@@ -322,6 +331,8 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const previousStatus = task.status;
   task.status = "needs_human";
   task.updated_at = now;
+
+  log.info("Task completed", { taskId, from: previousStatus, to: "needs_human" });
 
   await saveTask(deps, task);
   await appendHistory(deps, task.project, task.branch, {
@@ -344,6 +355,8 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Mark task as stuck (called by hook).
  */
 async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task stuck <task_id>");
     process.exit(1);
@@ -355,6 +368,7 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found for stuck", { taskId });
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
@@ -363,6 +377,8 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const previousStatus = task.status;
   task.status = "stuck";
   task.updated_at = now;
+
+  log.warn("Task stuck", { taskId, from: previousStatus, to: "stuck" });
 
   await saveTask(deps, task);
   await appendHistory(deps, task.project, task.branch, {
@@ -391,6 +407,8 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * 4. Cleanup: release workspace, delete remote branch, kill tmux session
  */
 async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task merge <task_id> [--strategy ff|merge]");
     process.exit(1);
@@ -404,10 +422,13 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  log.info("Merging task", { taskId, strategy });
+
   // Find task
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found for merge", { taskId });
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
@@ -416,6 +437,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const projects = await loadProjects(deps);
   const project = projects.find((p) => p.name === task.project);
   if (!project) {
+    log.error("Project not found for merge", { project: task.project });
     console.error(`Project '${task.project}' not found`);
     process.exit(1);
   }
@@ -424,10 +446,12 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   let mergeVia: "local" | "pr" = "local";
 
   // Check if PR exists and is already merged
+  log.debug("Checking PR status", { branch: task.branch });
   const prStatus = await checkPRStatus(project.path, task.branch);
 
   if (prStatus.merged && prStatus.mergeCommit) {
     // PR was merged on GitHub - skip local merge, use PR's merge commit
+    log.info("PR already merged on GitHub", { branch: task.branch, commit: prStatus.mergeCommit });
     console.log(`PR for ${task.branch} already merged on GitHub`);
     commitHash = prStatus.mergeCommit;
     mergeVia = "pr";
@@ -438,6 +462,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
   } else {
     // No PR or PR not merged - do local merge
+    log.debug("Performing local merge", { branch: task.branch, strategy });
     await deps.git.checkout(project.path, project.default_branch);
     await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
     commitHash = await deps.git.getCommitHash(project.path);
@@ -445,18 +470,22 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Delete remote branch
   try {
+    log.debug("Deleting remote branch", { branch: task.branch });
     await deps.git.deleteRemoteBranch(project.path, task.branch);
   } catch {
+    log.debug("Remote branch deletion failed (may not exist)", { branch: task.branch });
     // Ignore errors - remote branch may not exist
   }
 
   // Release workspace
   if (task.workspace) {
+    log.debug("Releasing workspace", { workspace: task.workspace });
     await releaseWorkspace(deps, task.workspace);
   }
 
   // Kill tmux session (safe - ignores errors if session already gone)
   if (task.tmux_session) {
+    log.debug("Killing tmux session", { session: task.tmux_session });
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
@@ -483,6 +512,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
   await updateTaskInDb(deps, task);
 
+  log.info("Task merged", { taskId, mergeVia, commitHash });
   const mergeMsg = mergeVia === "pr" ? "via PR" : "locally";
   console.log(`Task ${taskId} merged ${mergeMsg} and cleaned up`);
 }
@@ -491,6 +521,8 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Cancel task.
  */
 async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task cancel <task_id>");
     process.exit(1);
@@ -498,21 +530,26 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const taskId = parsed.args[0];
 
+  log.info("Cancelling task", { taskId });
+
   // Find task
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found for cancel", { taskId });
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
 
   // Release workspace
   if (task.workspace) {
+    log.debug("Releasing workspace", { workspace: task.workspace });
     await releaseWorkspace(deps, task.workspace);
   }
 
   // Kill tmux session (safe - ignores errors if session already gone)
   if (task.tmux_session) {
+    log.debug("Killing tmux session", { session: task.tmux_session });
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
@@ -538,5 +575,6 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
   await updateTaskInDb(deps, task);
 
+  log.info("Task cancelled", { taskId, from: previousStatus });
   console.log(`Task ${taskId} cancelled`);
 }

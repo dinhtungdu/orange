@@ -13,6 +13,7 @@ import type { Deps, Project } from "../core/types.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockGit } from "../core/git.js";
 import { RealClock, MockClock } from "../core/clock.js";
+import { NullLogger } from "../core/logger.js";
 import { saveProjects, loadProjects, saveTask, loadTask } from "../core/state.js";
 import { listTasks, updateTaskInDb, rebuildDb } from "../core/db.js";
 import { initWorkspacePool, acquireWorkspace, releaseWorkspace, getPoolStats } from "../core/workspace.js";
@@ -64,6 +65,7 @@ describe("Integration: Git Operations", () => {
       git: new MockGit(), // Use MockGit for these tests - we're testing CWD detection, not git operations
       clock: new RealClock(),
       dataDir: join(tempDir, "orange"),
+      logger: new NullLogger(),
     };
   });
 
@@ -134,6 +136,7 @@ describe("Integration: Workspace Pool", () => {
       git: mockGit,
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
+      logger: new NullLogger(),
     };
 
     project = {
@@ -224,6 +227,7 @@ describe("Integration: Full Task Lifecycle", () => {
       git: mockGit,
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
+      logger: new NullLogger(),
     };
 
     project = {
@@ -357,6 +361,7 @@ describe("Integration: Multiple Projects", () => {
       git: mockGit,
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
+      logger: new NullLogger(),
     };
   });
 

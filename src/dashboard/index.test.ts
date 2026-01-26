@@ -14,6 +14,7 @@ import type { Deps, Task, Project } from "../core/types.js";
 import { MockGit } from "../core/git.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
+import { NullLogger } from "../core/logger.js";
 import { saveTask } from "../core/state.js";
 import { saveProjects } from "../core/state.js";
 import { updateTaskInDb } from "../core/db.js";
@@ -100,6 +101,7 @@ describe("Dashboard Component", () => {
       tmux: new MockTmux(),
       git: new MockGit(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      logger: new NullLogger(),
       dataDir: tempDir,
     };
 

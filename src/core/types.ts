@@ -132,6 +132,18 @@ export interface Clock {
 }
 
 /**
+ * Logger interface for structured logging.
+ * Imported from logger.ts but declared here to avoid circular deps.
+ */
+export interface Logger {
+  error(msg: string, context?: Record<string, unknown>): void;
+  warn(msg: string, context?: Record<string, unknown>): void;
+  info(msg: string, context?: Record<string, unknown>): void;
+  debug(msg: string, context?: Record<string, unknown>): void;
+  child(component: string): Logger;
+}
+
+/**
  * Deps is the dependency injection container.
  * All external dependencies are injected through this interface,
  * allowing easy mocking in tests.
@@ -143,6 +155,8 @@ export interface Deps {
   git: GitExecutor;
   /** Time operations */
   clock: Clock;
+  /** Structured logger */
+  logger: Logger;
   /** Data directory path (default: ~/orange) */
   dataDir: string;
 }

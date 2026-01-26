@@ -12,6 +12,7 @@ import type { Deps, Task } from "./types.js";
 import { MockGit } from "./git.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
+import { NullLogger } from "./logger.js";
 import { saveTask } from "./state.js";
 import { updateTaskInDb, listTasks, getTaskById, rebuildDb } from "./db.js";
 
@@ -25,6 +26,7 @@ describe("SQLite Index Cache", () => {
       tmux: new MockTmux(),
       git: new MockGit(),
       clock: new MockClock(),
+      logger: new NullLogger(),
       dataDir: tempDir,
     };
   });
