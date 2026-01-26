@@ -2,7 +2,8 @@
  * Install command - installs Orange skills and stop hook.
  *
  * - Symlinks each skill folder to ~/.claude/skills/<skill-name> (dev changes reflect immediately)
- * - Installs the stop hook to ~/.claude/hooks/stop.sh
+ * - Adds stop hook to ~/.claude/settings.json
+ * - Creates hook script at ~/.claude/hooks/stop-orange.sh
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
  * is symlinked as a separate skill (e.g., skills/orchestrator -> ~/.claude/skills/orange-orchestrator).
@@ -14,16 +15,15 @@ import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 
 const SKILLS_DIR = join(import.meta.dir, "../../../skills");
-const SKILLS_DEST_DIR = join(homedir(), ".claude/skills");
-
-const HOOKS_DIR = join(homedir(), ".claude/hooks");
-const STOP_HOOK_PATH = join(HOOKS_DIR, "stop.sh");
+const CLAUDE_DIR = join(homedir(), ".claude");
+const SKILLS_DEST_DIR = join(CLAUDE_DIR, "skills");
+const HOOKS_DIR = join(CLAUDE_DIR, "hooks");
+const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
+const STOP_HOOK_SCRIPT = join(HOOKS_DIR, "stop-orange.sh");
 
 /**
- * Stop hook content.
- * This hook is called by Claude Code when an agent stops.
- * It reads the .orange-task file to determine if the agent passed or got stuck.
- * Uses pure bash JSON parsing (no jq dependency).
+ * Stop hook script content.
+ * Called by the settings.json hook entry.
  */
 const STOP_HOOK_CONTENT = `#!/bin/bash
 # Orange stop hook - notifies orange when agent completes
@@ -40,10 +40,28 @@ if [[ -f .orange-task ]]; then
     elif [[ "$OUTCOME" == "stuck" ]]; then
       orange task stuck "$TASK_ID"
     fi
-    # Unknown outcomes are ignored (agent may have crashed before writing)
   fi
 fi
 `;
+
+/** Hook command that goes into settings.json */
+const ORANGE_HOOK_COMMAND = `bash ${STOP_HOOK_SCRIPT}`;
+
+interface HookEntry {
+  command: string;
+  type: "command";
+}
+
+interface HookMatcher {
+  hooks: HookEntry[];
+}
+
+interface Settings {
+  hooks?: {
+    Stop?: HookMatcher[];
+  };
+  [key: string]: unknown;
+}
 
 /**
  * Install a single skill by creating a symlink.
@@ -62,6 +80,54 @@ async function installSkill(skillName: string, sourcePath: string): Promise<void
   // Create symlink
   await symlink(sourcePath, destPath, "dir");
   console.log(`Installed skill: orange-${skillName}`);
+}
+
+/**
+ * Install the stop hook into settings.json.
+ */
+async function installStopHook(): Promise<void> {
+  // Load existing settings
+  let settings: Settings = {};
+  try {
+    const content = await readFile(SETTINGS_PATH, "utf-8");
+    settings = JSON.parse(content);
+  } catch {
+    // File doesn't exist or invalid JSON, start fresh
+  }
+
+  // Ensure hooks.Stop structure exists
+  if (!settings.hooks) {
+    settings.hooks = {};
+  }
+  if (!settings.hooks.Stop) {
+    settings.hooks.Stop = [];
+  }
+
+  // Check if orange hook already exists
+  const orangeHookExists = settings.hooks.Stop.some((matcher) =>
+    matcher.hooks?.some((hook) => hook.command.includes("stop-orange.sh"))
+  );
+
+  if (orangeHookExists) {
+    console.log("Stop hook already installed in settings.json");
+    return;
+  }
+
+  // Add orange hook
+  // Find existing matcher or create new one
+  if (settings.hooks.Stop.length === 0) {
+    settings.hooks.Stop.push({ hooks: [] });
+  }
+
+  // Add to first matcher's hooks array
+  settings.hooks.Stop[0].hooks.push({
+    command: ORANGE_HOOK_COMMAND,
+    type: "command",
+  });
+
+  // Write back settings
+  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  console.log("Added stop hook to settings.json");
 }
 
 /**
@@ -94,33 +160,11 @@ export async function runInstallCommand(): Promise<void> {
     console.log(`Installed ${skillCount} skill(s) to ${SKILLS_DEST_DIR}`);
   }
 
-  // Check if stop hook already exists and has content
-  let existingContent = "";
-  try {
-    existingContent = await readFile(STOP_HOOK_PATH, "utf-8");
-  } catch {
-    // File doesn't exist, will create new
-  }
+  // Write hook script
+  await writeFile(STOP_HOOK_SCRIPT, STOP_HOOK_CONTENT);
+  await chmod(STOP_HOOK_SCRIPT, 0o755);
+  console.log(`Installed hook script to ${STOP_HOOK_SCRIPT}`);
 
-  // Only write hook if it doesn't exist or is our hook
-  if (!existingContent || existingContent.includes("Orange stop hook")) {
-    await writeFile(STOP_HOOK_PATH, STOP_HOOK_CONTENT);
-    await chmod(STOP_HOOK_PATH, 0o755);
-    console.log(`Installed stop hook to ${STOP_HOOK_PATH}`);
-  } else {
-    console.log(`Stop hook already exists at ${STOP_HOOK_PATH} (not overwriting)`);
-    console.log("To enable Orange integration, add the following to your stop hook:");
-    console.log("");
-    console.log(`if [[ -f .orange-task ]]; then`);
-    console.log(`  TASK_ID=$(jq -r .id .orange-task 2>/dev/null)`);
-    console.log(`  OUTCOME=$(jq -r .outcome .orange-task 2>/dev/null)`);
-    console.log(`  if [[ -n "$TASK_ID" && "$TASK_ID" != "null" ]]; then`);
-    console.log(`    if [[ "$OUTCOME" == "passed" ]]; then`);
-    console.log(`      orange task complete "$TASK_ID"`);
-    console.log(`    else`);
-    console.log(`      orange task stuck "$TASK_ID"`);
-    console.log(`    fi`);
-    console.log(`  fi`);
-    console.log(`fi`);
-  }
+  // Add hook to settings.json
+  await installStopHook();
 }
