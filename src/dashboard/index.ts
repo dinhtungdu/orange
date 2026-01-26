@@ -90,8 +90,9 @@ interface DashboardState {
 
 /**
  * Dashboard component.
+ * Exported for testing.
  */
-class DashboardComponent implements Component {
+export class DashboardComponent implements Component {
   private state: DashboardState = {
     tasks: [],
     allTasks: [],
@@ -139,15 +140,33 @@ class DashboardComponent implements Component {
     // Load initial tasks
     await this.refreshTasks();
 
-    // Watch task folders for changes
+    // Watch task folders for changes with efficient patterns:
+    // - Only watch TASK.md files (source of truth for task state)
+    // - Debounce rapid changes to avoid unnecessary rebuilds
     const tasksDir = join(this.deps.dataDir, "tasks");
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
     this.watcher = watch(tasksDir, {
       ignoreInitial: true,
-      depth: 2,
+      depth: 3,
+      // Only watch TASK.md files - ignore history.jsonl and other files
+      ignored: (path: string) => {
+        // Allow directories
+        if (!path.includes(".")) return false;
+        // Only allow TASK.md files
+        return !path.endsWith("TASK.md");
+      },
     });
 
-    this.watcher.on("all", () => {
-      this.refreshTasks().then(() => tui.requestRender());
+    this.watcher.on("all", (_event, path) => {
+      // Debounce: wait 100ms after last change before refreshing
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        this.refreshTasks().then(() => tui.requestRender());
+        debounceTimer = null;
+      }, 100);
     });
 
     // Periodically capture tmux output
@@ -163,6 +182,27 @@ class DashboardComponent implements Component {
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
     }
+  }
+
+  /**
+   * Load tasks without starting watchers. For testing.
+   */
+  async loadTasks(): Promise<void> {
+    await this.refreshTasks();
+  }
+
+  /**
+   * Get current cursor position. For testing.
+   */
+  getCursor(): number {
+    return this.state.cursor;
+  }
+
+  /**
+   * Get current status filter. For testing.
+   */
+  getStatusFilter(): StatusFilter {
+    return this.state.statusFilter;
   }
 
   private async refreshTasks(): Promise<void> {

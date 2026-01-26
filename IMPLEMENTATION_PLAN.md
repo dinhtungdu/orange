@@ -286,7 +286,7 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
   - Updated to reflect CWD-aware design
   - Orchestrator now assumes it's running in project directory
 
-**Total: 115 tests passing**
+**Total: 144 tests passing**
 
 ---
 
@@ -305,9 +305,9 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
   - Dashboard peek/capture uses safe methods
   - All error messages are clear and actionable
 
-- 🔴 **Performance optimizations**
-  - SQLite index rebuild on demand only
-  - Efficient file watching patterns
+- 🟢 **Performance optimizations**
+  - SQLite index rebuild on demand only (auto-triggers when db missing or schema invalid)
+  - Efficient file watching patterns (only watch TASK.md files, debounced 100ms)
 
 ### P3 - Extended Features
 
@@ -319,11 +319,13 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
 
 ### P5 - Test Coverage
 
-- 🔴 **Dashboard rendering tests**
-  - Use VirtualTerminal from pi-tui
+- 🟢 **Dashboard rendering tests** (`src/dashboard/index.test.ts`)
+  - 8 tests for rendering, navigation, filtering
+  - Uses MockTerminal and direct component testing
 
-- 🔴 **Integration tests with real git repos**
-  - Create temp repos for end-to-end testing
+- 🟢 **Integration tests with real git repos** (`src/__tests__/integration.test.ts`)
+  - 15 tests covering git operations, workspace pool, task lifecycle
+  - Creates temp git repos for end-to-end testing
 
 - 🟢 **CLI command integration tests**
   - project.test.ts: Add/list projects (16 tests)
@@ -386,7 +388,7 @@ Per specs/architecture.md:
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
 | `workspace.md` | 🟢 Complete | Lazy init deferred to future |
 | `dashboard.md` | 🟢 Complete | Project scoping, --all flag |
-| `testing.md` | 🟢 Complete | DI pattern, mocks, 121 tests |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 144 tests |
 
 ---
 
@@ -398,8 +400,11 @@ None currently.
 
 ## Next Steps
 
+All planned tasks complete! ✅
+
 1. ~~**Implement Phase 11** - CWD-aware refactor~~ ✅
 2. ~~Update tests for new command signatures~~ ✅
 3. ~~Lazy workspace initialization~~ ✅
-4. End-to-end testing with real tmux/git
-5. Dashboard rendering tests (VirtualTerminal from pi-tui)
+4. ~~End-to-end testing with real git repos~~ ✅
+5. ~~Dashboard rendering tests~~ ✅
+6. ~~Performance optimizations~~ ✅

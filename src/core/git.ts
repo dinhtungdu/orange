@@ -235,10 +235,17 @@ export class MockGit implements GitExecutor {
     // No-op in mock
   }
 
-  async addWorktree(_cwd: string, path: string, branch: string): Promise<void> {
+  async addWorktree(cwd: string, path: string, branch: string): Promise<void> {
     // Create the directory to simulate real git worktree behavior
     await mkdir(path, { recursive: true });
     this.worktrees.set(path, branch);
+    
+    // Copy branches from source repo to worktree path
+    const srcBranches = this.branches.get(cwd);
+    if (srcBranches) {
+      this.branches.set(path, new Set(srcBranches));
+      this.currentBranches.set(path, branch);
+    }
   }
 
   async removeWorktree(_cwd: string, path: string): Promise<void> {

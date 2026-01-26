@@ -1,17 +1,27 @@
 /**
  * SQLite index cache for fast task queries.
  *
- * The database is a derived cache rebuilt from task folders if missing.
+ * The database is a derived cache rebuilt from task folders if missing or corrupted.
  * Source of truth is the file-based TASK.md files.
  *
  * Uses Bun's built-in SQLite (bun:sqlite) for compatibility.
+ *
+ * Performance optimizations:
+ * - Rebuild is triggered on-demand when database is missing or schema is invalid
+ * - Single database connection per operation (auto-close)
+ * - Prepared statements for repeated queries
  */
 
 import { join } from "node:path";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, access, constants } from "node:fs/promises";
 import { Database } from "bun:sqlite";
 import type { Deps, Task, TaskStatus } from "./types.js";
 import { loadTask } from "./state.js";
+
+/**
+ * Track whether rebuild has been triggered this session to avoid repeated rebuilds.
+ */
+let rebuildTriggeredThisSession = false;
 
 /**
  * Get database path.
@@ -21,12 +31,53 @@ function getDbPath(deps: Deps): string {
 }
 
 /**
- * Ensure database exists and has schema.
+ * Check if database file exists.
+ */
+async function dbExists(deps: Deps): Promise<boolean> {
+  try {
+    await access(getDbPath(deps), constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate database schema integrity.
+ * Returns false if schema is missing or corrupted.
+ */
+function validateSchema(db: Database): boolean {
+  try {
+    // Check if tasks table exists with expected columns
+    const result = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+    ).get() as { sql: string } | null;
+
+    if (!result) return false;
+
+    // Verify essential columns exist
+    const requiredColumns = [
+      "id", "project", "branch", "status", "workspace",
+      "tmux_session", "description", "created_at", "updated_at"
+    ];
+
+    const sql = result.sql.toLowerCase();
+    return requiredColumns.every(col => sql.includes(col));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure database exists, has valid schema, and rebuild if needed.
  */
 async function ensureDb(deps: Deps): Promise<Database> {
   await mkdir(deps.dataDir, { recursive: true });
 
-  const db = new Database(getDbPath(deps));
+  const dbPath = getDbPath(deps);
+  const exists = await dbExists(deps);
+
+  const db = new Database(dbPath);
 
   // Create schema if not exists
   db.exec(`
@@ -46,7 +97,25 @@ async function ensureDb(deps: Deps): Promise<Database> {
     CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
   `);
 
+  // If database was just created or schema is invalid, trigger rebuild
+  if (!exists || !validateSchema(db)) {
+    if (!rebuildTriggeredThisSession) {
+      rebuildTriggeredThisSession = true;
+      db.close();
+      // Rebuild from task folders
+      await rebuildDbInternal(deps);
+      return new Database(dbPath);
+    }
+  }
+
   return db;
+}
+
+/**
+ * Reset rebuild tracking (useful for tests).
+ */
+export function resetRebuildTracking(): void {
+  rebuildTriggeredThisSession = false;
 }
 
 /**
@@ -122,11 +191,31 @@ export async function getTaskById(deps: Deps, id: string): Promise<Task | null> 
 }
 
 /**
- * Rebuild database from task folders.
- * Used when database is missing or corrupted.
+ * Internal rebuild function (used by ensureDb for auto-recovery).
  */
-export async function rebuildDb(deps: Deps): Promise<void> {
-  const db = await ensureDb(deps);
+async function rebuildDbInternal(deps: Deps): Promise<void> {
+  await mkdir(deps.dataDir, { recursive: true });
+
+  const dbPath = getDbPath(deps);
+  const db = new Database(dbPath);
+
+  // Create schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      project TEXT NOT NULL,
+      branch TEXT NOT NULL,
+      status TEXT NOT NULL,
+      workspace TEXT,
+      tmux_session TEXT,
+      description TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
+  `);
 
   // Clear existing data
   db.exec("DELETE FROM tasks");
@@ -173,4 +262,12 @@ export async function rebuildDb(deps: Deps): Promise<void> {
   }
 
   db.close();
+}
+
+/**
+ * Rebuild database from task folders.
+ * Public API for manual rebuild (e.g., from CLI).
+ */
+export async function rebuildDb(deps: Deps): Promise<void> {
+  await rebuildDbInternal(deps);
 }
