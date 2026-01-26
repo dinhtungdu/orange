@@ -16,17 +16,18 @@ Agent orchestration system in TypeScript. Chat with orchestrator → agents work
 ## Overview
 
 ```
-tmux sessions:
-┌─────────────────────────┐
-│ orange-orchestrator     │  ← orchestrator + dashboard
-│ ┌─────────┬───────────┐ │
-│ │ Claude  │ Dashboard │ │
-│ │ Code    │ TUI       │ │
-│ └─────────┴───────────┘ │
-└─────────────────────────┘
+tmux sessions (per-project orchestrators):
+┌─────────────────────────┐  ┌─────────────────────────┐
+│ coffee-orchestrator     │  │ orange-orchestrator     │
+│ cwd: ~/workspace/coffee │  │ cwd: ~/workspace/orange │
+│ ┌─────────┬───────────┐ │  │ ┌─────────┬───────────┐ │
+│ │ Claude  │ Dashboard │ │  │ │ Claude  │ Dashboard │ │
+│ │ Code    │ (scoped)  │ │  │ │ Code    │ (scoped)  │ │
+│ └─────────┴───────────┘ │  │ └─────────┴───────────┘ │
+└─────────────────────────┘  └─────────────────────────┘
 
 ┌─────────────────────────┐  ┌─────────────────────────┐
-│ orange/dark-mode        │  │ coffee/login-fix        │
+│ coffee/login-fix        │  │ orange/dark-mode        │
 │ (task session)          │  │ (task session)          │
 │ ┌─────────────────────┐ │  │ ┌─────────────────────┐ │
 │ │ Claude Code agent   │ │  │ │ Claude Code agent   │ │
@@ -37,8 +38,8 @@ tmux sessions:
 ```
 
 **Session naming:**
-- `orange-orchestrator` - Orchestrator + dashboard
-- `<project>/<branch>` - Task sessions (e.g., `orange/dark-mode`)
+- `<project>-orchestrator` - Per-project orchestrator + scoped dashboard (e.g., `coffee-orchestrator`)
+- `<project>/<branch>` - Task sessions (e.g., `coffee/login-fix`)
 
 ## Flow
 
@@ -155,17 +156,26 @@ cp dist/orange /usr/local/bin/
 ## Startup
 
 ```bash
+cd ~/workspace/coffee
 orange start
-# Creates tmux session (if not exists) and attaches:
-#   - Pane 0: Claude Code (with orange skill)
-#   - Pane 1: Dashboard TUI
-# If session exists, just attaches.
-# Working directory: ~/orange/
+# 1. Auto-registers project if not in projects.json (name from folder)
+# 2. Creates/attaches tmux session "coffee-orchestrator":
+#    - Pane 0: Claude Code (with orange skill, has project context)
+#    - Pane 1: Dashboard TUI (project-scoped, shows only coffee/* tasks)
+# 3. Working directory: ~/workspace/coffee (the actual project repo)
 ```
 
-Equivalent to:
+**CWD-aware design:**
+- Orchestrator runs IN the project directory (has full context: CLAUDE.md, codebase)
+- Dashboard pane shows only that project's tasks
+- Each project has its own orchestrator session
+- Multiple orchestrators can run simultaneously
+
+**Error if not in git repo:**
 ```bash
-tmux new-session -A -s orange-orchestrator -c ~/orange
+cd ~/Downloads
+orange start
+# Error: Not a git repository. Run from a project directory.
 ```
 
 ## Decisions
@@ -176,6 +186,9 @@ tmux new-session -A -s orange-orchestrator -c ~/orange
 4. **Workspace pool** - Reuse worktrees, don't delete
 5. **Merge workflow** - Support both local merge and PR
 6. **Self-review** - Agent spawns review subagent internally
+7. **Per-project orchestrator** - Orchestrator must run in project directory for context
+8. **CWD-aware CLI** - Commands infer project from current directory
+9. **Lazy workspace init** - Worktrees created on-demand at first `task spawn`
 
 ## Dependencies
 

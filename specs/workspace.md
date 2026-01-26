@@ -4,14 +4,24 @@ Git worktrees managed as a reusable pool.
 
 ## Initialization
 
+**Explicit init (optional):**
 ```bash
-orange workspace init orange
-# Creates ~/orange/workspaces/orange--1, orange--2 (based on pool_size)
+cd ~/workspace/coffee
+orange workspace init
+# Creates ~/orange/workspaces/coffee--1, coffee--2 (based on pool_size)
+```
+
+**Lazy init (automatic):**
+Workspaces are created on-demand when `orange task spawn` is called and no workspace is available:
+```bash
+orange task spawn abc123
+# If no workspace exists: creates coffee--1, then uses it
+# If pool exhausted: creates coffee--N (up to pool_size)
 ```
 
 Each workspace is a git worktree of the source repo:
 ```bash
-git -C /path/to/source worktree add ~/orange/workspaces/orange--1 main
+git -C /path/to/source worktree add ~/orange/workspaces/coffee--1 main
 ```
 
 ## Pool Status
@@ -90,6 +100,7 @@ async function spawnNextPending(project: string): Promise<void> {
 - Acquired on `spawn`, released on `complete`/`cancel`/`merge`
 - **Reused, not deleted** - branch reset on acquire
 - Lock file prevents race conditions
+- **Lazy init** - worktrees created on first spawn, not on `orange start`
 
 ## tmux Abstraction
 

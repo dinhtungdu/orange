@@ -1,22 +1,63 @@
 # Dashboard TUI
 
-TypeScript + pi-tui. Shows all tasks from SQLite cache (including done/failed).
+TypeScript + pi-tui. Shows tasks from SQLite cache (including done/failed).
 
+## Scoping
+
+Dashboard can run in two modes:
+
+1. **Project-scoped** (default when in a project directory):
+   ```bash
+   cd ~/workspace/coffee
+   orange dashboard      # Shows only coffee/* tasks
+   ```
+
+2. **Global** (when not in project, or with `--all`):
+   ```bash
+   cd ~
+   orange dashboard      # Shows all tasks
+   orange dashboard --all  # Explicit global view
+   ```
+
+When launched via `orange start`, the dashboard pane is project-scoped to match the orchestrator's context.
+
+## Layout
+
+**Project-scoped view:**
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Orange Dashboard                          3 tasks       │
+│ coffee                                    2 tasks       │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│ ● orange/dark-mode                    [working]    2m  │
-│   Add dark mode support with system preference...       │
-│   > Implementing ThemeContext provider...               │
-│                                                         │
-│ ● coffee/login-fix                    [working]    5m  │
+│ ● coffee/login-fix                    [working]    2m  │
 │   Fix OAuth redirect loop on mobile                     │
 │   > Self-review: checking error handling...             │
 │                                                         │
-│ ◉ app/refactor                        [needs_human] 15m│
-│   Refactor auth module to use new token service         │
+│ ◉ coffee/password-reset               [needs_human] 15m│
+│   Implement password reset with email verification      │
+│   > Ready for human review                              │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│ j/k navigate │ Enter attach │ p peek │ m merge │ q quit │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Global view (all projects):**
+```
+┌─────────────────────────────────────────────────────────┐
+│ Orange Dashboard (all)                    4 tasks       │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ ● coffee/login-fix                    [working]    2m  │
+│   Fix OAuth redirect loop on mobile                     │
+│   > Self-review: checking error handling...             │
+│                                                         │
+│ ● orange/dark-mode                    [working]    5m  │
+│   Add dark mode support with system preference...       │
+│   > Implementing ThemeContext provider...               │
+│                                                         │
+│ ◉ coffee/password-reset               [needs_human] 15m│
+│   Implement password reset with email verification      │
 │   > Ready for human review                              │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤

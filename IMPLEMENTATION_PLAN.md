@@ -1,6 +1,6 @@
 # Orange Implementation Plan
 
-## Status: Phase 1-10 Complete, P2 Error Handling Complete
+## Status: Phase 1-10 Complete, Phase 11 (CWD-Aware Refactor) Pending
 
 **Goal**: Agent orchestration system - Chat with orchestrator → agents work in parallel → auto-review → human review
 
@@ -196,6 +196,87 @@
 
 ---
 
+## Phase 11: CWD-Aware Refactor 🔴
+
+Major architectural change: Orchestrator is per-project, not global. CLI commands infer project from current directory.
+
+### 11.1 Core Changes
+
+- 🔴 **CWD detection utility** (`src/core/cwd.ts`)
+  - `detectProject(cwd)`: Find git root, lookup in projects.json, return project or null
+  - `requireProject(cwd)`: Same but throws if not in a registered project
+  - `getGitRoot(cwd)`: Find git repository root from any subdirectory
+
+- 🔴 **Project auto-registration**
+  - When `orange start` runs in unregistered project: auto-add to projects.json
+  - Infer name from folder, use default pool_size=2
+  - Skip if already registered
+
+### 11.2 CLI Command Updates
+
+- 🔴 **orange start** (`src/cli/commands/start.ts`)
+  - Must run from git repository (error if not)
+  - Auto-register project if not in projects.json
+  - Session name: `<project>-orchestrator` (not `orange-orchestrator`)
+  - Working directory: project repo path (not ~/orange)
+  - Dashboard pane: project-scoped (pass `--project` flag)
+
+- 🔴 **orange task create** (`src/cli/commands/task.ts`)
+  - Change signature: `orange task create <branch> <description>` (no project arg)
+  - Infer project from cwd
+  - Error if not in a registered project
+
+- 🔴 **orange task list** (`src/cli/commands/task.ts`)
+  - Default: show tasks for current project (inferred from cwd)
+  - `--all` flag: show all tasks across projects
+  - If not in project and no `--all`: show all (global view)
+
+- 🔴 **orange workspace init** (`src/cli/commands/workspace.ts`)
+  - Change signature: `orange workspace init` (no project arg)
+  - Infer project from cwd
+
+- 🔴 **orange workspace list** (`src/cli/commands/workspace.ts`)
+  - Default: show pool for current project
+  - `--all` flag: show all workspaces
+
+- 🔴 **orange (no args) / orange dashboard**
+  - In project directory: project-scoped dashboard
+  - Not in project: global dashboard
+  - `--all` flag: always global
+  - `--project <name>` flag: specific project
+
+### 11.3 Dashboard Updates
+
+- 🔴 **Project scoping** (`src/dashboard/index.ts`)
+  - Accept `--project` flag to filter tasks
+  - Accept `--all` flag for global view
+  - Header shows project name (scoped) or "all" (global)
+  - When launched from `orange start`: auto-scoped to that project
+
+### 11.4 Workspace Lazy Init
+
+- 🔴 **On-demand worktree creation** (`src/core/workspace.ts`)
+  - `acquireWorkspace()`: if no workspace exists, create one (up to pool_size)
+  - Show progress: "Creating workspace coffee--1..."
+  - `orange workspace init` becomes optional (pre-warming)
+
+### 11.5 Test Updates
+
+- 🔴 **Update existing tests**
+  - `task.test.ts`: Update for new `task create` signature
+  - `args.test.ts`: Update argument parsing tests
+  - Add CWD detection tests
+  - Add project auto-registration tests
+
+### 11.6 Skill Update
+
+- 🟢 **Updated skill file** (`skills/orchestrator.md`)
+  - Removed `<project>` from `task create` examples
+  - Updated to reflect CWD-aware design
+  - Orchestrator now assumes it's running in project directory
+
+---
+
 ## Post-MVP Enhancements (P2-P5)
 
 ### P2 - Polish
@@ -217,11 +298,11 @@
 
 ### P3 - Extended Features
 
-- 🔴 **Multiple orchestrator instances**
-  - Support multiple independent orchestrator sessions
+- 🟢 **Multiple orchestrator instances** (solved by Phase 11)
+  - Per-project orchestrators: `<project>-orchestrator` sessions
 
-- 🔴 **Project filtering in dashboard**
-  - Filter by project (status filter moved to Phase 10)
+- 🟢 **Project filtering in dashboard** (solved by Phase 11)
+  - CWD-aware scoping + `--all` / `--project` flags
 
 ### P5 - Test Coverage
 
@@ -241,9 +322,11 @@
 
 Per specs/architecture.md:
 - **Single binary**: CLI + Dashboard via pi-tui
-- **Session naming**: `orange-orchestrator` for main, `<project>/<branch>` for tasks
+- **Per-project orchestrator**: `<project>-orchestrator` sessions, runs in project directory
+- **CWD-aware CLI**: Commands infer project from current directory
+- **Session naming**: `<project>-orchestrator` for orchestrator, `<project>/<branch>` for tasks
 - **Storage**: File-based (source of truth) + SQLite (derived cache)
-- **Workspace pool**: Reuse worktrees, don't delete
+- **Workspace pool**: Reuse worktrees, don't delete; lazy init on first spawn
 - **Self-review**: Agent spawns review subagent internally (no external review orchestration)
 
 ---
@@ -258,8 +341,10 @@ Per specs/architecture.md:
 | Workspace pool | Reuse, not delete | Fast task switching |
 | Merge workflow | Local + PR both supported | Flexibility |
 | Self-review | Agent-internal | Agent keeps context |
-| Session naming | `project/branch` | Easy identification |
+| Session naming | `project-orchestrator`, `project/branch` | Per-project isolation |
 | SQLite driver | `bun:sqlite` | Bun native, better-sqlite3 not supported |
+| CWD-aware | Infer project from cwd | Orchestrator needs project context |
+| Lazy workspace init | Create on first spawn | Fast `orange start`, no wasted resources |
 
 ---
 
@@ -282,12 +367,12 @@ Per specs/architecture.md:
 
 | Spec | Status | Notes |
 |------|--------|-------|
-| `architecture.md` | 🟢 Complete | Symlink install, auto-attach start implemented |
-| `cli.md` | 🟢 Complete | PR detection in merge implemented |
+| `architecture.md` | 🟡 Updated | Per-project orchestrator, CWD-aware design |
+| `cli.md` | 🟡 Updated | CWD-aware commands, new signatures |
 | `data.md` | 🟢 Complete | projects.json, TASK.md, history.jsonl, index.db |
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
-| `workspace.md` | 🟢 Complete | Auto-spawn next pending implemented |
-| `dashboard.md` | 🟢 Complete | Status filter (`f` key) implemented |
+| `workspace.md` | 🟡 Updated | Lazy init on spawn |
+| `dashboard.md` | 🟡 Updated | Project scoping, --all flag |
 | `testing.md` | 🟢 Complete | DI pattern, mocks, 94 tests |
 
 ---
@@ -300,6 +385,7 @@ None currently.
 
 ## Next Steps
 
-1. End-to-end testing with real tmux/git
-2. Add more comprehensive CLI command tests
-3. Dashboard rendering tests (VirtualTerminal from pi-tui)
+1. **Implement Phase 11** - CWD-aware refactor
+2. Update tests for new command signatures
+3. End-to-end testing with real tmux/git
+4. Dashboard rendering tests (VirtualTerminal from pi-tui)
