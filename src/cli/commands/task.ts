@@ -338,8 +338,102 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 }
 
 /**
- * View task's output log.
- * Works for completed/cancelled tasks where session is no longer active.
+ * Convert workspace path to Claude project folder name.
+ * Example: /Users/tung/orange/workspaces/orange--1 → -Users-tung-orange-workspaces-orange--1
+ */
+function workspaceToClaudeProjectPath(workspacePath: string): string {
+  return "-" + workspacePath.slice(1).replace(/\//g, "-");
+}
+
+/**
+ * Truncate string to max length with ellipsis.
+ */
+function truncate(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen - 3) + "...";
+}
+
+/**
+ * Format a conversation entry for display.
+ */
+function formatEntry(entry: ConversationEntry): string | null {
+  // Skip queue operations
+  if (entry.type === "queue-operation") return null;
+
+  // Handle user messages
+  if (entry.type === "user" && entry.message) {
+    const content = entry.message.content;
+    if (typeof content === "string") {
+      // Regular user text message
+      const text = content.replace(/\n/g, " ").trim();
+      return `[user] ${truncate(text, 80)}`;
+    } else if (Array.isArray(content)) {
+      // Tool result - skip, shown contextually with tool call
+      return null;
+    }
+  }
+
+  // Handle assistant messages
+  if (entry.type === "assistant" && entry.message?.content) {
+    const content = entry.message.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        // Skip thinking blocks
+        if (block.type === "thinking") continue;
+
+        // Text responses
+        if (block.type === "text" && block.text) {
+          const text = block.text.replace(/\n/g, " ").trim();
+          return `[assistant] ${truncate(text, 80)}`;
+        }
+
+        // Tool calls
+        if (block.type === "tool_use") {
+          const toolName = block.name || "unknown";
+          const input = block.input || {};
+          // Extract brief description from tool input
+          let desc = "";
+          if (input.file_path) desc = input.file_path as string;
+          else if (input.command) desc = truncate(input.command as string, 40);
+          else if (input.pattern) desc = input.pattern as string;
+          else if (input.description) desc = input.description as string;
+
+          return `[tool] ${toolName}${desc ? `: ${desc}` : ""}`;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+interface ConversationEntry {
+  type: "user" | "assistant" | "queue-operation";
+  message?: {
+    role?: string;
+    content?: string | ContentBlock[];
+  };
+}
+
+interface ContentBlock {
+  type: string;
+  text?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+interface SessionIndexEntry {
+  sessionId: string;
+  gitBranch: string;
+  modified: string;
+}
+
+interface SessionsIndex {
+  entries: SessionIndexEntry[];
+}
+
+/**
+ * View task's conversation history from Claude's project folder.
  */
 async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (parsed.args.length < 1) {
@@ -348,7 +442,7 @@ async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   const taskId = parsed.args[0];
-  const lines = parseInt(parsed.options.lines as string) || 0; // 0 means all
+  const maxEntries = parseInt(parsed.options.lines as string) || 0; // 0 means all
 
   // Find task
   const tasks = await listTasks(deps, {});
@@ -358,27 +452,65 @@ async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Get log file path
-  const taskDir = getTaskDir(deps, task.project, task.branch);
-  const logFile = join(taskDir, "output.log");
-
-  if (!existsSync(logFile)) {
-    console.error(`No output log found for task '${taskId}'`);
-    console.error(`Expected: ${logFile}`);
+  // Must have a workspace to get Claude history
+  if (!task.workspace) {
+    console.error(`Task '${taskId}' has no workspace assigned`);
     process.exit(1);
   }
 
-  // Read and output
-  const content = await readFile(logFile, "utf-8");
-  
-  if (lines > 0) {
-    // Show last N lines
-    const allLines = content.split("\n");
-    const lastLines = allLines.slice(-lines);
-    console.log(lastLines.join("\n"));
-  } else {
-    console.log(content);
+  // Build Claude project path
+  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const claudeProjectName = workspaceToClaudeProjectPath(workspacePath);
+  const claudeDir = join(process.env.HOME || "", ".claude", "projects", claudeProjectName);
+
+  // Read sessions index
+  const indexPath = join(claudeDir, "sessions-index.json");
+  if (!existsSync(indexPath)) {
+    console.error(`No Claude conversation history found for task '${taskId}'`);
+    console.error(`Expected: ${indexPath}`);
+    process.exit(1);
   }
+
+  const indexContent = await readFile(indexPath, "utf-8");
+  const index: SessionsIndex = JSON.parse(indexContent);
+
+  // Find sessions for this task's branch
+  const branchSessions = index.entries
+    .filter((e) => e.gitBranch === task.branch)
+    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+
+  if (branchSessions.length === 0) {
+    console.error(`No sessions found for branch '${task.branch}'`);
+    process.exit(1);
+  }
+
+  // Get the most recent session
+  const session = branchSessions[0];
+  const sessionPath = join(claudeDir, `${session.sessionId}.jsonl`);
+
+  if (!existsSync(sessionPath)) {
+    console.error(`Session file not found: ${sessionPath}`);
+    process.exit(1);
+  }
+
+  // Parse JSONL and format entries
+  const sessionContent = await readFile(sessionPath, "utf-8");
+  const lines = sessionContent.trim().split("\n");
+  const formatted: string[] = [];
+
+  for (const line of lines) {
+    try {
+      const entry: ConversationEntry = JSON.parse(line);
+      const output = formatEntry(entry);
+      if (output) formatted.push(output);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  // Apply --lines limit (last N entries)
+  const output = maxEntries > 0 ? formatted.slice(-maxEntries) : formatted;
+  console.log(output.join("\n"));
 }
 
 /**
