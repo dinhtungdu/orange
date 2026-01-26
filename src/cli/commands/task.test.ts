@@ -97,7 +97,7 @@ describe("task create command", () => {
 
   test("creates a task with status pending", async () => {
     const parsed = parseArgs([
-      "bun", "script.ts", "task", "create", "testproj", "feature-x", "Implement feature X"
+      "bun", "script.ts", "task", "create", "--project", "testproj", "feature-x", "Implement feature X"
     ]);
 
     await runTaskCommand(parsed, deps);
@@ -119,7 +119,7 @@ describe("task create command", () => {
 
   test("creates task with multi-word description", async () => {
     const parsed = parseArgs([
-      "bun", "script.ts", "task", "create", "testproj", "my-branch",
+      "bun", "script.ts", "task", "create", "--project", "testproj", "my-branch",
       "This", "is", "a", "multi", "word", "description"
     ]);
 
@@ -131,7 +131,7 @@ describe("task create command", () => {
 
   test("creates history entry for task creation", async () => {
     const parsed = parseArgs([
-      "bun", "script.ts", "task", "create", "testproj", "feature-y", "Do something"
+      "bun", "script.ts", "task", "create", "--project", "testproj", "feature-y", "Do something"
     ]);
 
     await runTaskCommand(parsed, deps);
@@ -146,7 +146,7 @@ describe("task create command", () => {
 
   test("adds task to SQLite index", async () => {
     const parsed = parseArgs([
-      "bun", "script.ts", "task", "create", "testproj", "indexed-task", "Test indexing"
+      "bun", "script.ts", "task", "create", "--project", "testproj", "indexed-task", "Test indexing"
     ]);
 
     await runTaskCommand(parsed, deps);
@@ -158,7 +158,7 @@ describe("task create command", () => {
 
   test("errors when project not found", async () => {
     const parsed = parseArgs([
-      "bun", "script.ts", "task", "create", "nonexistent", "branch", "desc"
+      "bun", "script.ts", "task", "create", "--project", "nonexistent", "branch", "desc"
     ]);
 
     await expect(runTaskCommand(parsed, deps)).rejects.toThrow("process.exit(1)");
@@ -215,7 +215,7 @@ describe("task list command", () => {
   });
 
   test("shows no tasks message when empty", async () => {
-    const parsed = parseArgs(["bun", "script.ts", "task", "list"]);
+    const parsed = parseArgs(["bun", "script.ts", "task", "list", "--all"]);
 
     await runTaskCommand(parsed, deps);
 
@@ -225,16 +225,16 @@ describe("task list command", () => {
   test("lists all tasks", async () => {
     // Create tasks
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj1", "task1", "Task one"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj1", "task1", "Task one"]),
       deps
     );
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj2", "task2", "Task two"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj2", "task2", "Task two"]),
       deps
     );
     consoleLogs = [];
 
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "list"]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "list", "--all"]), deps);
 
     const output = consoleLogs.join("\n");
     expect(output).toContain("task1");
@@ -244,11 +244,11 @@ describe("task list command", () => {
 
   test("filters by project", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj1", "task1", "Task one"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj1", "task1", "Task one"]),
       deps
     );
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj2", "task2", "Task two"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj2", "task2", "Task two"]),
       deps
     );
     consoleLogs = [];
@@ -266,7 +266,7 @@ describe("task list command", () => {
   test("filters by status", async () => {
     // Create a pending task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj1", "pending-task", "Pending"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj1", "pending-task", "Pending"]),
       deps
     );
     consoleLogs = [];
@@ -291,12 +291,12 @@ describe("task list command", () => {
 
   test("shows status icons", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "proj1", "task1", "Task"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "proj1", "task1", "Task"]),
       deps
     );
     consoleLogs = [];
 
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "list"]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "list", "--all"]), deps);
 
     const output = consoleLogs.join("\n");
     // Pending status icon is ○
@@ -370,7 +370,7 @@ describe("task spawn command", () => {
   test("spawns task and changes status to working", async () => {
     // Create task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "spawn-feature", "Do work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "spawn-feature", "Do work"]),
       deps
     );
 
@@ -396,7 +396,7 @@ describe("task spawn command", () => {
 
   test("creates history events on spawn", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "spawn-history", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "spawn-history", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "spawn-history");
@@ -422,7 +422,7 @@ describe("task spawn command", () => {
   test("errors when task not pending", async () => {
     // Create and spawn task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "spawn-notpending", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "spawn-notpending", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "spawn-notpending");
@@ -491,7 +491,7 @@ describe("task complete command", () => {
   test("marks task as needs_human", async () => {
     // Setup: create and spawn task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "complete-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "complete-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "complete-feature");
@@ -511,7 +511,7 @@ describe("task complete command", () => {
 
   test("creates history events on complete", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "complete-history", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "complete-history", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "complete-history");
@@ -576,7 +576,7 @@ describe("task stuck command", () => {
 
   test("marks task as stuck", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "stuck-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "stuck-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "stuck-feature");
@@ -648,7 +648,7 @@ describe("task merge command", () => {
   test("merges task, releases workspace, kills session", async () => {
     // Create, spawn, complete task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "merge-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "merge-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "merge-feature");
@@ -680,7 +680,7 @@ describe("task merge command", () => {
 
   test("creates task.merged history event", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "merge-history", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "merge-history", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "merge-history");
@@ -750,7 +750,7 @@ describe("task cancel command", () => {
 
   test("cancels task, releases workspace, kills session", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "cancel-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "cancel-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "cancel-feature");
@@ -772,7 +772,7 @@ describe("task cancel command", () => {
 
   test("creates task.cancelled history event", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "cancel-history", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "cancel-history", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "cancel-history");
@@ -845,7 +845,7 @@ describe("task peek command", () => {
 
   test("captures tmux pane output", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "peek-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "peek-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "peek-feature");
@@ -866,7 +866,7 @@ describe("task peek command", () => {
 
   test("errors when task has no session", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "peek-nosession", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "peek-nosession", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "peek-nosession");
@@ -880,7 +880,7 @@ describe("task peek command", () => {
 
   test("errors when session no longer exists", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "peek-gone", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "peek-gone", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "peek-gone");
@@ -960,7 +960,7 @@ describe("MockTmux availability", () => {
     mockTmux.setAvailable(false);
 
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "testproj", "unavail-feature", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "unavail-feature", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "unavail-feature");

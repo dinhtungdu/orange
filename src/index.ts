@@ -3,6 +3,8 @@
  * Orange - Agent orchestration system
  *
  * Entry point that dispatches to CLI commands or dashboard based on arguments.
+ *
+ * All commands are CWD-aware - they infer project from current directory.
  */
 
 import { parseArgs, printUsage } from "./cli/args.js";
@@ -21,7 +23,10 @@ async function main(): Promise<void> {
   try {
     switch (parsed.command) {
       case "dashboard":
-        await runDashboard(deps);
+        await runDashboard(deps, {
+          all: parsed.options.all === true,
+          project: parsed.options.project as string | undefined,
+        });
         break;
 
       case "project":

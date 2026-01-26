@@ -52,12 +52,12 @@ describe("parseArgs", () => {
   });
 
   test("parses task create with description", () => {
+    // New CWD-aware syntax: orange task create <branch> <description>
     const result = parseArgs([
       "bun",
       "script.ts",
       "task",
       "create",
-      "orange",
       "feature-x",
       "Implement",
       "feature",
@@ -65,7 +65,25 @@ describe("parseArgs", () => {
     ]);
     expect(result.command).toBe("task");
     expect(result.subcommand).toBe("create");
-    expect(result.args).toEqual(["orange", "feature-x", "Implement", "feature", "X"]);
+    expect(result.args).toEqual(["feature-x", "Implement", "feature", "X"]);
+  });
+
+  test("parses task create with --project flag", () => {
+    const result = parseArgs([
+      "bun",
+      "script.ts",
+      "task",
+      "create",
+      "--project",
+      "orange",
+      "feature-x",
+      "Implement",
+      "feature",
+    ]);
+    expect(result.command).toBe("task");
+    expect(result.subcommand).toBe("create");
+    expect(result.options.project).toBe("orange");
+    expect(result.args).toEqual(["feature-x", "Implement", "feature"]);
   });
 
   test("parses task list with filters", () => {
@@ -125,10 +143,11 @@ describe("parseArgs", () => {
   });
 
   test("parses workspace init", () => {
-    const result = parseArgs(["bun", "script.ts", "workspace", "init", "orange"]);
+    // New CWD-aware syntax: orange workspace init (no project arg)
+    const result = parseArgs(["bun", "script.ts", "workspace", "init"]);
     expect(result.command).toBe("workspace");
     expect(result.subcommand).toBe("init");
-    expect(result.args).toEqual(["orange"]);
+    expect(result.args).toEqual([]);
   });
 
   test("parses workspace list", () => {

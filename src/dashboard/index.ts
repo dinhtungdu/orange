@@ -5,6 +5,11 @@
  * - Task list with status indicators
  * - Keyboard navigation
  * - Real-time status updates via file watching
+ *
+ * Scoping:
+ * - In a project directory: shows only that project's tasks
+ * - With --all flag: shows all tasks
+ * - With --project flag: shows specific project's tasks
  */
 
 import { TUI, ProcessTerminal, type Component } from "@mariozechner/pi-tui";
@@ -13,6 +18,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import type { Deps, Task, TaskStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
+import { detectProject } from "../core/cwd.js";
 
 /**
  * Status indicator icons.
@@ -57,17 +63,29 @@ const ACTIVE_STATUSES: TaskStatus[] = ["pending", "working", "needs_human", "stu
 const DONE_STATUSES: TaskStatus[] = ["done", "failed"];
 
 /**
+ * Dashboard options.
+ */
+export interface DashboardOptions {
+  /** Show all projects (global view) */
+  all?: boolean;
+  /** Show specific project's tasks */
+  project?: string;
+}
+
+/**
  * Dashboard state.
  */
 interface DashboardState {
   tasks: Task[];
-  allTasks: Task[];  // Unfiltered tasks
+  allTasks: Task[];  // Unfiltered by status
   cursor: number;
   lastOutput: Map<string, string>;
   pendingOps: Set<string>;
   error: string | null;
   width: number;
   statusFilter: StatusFilter;
+  projectFilter: string | null;  // null = global view
+  projectLabel: string;  // Display label for header
 }
 
 /**
@@ -83,6 +101,8 @@ class DashboardComponent implements Component {
     error: null,
     width: 80,
     statusFilter: "all",
+    projectFilter: null,
+    projectLabel: "all",
   };
 
   private deps: Deps;
@@ -90,12 +110,31 @@ class DashboardComponent implements Component {
   private watcher: ReturnType<typeof watch> | null = null;
   private captureInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(deps: Deps) {
+  constructor(deps: Deps, options: DashboardOptions = {}) {
     this.deps = deps;
+
+    // Set project filter based on options
+    if (options.project) {
+      this.state.projectFilter = options.project;
+      this.state.projectLabel = options.project;
+    } else if (!options.all) {
+      // Will be set in init() based on cwd detection
+      this.state.projectFilter = null;
+      this.state.projectLabel = "all";
+    }
   }
 
-  async init(tui: TUI): Promise<void> {
+  async init(tui: TUI, options: DashboardOptions = {}): Promise<void> {
     this.tui = tui;
+
+    // If no explicit project/all option, detect from cwd
+    if (!options.project && !options.all) {
+      const detection = await detectProject(this.deps);
+      if (detection.project) {
+        this.state.projectFilter = detection.project.name;
+        this.state.projectLabel = detection.project.name;
+      }
+    }
 
     // Load initial tasks
     await this.refreshTasks();
@@ -128,8 +167,10 @@ class DashboardComponent implements Component {
 
   private async refreshTasks(): Promise<void> {
     try {
-      this.state.allTasks = await listTasks(this.deps, {});
-      this.applyFilter();
+      this.state.allTasks = await listTasks(this.deps, {
+        project: this.state.projectFilter ?? undefined,
+      });
+      this.applyStatusFilter();
       this.state.error = null;
 
       // Clamp cursor
@@ -142,7 +183,7 @@ class DashboardComponent implements Component {
     }
   }
 
-  private applyFilter(): void {
+  private applyStatusFilter(): void {
     switch (this.state.statusFilter) {
       case "active":
         this.state.tasks = this.state.allTasks.filter((t) =>
@@ -159,11 +200,11 @@ class DashboardComponent implements Component {
     }
   }
 
-  private cycleFilter(): void {
+  private cycleStatusFilter(): void {
     const filters: StatusFilter[] = ["all", "active", "done"];
     const currentIndex = filters.indexOf(this.state.statusFilter);
     this.state.statusFilter = filters[(currentIndex + 1) % filters.length];
-    this.applyFilter();
+    this.applyStatusFilter();
 
     // Clamp cursor after filter change
     if (this.state.cursor >= this.state.tasks.length) {
@@ -225,7 +266,7 @@ class DashboardComponent implements Component {
         break;
 
       case "f":
-        this.cycleFilter();
+        this.cycleStatusFilter();
         break;
 
       case "q":
@@ -358,11 +399,14 @@ class DashboardComponent implements Component {
     this.state.width = width;
     const lines: string[] = [];
 
-    // Header with filter indicator
-    const filterLabel = this.state.statusFilter === "all"
+    // Header with project and filter indicator
+    const statusLabel = this.state.statusFilter === "all"
       ? ""
-      : ` (${this.state.statusFilter})`;
-    lines.push(chalk.bold.cyan(` Orange Dashboard${filterLabel}`));
+      : ` [${this.state.statusFilter}]`;
+    const header = this.state.projectLabel === "all"
+      ? `Orange Dashboard (all)${statusLabel}`
+      : `${this.state.projectLabel}${statusLabel}`;
+    lines.push(chalk.bold.cyan(` ${header}`));
     lines.push(chalk.dim("─".repeat(width)));
 
     // Error message
@@ -373,8 +417,11 @@ class DashboardComponent implements Component {
 
     // Task list
     if (this.state.tasks.length === 0) {
+      const projectMsg = this.state.projectFilter
+        ? ` for project '${this.state.projectFilter}'`
+        : "";
       lines.push(
-        chalk.gray(" No tasks. Use 'orange task create' to add one.")
+        chalk.gray(` No tasks${projectMsg}. Use 'orange task create' to add one.`)
       );
     } else {
       for (let i = 0; i < this.state.tasks.length; i++) {
@@ -425,14 +472,14 @@ class DashboardComponent implements Component {
 /**
  * Run the dashboard.
  */
-export async function runDashboard(deps: Deps): Promise<void> {
+export async function runDashboard(deps: Deps, options: DashboardOptions = {}): Promise<void> {
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal);
-  const dashboard = new DashboardComponent(deps);
+  const dashboard = new DashboardComponent(deps, options);
 
   tui.addChild(dashboard);
   tui.setFocus(dashboard);
 
-  await dashboard.init(tui);
+  await dashboard.init(tui, options);
   tui.start();
 }

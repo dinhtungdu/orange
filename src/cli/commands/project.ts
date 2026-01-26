@@ -2,14 +2,16 @@
  * Project management commands.
  *
  * Commands:
- * - orange project add <path> [--name <name>] [--pool-size <n>]
+ * - orange project add [path] [--name <name>] [--pool-size <n>]
  * - orange project list
+ * - orange project remove <name>
  */
 
 import { basename, resolve } from "node:path";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Project } from "../../core/types.js";
 import { loadProjects, saveProjects } from "../../core/state.js";
+import { getGitRoot, getDefaultBranch } from "../../core/cwd.js";
 
 /**
  * Run a project subcommand.
@@ -27,34 +29,52 @@ export async function runProjectCommand(
       await listProjects(deps);
       break;
 
+    case "remove":
+      await removeProject(parsed, deps);
+      break;
+
     default:
       console.error(
         `Unknown project subcommand: ${parsed.subcommand ?? "(none)"}`
       );
-      console.error("Usage: orange project <add|list>");
+      console.error("Usage: orange project <add|list|remove>");
       process.exit(1);
   }
 }
 
 /**
  * Add a new project.
+ * Path defaults to current directory if not provided.
  */
 async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange project add <path> [--name <name>] [--pool-size <n>]");
+  // Path defaults to current directory
+  const inputPath = parsed.args[0] ?? process.cwd();
+  const resolvedPath = resolve(inputPath);
+
+  // Verify it's a git repository
+  const gitRoot = getGitRoot(resolvedPath);
+  if (!gitRoot) {
+    console.error(`Error: '${resolvedPath}' is not a git repository`);
     process.exit(1);
   }
 
-  const path = resolve(parsed.args[0]);
+  const path = gitRoot; // Use git root, not the input path
   const name = (parsed.options.name as string) ?? basename(path);
   const poolSize = parseInt(parsed.options["pool-size"] as string) || 2;
+  const defaultBranch = getDefaultBranch(path);
 
   // Load existing projects
   const projects = await loadProjects(deps);
 
-  // Check if project already exists
+  // Check if project already exists by name or path
   if (projects.some((p) => p.name === name)) {
     console.error(`Project '${name}' already exists`);
+    process.exit(1);
+  }
+
+  if (projects.some((p) => resolve(p.path) === path)) {
+    const existing = projects.find((p) => resolve(p.path) === path);
+    console.error(`Path '${path}' is already registered as project '${existing?.name}'`);
     process.exit(1);
   }
 
@@ -62,14 +82,16 @@ async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const project: Project = {
     name,
     path,
-    default_branch: "main",
+    default_branch: defaultBranch,
     pool_size: poolSize,
   };
 
   projects.push(project);
   await saveProjects(deps, projects);
 
-  console.log(`Added project '${name}' at ${path} (pool size: ${poolSize})`);
+  console.log(`Added project '${name}' at ${path}`);
+  console.log(`  Default branch: ${defaultBranch}`);
+  console.log(`  Pool size: ${poolSize}`);
 }
 
 /**
@@ -79,7 +101,8 @@ async function listProjects(deps: Deps): Promise<void> {
   const projects = await loadProjects(deps);
 
   if (projects.length === 0) {
-    console.log("No projects registered. Use 'orange project add <path>' to add one.");
+    console.log("No projects registered.");
+    console.log("Use 'orange project add' from a project directory, or 'orange start' to auto-register.");
     return;
   }
 
@@ -91,4 +114,33 @@ async function listProjects(deps: Deps): Promise<void> {
     console.log(`    Pool size: ${project.pool_size}`);
     console.log();
   }
+}
+
+/**
+ * Remove a project.
+ */
+async function removeProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange project remove <name>");
+    process.exit(1);
+  }
+
+  const name = parsed.args[0];
+
+  // Load existing projects
+  const projects = await loadProjects(deps);
+
+  // Find project
+  const index = projects.findIndex((p) => p.name === name);
+  if (index === -1) {
+    console.error(`Project '${name}' not found`);
+    process.exit(1);
+  }
+
+  // Remove project
+  projects.splice(index, 1);
+  await saveProjects(deps, projects);
+
+  console.log(`Removed project '${name}'`);
+  console.log("Note: Workspaces and tasks are not deleted. Clean them up manually if needed.");
 }

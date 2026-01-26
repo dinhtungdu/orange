@@ -1,13 +1,16 @@
 /**
  * CLI argument parsing for the orange command.
  *
+ * All commands are CWD-aware - they infer project from current directory.
+ *
  * Routes commands to appropriate handlers:
- * - project: Project management (add, list)
+ * - project: Project management (add, list, remove)
  * - task: Task management (create, list, spawn, peek, complete, stuck, merge, cancel)
  * - workspace: Workspace pool management (init, list)
- * - start: Start orchestrator session
+ * - start: Start orchestrator session (must be in project directory)
  * - install: Install orchestrator skill
- * - (no args): Launch dashboard
+ * - dashboard: Launch dashboard (scoped to project if in project directory)
+ * - (no args): Same as dashboard
  */
 
 export interface ParsedArgs {
@@ -93,7 +96,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
  */
 function isSubcommand(command: string, arg: string): boolean {
   const subcommands: Record<string, string[]> = {
-    project: ["add", "list"],
+    project: ["add", "list", "remove"],
     task: [
       "create",
       "list",
@@ -117,23 +120,29 @@ export function printUsage(): void {
   console.log(`
 orange - Agent orchestration system
 
+All commands are CWD-aware - they infer project from current directory.
+
 Usage:
-  orange                              Launch dashboard
-  orange start                        Create orchestrator session
+  orange                              Launch dashboard (project-scoped if in project)
+  orange dashboard [options]          Launch dashboard
+    --all                             Show all tasks (global view)
+    --project <name>                  Show specific project's tasks
+  orange start                        Start orchestrator for current project
   orange install                      Install orchestrator skill
 
 Project Management:
-  orange project add <path> [options] Add a project
+  orange project add [path] [options] Add a project (defaults to current directory)
     --name <name>                     Custom project name
     --pool-size <n>                   Worktree pool size (default: 2)
   orange project list                 List all projects
+  orange project remove <name>        Remove a project
 
-Task Management:
-  orange task create <project> <branch> <description>
+Task Management (project inferred from cwd):
+  orange task create <branch> <description>
                                       Create a new task
   orange task list [options]          List tasks
-    --project <project>               Filter by project
     --status <status>                 Filter by status
+    --all                             Show all projects' tasks
   orange task spawn <task_id>         Spawn agent for task
   orange task peek <task_id> [options] Show agent output
     --lines <n>                       Number of lines (default: 50)
@@ -143,8 +152,9 @@ Task Management:
     --strategy <ff|merge>             Merge strategy (default: ff)
   orange task cancel <task_id>        Cancel task
 
-Workspace Management:
-  orange workspace init <project>     Create worktrees for project
-  orange workspace list               Show workspace pool status
+Workspace Management (project inferred from cwd):
+  orange workspace init               Create worktrees for current project
+  orange workspace list [options]     Show workspace pool status
+    --all                             Show all projects' workspaces
 `);
 }

@@ -1,9 +1,11 @@
 /**
  * Task management commands.
  *
+ * All commands are CWD-aware - project is inferred from current directory.
+ *
  * Commands:
- * - orange task create <project> <branch> <description>
- * - orange task list [--project <project>] [--status <status>]
+ * - orange task create <branch> <description>
+ * - orange task list [--status <status>] [--all]
  * - orange task spawn <task_id>
  * - orange task peek <task_id> [--lines N]
  * - orange task complete <task_id>
@@ -12,7 +14,6 @@
  * - orange task cancel <task_id>
  */
 
-import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { nanoid } from "nanoid";
 import type { ParsedArgs } from "../args.js";
@@ -20,13 +21,13 @@ import type { Deps, Task, TaskStatus } from "../../core/types.js";
 import {
   loadProjects,
   saveTask,
-  loadTask,
   appendHistory,
   getTaskDir,
 } from "../../core/state.js";
 import { listTasks, updateTaskInDb } from "../../core/db.js";
 import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
+import { requireProject, detectProject } from "../../core/cwd.js";
 
 /**
  * Check if a PR exists for a branch and whether it's merged.
@@ -120,24 +121,31 @@ export async function runTaskCommand(
 
 /**
  * Create a new task.
+ * Project is inferred from current working directory, or can be specified with --project.
  */
 async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 3) {
-    console.error(
-      "Usage: orange task create <project> <branch> <description>"
-    );
+  if (parsed.args.length < 2) {
+    console.error("Usage: orange task create <branch> <description>");
     process.exit(1);
   }
 
-  const [projectName, branch, ...descParts] = parsed.args;
+  const [branch, ...descParts] = parsed.args;
   const description = descParts.join(" ");
 
-  // Validate project exists
-  const projects = await loadProjects(deps);
-  const project = projects.find((p) => p.name === projectName);
-  if (!project) {
-    console.error(`Project '${projectName}' not found`);
-    process.exit(1);
+  // Get project from --project flag or infer from cwd
+  let projectName: string;
+  if (parsed.options.project) {
+    projectName = parsed.options.project as string;
+    // Validate project exists
+    const projects = await loadProjects(deps);
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      console.error(`Project '${projectName}' not found`);
+      process.exit(1);
+    }
+  } else {
+    const project = await requireProject(deps);
+    projectName = project.name;
   }
 
   const now = deps.clock.now();
@@ -178,15 +186,36 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * List tasks.
+ * Scoped to current project by default, use --all for global view.
+ * Can also filter by explicit --project flag.
  */
 async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  const projectFilter = parsed.options.project as string | undefined;
+  const showAll = parsed.options.all === true;
   const statusFilter = parsed.options.status as TaskStatus | undefined;
+  const explicitProject = parsed.options.project as string | undefined;
+
+  let projectFilter: string | undefined;
+
+  if (explicitProject) {
+    // Explicit --project flag takes precedence
+    projectFilter = explicitProject;
+  } else if (!showAll) {
+    // Try to get project from cwd, but don't error if not in a project
+    const detection = await detectProject(deps);
+    if (detection.project) {
+      projectFilter = detection.project.name;
+    }
+    // If not in a project and no --all, show all tasks (global view)
+  }
 
   const tasks = await listTasks(deps, { project: projectFilter, status: statusFilter });
 
   if (tasks.length === 0) {
-    console.log("No tasks found.");
+    if (projectFilter) {
+      console.log(`No tasks found for project '${projectFilter}'.`);
+    } else {
+      console.log("No tasks found.");
+    }
     return;
   }
 
@@ -200,7 +229,8 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     failed: "✗",
   };
 
-  console.log("Tasks:\n");
+  const header = projectFilter ? `Tasks (${projectFilter}):` : "Tasks (all projects):";
+  console.log(`${header}\n`);
   for (const task of tasks) {
     const icon = statusIcon[task.status];
     console.log(`  ${icon} ${task.id} [${task.status}] ${task.project}/${task.branch}`);

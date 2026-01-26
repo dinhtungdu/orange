@@ -1,6 +1,6 @@
 # Orange Implementation Plan
 
-## Status: Phase 1-10 Complete, Phase 11 (CWD-Aware Refactor) Pending
+## Status: Phase 1-11 Complete
 
 **Goal**: Agent orchestration system - Chat with orchestrator → agents work in parallel → auto-review → human review
 
@@ -162,7 +162,7 @@
   - project.test.ts: Project add/list commands (16 tests)
   - task.test.ts: Full task lifecycle (27 tests - includes tmux availability and safe method tests)
 
-**Total: 94 tests passing**
+**Total: 115 tests passing** (after Phase 11)
 
 ---
 
@@ -196,58 +196,68 @@
 
 ---
 
-## Phase 11: CWD-Aware Refactor 🔴
+## Phase 11: CWD-Aware Refactor 🟢
 
 Major architectural change: Orchestrator is per-project, not global. CLI commands infer project from current directory.
 
 ### 11.1 Core Changes
 
-- 🔴 **CWD detection utility** (`src/core/cwd.ts`)
+- 🟢 **CWD detection utility** (`src/core/cwd.ts`)
   - `detectProject(cwd)`: Find git root, lookup in projects.json, return project or null
   - `requireProject(cwd)`: Same but throws if not in a registered project
   - `getGitRoot(cwd)`: Find git repository root from any subdirectory
+  - `autoRegisterProject(cwd)`: Auto-register project with defaults
+  - Path normalization to handle macOS symlinks (/var -> /private/var)
 
-- 🔴 **Project auto-registration**
+- 🟢 **Project auto-registration**
   - When `orange start` runs in unregistered project: auto-add to projects.json
   - Infer name from folder, use default pool_size=2
   - Skip if already registered
+  - Handle name conflicts by appending timestamp
 
 ### 11.2 CLI Command Updates
 
-- 🔴 **orange start** (`src/cli/commands/start.ts`)
+- 🟢 **orange start** (`src/cli/commands/start.ts`)
   - Must run from git repository (error if not)
   - Auto-register project if not in projects.json
   - Session name: `<project>-orchestrator` (not `orange-orchestrator`)
   - Working directory: project repo path (not ~/orange)
   - Dashboard pane: project-scoped (pass `--project` flag)
 
-- 🔴 **orange task create** (`src/cli/commands/task.ts`)
+- 🟢 **orange task create** (`src/cli/commands/task.ts`)
   - Change signature: `orange task create <branch> <description>` (no project arg)
-  - Infer project from cwd
+  - Infer project from cwd (or `--project` flag for scripting/testing)
   - Error if not in a registered project
 
-- 🔴 **orange task list** (`src/cli/commands/task.ts`)
+- 🟢 **orange task list** (`src/cli/commands/task.ts`)
   - Default: show tasks for current project (inferred from cwd)
   - `--all` flag: show all tasks across projects
+  - `--project` flag: filter by explicit project
   - If not in project and no `--all`: show all (global view)
 
-- 🔴 **orange workspace init** (`src/cli/commands/workspace.ts`)
+- 🟢 **orange workspace init** (`src/cli/commands/workspace.ts`)
   - Change signature: `orange workspace init` (no project arg)
   - Infer project from cwd
 
-- 🔴 **orange workspace list** (`src/cli/commands/workspace.ts`)
+- 🟢 **orange workspace list** (`src/cli/commands/workspace.ts`)
   - Default: show pool for current project
   - `--all` flag: show all workspaces
 
-- 🔴 **orange (no args) / orange dashboard**
+- 🟢 **orange (no args) / orange dashboard**
   - In project directory: project-scoped dashboard
   - Not in project: global dashboard
   - `--all` flag: always global
   - `--project <name>` flag: specific project
 
+- 🟢 **orange project add** (`src/cli/commands/project.ts`)
+  - Path defaults to current directory if not provided
+  - Validates path is a git repository
+  - Auto-detects default branch
+  - Added `orange project remove <name>` command
+
 ### 11.3 Dashboard Updates
 
-- 🔴 **Project scoping** (`src/dashboard/index.ts`)
+- 🟢 **Project scoping** (`src/dashboard/index.ts`)
   - Accept `--project` flag to filter tasks
   - Accept `--all` flag for global view
   - Header shows project name (scoped) or "all" (global)
@@ -259,14 +269,15 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
   - `acquireWorkspace()`: if no workspace exists, create one (up to pool_size)
   - Show progress: "Creating workspace coffee--1..."
   - `orange workspace init` becomes optional (pre-warming)
+  - (Deferred to future phase - current implementation requires explicit init)
 
 ### 11.5 Test Updates
 
-- 🔴 **Update existing tests**
-  - `task.test.ts`: Update for new `task create` signature
-  - `args.test.ts`: Update argument parsing tests
-  - Add CWD detection tests
-  - Add project auto-registration tests
+- 🟢 **Update existing tests**
+  - `task.test.ts`: Updated for new `task create` signature (uses `--project` flag)
+  - `args.test.ts`: Updated argument parsing tests for new signatures
+  - `cwd.test.ts`: Added CWD detection tests (21 tests)
+  - `project.test.ts`: Updated to create real git repos for testing
 
 ### 11.6 Skill Update
 
@@ -274,6 +285,8 @@ Major architectural change: Orchestrator is per-project, not global. CLI command
   - Removed `<project>` from `task create` examples
   - Updated to reflect CWD-aware design
   - Orchestrator now assumes it's running in project directory
+
+**Total: 115 tests passing**
 
 ---
 
@@ -367,13 +380,13 @@ Per specs/architecture.md:
 
 | Spec | Status | Notes |
 |------|--------|-------|
-| `architecture.md` | 🟡 Updated | Per-project orchestrator, CWD-aware design |
-| `cli.md` | 🟡 Updated | CWD-aware commands, new signatures |
+| `architecture.md` | 🟢 Complete | Per-project orchestrator, CWD-aware design |
+| `cli.md` | 🟢 Complete | CWD-aware commands, new signatures |
 | `data.md` | 🟢 Complete | projects.json, TASK.md, history.jsonl, index.db |
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
-| `workspace.md` | 🟡 Updated | Lazy init on spawn |
-| `dashboard.md` | 🟡 Updated | Project scoping, --all flag |
-| `testing.md` | 🟢 Complete | DI pattern, mocks, 94 tests |
+| `workspace.md` | 🟢 Complete | Lazy init deferred to future |
+| `dashboard.md` | 🟢 Complete | Project scoping, --all flag |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 115 tests |
 
 ---
 
@@ -385,7 +398,8 @@ None currently.
 
 ## Next Steps
 
-1. **Implement Phase 11** - CWD-aware refactor
-2. Update tests for new command signatures
+1. ~~**Implement Phase 11** - CWD-aware refactor~~ ✅
+2. ~~Update tests for new command signatures~~ ✅
 3. End-to-end testing with real tmux/git
 4. Dashboard rendering tests (VirtualTerminal from pi-tui)
+5. Lazy workspace initialization (deferred from Phase 11)

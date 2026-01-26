@@ -26,9 +26,19 @@ export function createDeps(): Deps {
 
 /**
  * Create test dependencies with provided overrides.
+ * Can also pass a string as dataDir shorthand.
  */
-export function createTestDeps(overrides: Partial<Deps>): Deps {
+export function createTestDeps(overrides: Partial<Deps> | string): Deps {
   const defaults = createDeps();
+
+  // Support string shorthand for dataDir
+  if (typeof overrides === "string") {
+    return {
+      ...defaults,
+      dataDir: overrides,
+    };
+  }
+
   return {
     ...defaults,
     ...overrides,

@@ -1,15 +1,17 @@
 /**
  * Workspace management commands.
  *
+ * All commands are CWD-aware - project is inferred from current directory.
+ *
  * Commands:
- * - orange workspace init <project>
- * - orange workspace list
+ * - orange workspace init
+ * - orange workspace list [--all]
  */
 
 import type { ParsedArgs } from "../args.js";
 import type { Deps } from "../../core/types.js";
-import { loadProjects } from "../../core/state.js";
 import { initWorkspacePool, loadPoolState } from "../../core/workspace.js";
+import { requireProject, detectProject } from "../../core/cwd.js";
 
 /**
  * Run a workspace subcommand.
@@ -20,11 +22,11 @@ export async function runWorkspaceCommand(
 ): Promise<void> {
   switch (parsed.subcommand) {
     case "init":
-      await initWorkspace(parsed, deps);
+      await initWorkspace(deps);
       break;
 
     case "list":
-      await listWorkspaces(deps);
+      await listWorkspaces(parsed, deps);
       break;
 
     default:
@@ -37,43 +39,51 @@ export async function runWorkspaceCommand(
 }
 
 /**
- * Initialize workspaces for a project.
+ * Initialize workspaces for the current project.
  */
-async function initWorkspace(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange workspace init <project>");
-    process.exit(1);
-  }
-
-  const projectName = parsed.args[0];
-
-  // Find project
-  const projects = await loadProjects(deps);
-  const project = projects.find((p) => p.name === projectName);
-  if (!project) {
-    console.error(`Project '${projectName}' not found`);
-    process.exit(1);
-  }
+async function initWorkspace(deps: Deps): Promise<void> {
+  // Get project from cwd
+  const project = await requireProject(deps);
 
   await initWorkspacePool(deps, project);
   console.log(
-    `Initialized ${project.pool_size} workspaces for project '${projectName}'`
+    `Initialized ${project.pool_size} workspaces for project '${project.name}'`
   );
 }
 
 /**
  * List workspace pool status.
  */
-async function listWorkspaces(deps: Deps): Promise<void> {
+async function listWorkspaces(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const showAll = parsed.options.all === true;
   const poolState = await loadPoolState(deps);
 
-  const workspaces = Object.entries(poolState.workspaces);
+  let workspaces = Object.entries(poolState.workspaces);
+
+  // Filter by project if not showing all
+  if (!showAll) {
+    const detection = await detectProject(deps);
+    if (detection.project) {
+      const projectName = detection.project.name;
+      workspaces = workspaces.filter(([name]) => name.startsWith(`${projectName}--`));
+    }
+    // If not in a project and no --all, show all workspaces (global view)
+  }
+
   if (workspaces.length === 0) {
-    console.log("No workspaces initialized. Use 'orange workspace init <project>' to create some.");
+    const detection = await detectProject(deps);
+    if (detection.project && !showAll) {
+      console.log(`No workspaces for project '${detection.project.name}'.`);
+      console.log("Use 'orange workspace init' to create some.");
+    } else {
+      console.log("No workspaces initialized.");
+      console.log("Use 'orange workspace init' from a project directory to create some.");
+    }
     return;
   }
 
-  console.log("Workspace Pool:\n");
+  const header = showAll ? "Workspace Pool (all projects):" : "Workspace Pool:";
+  console.log(`${header}\n`);
 
   // Group by project
   const byProject = new Map<string, typeof workspaces>();
