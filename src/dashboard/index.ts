@@ -745,6 +745,19 @@ export async function runDashboard(deps: Deps, options: DashboardOptions = {}): 
   tui.addChild(dashboard);
   tui.setFocus(dashboard);
 
+  // Enter alternate screen buffer (like vim/less) and clear
+  process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
+
+  // Restore main screen on exit
+  const cleanup = () => {
+    process.stdout.write("\x1b[?1049l");
+  };
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
+
   await dashboard.init(tui, options);
   tui.start();
 }
