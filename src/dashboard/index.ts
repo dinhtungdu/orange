@@ -493,7 +493,7 @@ export class DashboardComponent implements Component {
         }
 
         if (selected) {
-          line = chalk.inverse(line);
+          line = chalk.inverse(line) + chalk.reset("");
         }
 
         lines.push(line);
