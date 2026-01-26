@@ -229,6 +229,7 @@ class DashboardComponent implements Component {
         break;
 
       case "q":
+        this.tui?.stop();
         this.dispose().then(() => process.exit(0));
         break;
     }

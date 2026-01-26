@@ -85,6 +85,8 @@ export interface TmuxExecutor {
   capturePaneSafe(session: string, lines: number): Promise<string | null>;
   /** Send keys to a session */
   sendKeys(session: string, keys: string): Promise<void>;
+  /** Split window horizontally and run command in new pane */
+  splitWindow(session: string, command: string): Promise<void>;
   /** Attach to session if exists, create and attach if not (tmux new-session -A) */
   attachOrCreate(name: string, cwd: string): Promise<void>;
 }

@@ -144,6 +144,22 @@ export class RealTmux implements TmuxExecutor {
     }
   }
 
+  async splitWindow(session: string, command: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "split-window",
+      "-t",
+      session,
+      "-h", // Horizontal split (side by side)
+      command,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to split window in session '${session}': ${stderr}`
+      );
+    }
+  }
+
   async attachOrCreate(name: string, cwd: string): Promise<void> {
     // Use Bun.spawn with inherited stdio for interactive attach
     const proc = Bun.spawn(["tmux", "new-session", "-A", "-s", name, "-c", cwd], {
@@ -223,6 +239,14 @@ export class MockTmux implements TmuxExecutor {
       throw new Error(`Session '${session}' not found`);
     }
     sessionData.output.push(`[keys: ${keys}]`);
+  }
+
+  async splitWindow(session: string, command: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[split: ${command}]`);
   }
 
   async attachOrCreate(name: string, cwd: string): Promise<void> {

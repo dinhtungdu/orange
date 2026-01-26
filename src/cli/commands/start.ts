@@ -38,15 +38,12 @@ export async function runStartCommand(deps: Deps): Promise<void> {
     );
 
     // Split window and run dashboard in second pane
-    // Wait a bit for session to initialize before sending keys
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
+    // Use full path since 'orange' alias isn't available in non-interactive shell
+    const dashboardCmd = `bun run ${process.env.HOME}/workspace/orange/src/index.ts`;
     try {
-      await deps.tmux.sendKeys(ORCHESTRATOR_SESSION, 'C-b "'); // Split horizontally
-      await deps.tmux.sendKeys(ORCHESTRATOR_SESSION, "orange"); // Run dashboard
-      await deps.tmux.sendKeys(ORCHESTRATOR_SESSION, "Enter");
+      await deps.tmux.splitWindow(ORCHESTRATOR_SESSION, dashboardCmd);
     } catch (err) {
-      // If sendKeys fails, the session is still usable - just warn
+      // If split fails, the session is still usable - just warn
       console.warn("Warning: Failed to set up dashboard pane");
       console.warn(err instanceof Error ? err.message : String(err));
       console.warn("You can manually split the window and run 'orange' for the dashboard");
