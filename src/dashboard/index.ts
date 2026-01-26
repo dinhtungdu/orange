@@ -343,7 +343,7 @@ export class DashboardComponent implements Component {
     // Check if session still exists
     const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
     if (!sessionExists) {
-      this.state.error = `Session '${task.tmux_session}' no longer exists`;
+      this.state.error = `Session no longer exists. Press 'l' to view output log.`;
       this.tui?.requestRender();
       return;
     }
@@ -478,13 +478,8 @@ export class DashboardComponent implements Component {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
 
-    // Only show log for completed tasks
-    const completedStatuses: TaskStatus[] = ["done", "failed"];
-    if (!completedStatuses.includes(task.status)) {
-      this.state.error = `Task is ${task.status}. Use 'p' to peek or Enter to attach to active tasks.`;
-      this.tui?.requestRender();
-      return;
-    }
+    // Allow viewing log for any task that has an output.log file
+    // This handles the case where a "working" task's session died but log exists
 
     // Exit TUI and show log using less
     this.tui?.stop();
