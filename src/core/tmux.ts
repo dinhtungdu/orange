@@ -1,0 +1,186 @@
+/**
+ * Tmux abstraction layer for session management.
+ *
+ * Provides both real tmux execution and mock implementation for testing.
+ * Session naming convention: <project>/<branch> (e.g., "orange/dark-mode")
+ */
+
+import type { TmuxExecutor } from "./types.js";
+
+/**
+ * Execute a shell command and return stdout.
+ */
+async function exec(
+  command: string,
+  args: string[]
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = Bun.spawn([command, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const stdout = await new Response(proc.stdout).text();
+  const stderr = await new Response(proc.stderr).text();
+  const exitCode = await proc.exited;
+
+  return { stdout, stderr, exitCode };
+}
+
+/**
+ * RealTmux implements TmuxExecutor using actual tmux commands.
+ */
+export class RealTmux implements TmuxExecutor {
+  async newSession(name: string, cwd: string, command: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "new-session",
+      "-d",
+      "-s",
+      name,
+      "-c",
+      cwd,
+      command,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to create tmux session '${name}': ${stderr}`);
+    }
+  }
+
+  async killSession(name: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "kill-session",
+      "-t",
+      name,
+    ]);
+
+    if (exitCode !== 0 && !stderr.includes("no server running")) {
+      throw new Error(`Failed to kill tmux session '${name}': ${stderr}`);
+    }
+  }
+
+  async listSessions(): Promise<string[]> {
+    const { stdout, exitCode } = await exec("tmux", [
+      "list-sessions",
+      "-F",
+      "#{session_name}",
+    ]);
+
+    if (exitCode !== 0) {
+      // No sessions or no server running
+      return [];
+    }
+
+    return stdout
+      .trim()
+      .split("\n")
+      .filter((s) => s.length > 0);
+  }
+
+  async sessionExists(name: string): Promise<boolean> {
+    const { exitCode } = await exec("tmux", ["has-session", "-t", name]);
+    return exitCode === 0;
+  }
+
+  async capturePane(session: string, lines: number): Promise<string> {
+    const { stdout, exitCode, stderr } = await exec("tmux", [
+      "capture-pane",
+      "-t",
+      session,
+      "-p",
+      "-S",
+      `-${lines}`,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to capture pane from session '${session}': ${stderr}`
+      );
+    }
+
+    return stdout;
+  }
+
+  async sendKeys(session: string, keys: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "send-keys",
+      "-t",
+      session,
+      keys,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to send keys to session '${session}': ${stderr}`
+      );
+    }
+  }
+}
+
+/**
+ * MockTmux implements TmuxExecutor for testing.
+ * Tracks sessions in memory without actually running tmux.
+ */
+export class MockTmux implements TmuxExecutor {
+  /** In-memory session storage */
+  sessions: Map<string, { cwd: string; command: string; output: string[] }> =
+    new Map();
+
+  async newSession(name: string, cwd: string, command: string): Promise<void> {
+    if (this.sessions.has(name)) {
+      throw new Error(`Session '${name}' already exists`);
+    }
+    this.sessions.set(name, { cwd, command, output: [] });
+  }
+
+  async killSession(name: string): Promise<void> {
+    this.sessions.delete(name);
+  }
+
+  async listSessions(): Promise<string[]> {
+    return Array.from(this.sessions.keys());
+  }
+
+  async sessionExists(name: string): Promise<boolean> {
+    return this.sessions.has(name);
+  }
+
+  async capturePane(session: string, lines: number): Promise<string> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    return sessionData.output.slice(-lines).join("\n");
+  }
+
+  async sendKeys(session: string, keys: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[keys: ${keys}]`);
+  }
+
+  /**
+   * Test helper: Add output to a session's captured pane.
+   */
+  addOutput(session: string, line: string): void {
+    const sessionData = this.sessions.get(session);
+    if (sessionData) {
+      sessionData.output.push(line);
+    }
+  }
+
+  /**
+   * Test helper: Clear all sessions.
+   */
+  clear(): void {
+    this.sessions.clear();
+  }
+}
+
+/**
+ * Create a real tmux executor for production use.
+ */
+export function createTmux(): TmuxExecutor {
+  return new RealTmux();
+}

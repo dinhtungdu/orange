@@ -1,182 +1,202 @@
-# Matcha Implementation Plan
+# Orange Implementation Plan
 
-## Status: Phase 15 Complete
+## Status: Phase 1-9 Complete - MVP Ready
 
-**Goal**: Zellij-native workspace manager with PR integration
+**Goal**: Agent orchestration system - Chat with orchestrator → agents work in parallel → auto-review → human review
+
+**Stack**: TypeScript, pi-tui, tmux, SQLite (bun:sqlite)
 
 **Legend**: 🔴 Not started | 🟡 In progress | 🟢 Complete
 
-**Last verified**: 2026-01-23
+**Last verified**: 2026-01-26
 
 **Specs**: See `specs/*.md` for detailed specifications
 
 ---
 
-## Remaining Work (Prioritized)
+## Implementation Priority
 
-### P2 - Medium Priority (Documented Future Features)
+### Phase 1: Project Foundation (Critical Path)
 
-- 🔴 **Continuous stats refresh** (currently one-shot on startup)
-  - Options: periodic polling (30-60s) or file watcher for `.git/` changes
-  - **Decision**: Intentionally one-shot for simplicity (see Key Decisions)
-  - Implement only if users report stale stats as pain point
+- 🟢 **Initialize project structure**
+  - Created `package.json` with dependencies (pi-tui, chokidar, chalk, gray-matter, nanoid, proper-lockfile)
+  - Created `tsconfig.json` per specs/architecture.md
+  - Created directory structure: `src/cli/`, `src/dashboard/`, `src/core/`
+  - Note: Using `bun:sqlite` instead of `better-sqlite3` for Bun compatibility
 
-- 🔴 **Custom tab layouts per workspace** (`_tabs_config` parameter)
-  - `TabsConfig` loaded but hardcoded to `workspace.kdl`
-  - `workspace_overrides` in `tabs.json` defined but not used
-  - `_tabs_config` parameter passed through `main.rs` (3 locations) but unused
-  - Would allow per-workspace pane configurations
+- 🟢 **Core types** (`src/core/types.ts`)
+  - Task interface (id, project, branch, status, workspace, tmux_session, description, created_at, updated_at)
+  - TaskStatus type: pending, working, needs_human, stuck, done, failed
+  - Project interface (name, path, default_branch, pool_size)
+  - Deps interface for dependency injection (TmuxExecutor, GitExecutor, Clock, dataDir)
+  - PoolState, WorkspaceEntry, HistoryEvent types
 
-### P3 - Low Priority (Long-term Architecture)
+- 🟢 **Entry point** (`src/index.ts`)
+  - Argument parsing dispatch to CLI commands or dashboard
+  - Routes: project, task, workspace, start, install, help, dashboard
 
-- 🔴 **Container backend** - `Backend::Container` defined in `types.rs` but not implemented
-  - Would allow workspaces in Docker/Podman containers
-  - Keep reserved for future implementation
+### Phase 2: External Abstractions (Required for Testing)
 
-- 🔴 **Remote backend** - `Backend::Remote` defined in `types.rs` but not implemented
-  - Would allow workspaces on remote machines via SSH
-  - Keep reserved for future implementation
+- 🟢 **Tmux abstraction** (`src/core/tmux.ts`)
+  - TmuxExecutor interface: newSession, killSession, listSessions, sessionExists, capturePane, sendKeys
+  - RealTmux class implementing TmuxExecutor
+  - MockTmux class for testing
 
-### P5 - Test Coverage Improvements (Optional)
+- 🟢 **Git abstraction** (`src/core/git.ts`)
+  - GitExecutor interface: fetch, checkout, resetHard, createBranch, deleteBranch, merge, currentBranch, clean, addWorktree, removeWorktree
+  - RealGit class implementing GitExecutor
+  - MockGit class for testing
 
-- 🔴 **UI rendering tests** - `ui.rs` not tested
-  - Could use `ratatui` test utilities for snapshot testing
+- 🟢 **Clock abstraction** (`src/core/clock.ts`)
+  - Clock interface: now()
+  - RealClock and MockClock implementations
 
-- 🔴 **Event handling tests** - `main.rs` event loop not tested
-  - Would require mocking terminal events
+### Phase 3: State Management
 
-- 🔴 **Background thread tests** - Stats collection thread not tested
-  - Complex to test async behavior
+- 🟢 **File-based state** (`src/core/state.ts`)
+  - Projects: load/save `~/orange/projects.json`
+  - Tasks: TASK.md frontmatter read/write (gray-matter)
+  - History: history.jsonl append-only event log
+  - Event types: task.created, agent.spawned, status.changed, task.merged, task.cancelled, etc.
 
----
+- 🟢 **SQLite index cache** (`src/core/db.ts`)
+  - Create `~/orange/index.db` schema per specs/data.md
+  - Tasks table: id, project, branch, status, workspace, tmux_session, description, created_at, updated_at
+  - Rebuild from task folders if missing/corrupted
+  - Query helpers: listTasks, getTaskById, updateTaskInDb, rebuildDb
 
-## Completed Phases (1-15)
+### Phase 4: Workspace Pool
 
-### Phase 1-7: Foundation
-- 🟢 Original tmux architecture (tabs-tui, IPC, worktree backend)
-- 🟢 CLI commands: `matcha project add/list/delete`, `matcha workspace add/list/delete`
-- 🟢 State management: `state.json`, `tabs.json`, `stats_cache.json`
-- 🟢 Git worktree isolation backend
+- 🟢 **Workspace pool management** (`src/core/workspace.ts`)
+  - initWorkspacePool(deps, project): Create worktrees based on pool_size
+  - acquireWorkspace(deps, project, task): Acquire available workspace with lock
+  - releaseWorkspace(deps, workspace): Release workspace, clean git state
+  - .pool.json state tracking
+  - proper-lockfile for race condition prevention
 
-### Phase 8: Zellij Migration
-- 🟢 Migrated from tmux to Zellij (~1000 lines deleted)
-- 🟢 Zellij abstraction layer (`ZellijExecutor` trait)
-- 🟢 Tab/pane management via `zellij action` commands
+### Phase 5: CLI Commands (Core)
 
-### Phase 9: Code Quality
-- 🟢 Clippy fixes
-- 🟢 Tab existence checking before operations
+- 🟢 **Argument parsing** (`src/cli/args.ts`)
+  - Parse CLI commands and options
+  - Route to appropriate command handlers
+  - Support for subcommands and options
 
-### Phase 10: Workspace Merge
-- 🟢 `matcha workspace merge` command
-- 🟢 `m` keybinding in TUI for merge with strategy selection (ff/merge)
-- 🟢 Pre-checks for uncommitted changes and commits ahead
+- 🟢 **Project commands** (`src/cli/commands/project.ts`)
+  - `orange project add <path> [--name] [--pool-size]`
+  - `orange project list`
 
-### Phase 11: Workspace Templates
-- 🟢 Template system for workspace creation
+- 🟢 **Workspace commands** (`src/cli/commands/workspace.ts`)
+  - `orange workspace init <project>` - Create worktrees for pool
+  - `orange workspace list` - Show pool status
 
-### Phase 12: App Layout Keybindings
-- 🟢 Number keys 1-9 for tab switching
-- 🟢 Lock mode with Ctrl+g unlock (see `specs/layout.md`)
+- 🟢 **Task commands** (`src/cli/commands/task.ts`)
+  - `orange task create <project> <branch> <description>` - Create task folder, TASK.md, history.jsonl
+  - `orange task list [--project] [--status]` - List from SQLite index
+  - `orange task spawn <task_id>` - Acquire workspace, create branch, start tmux session with Claude
 
-### Phase 13: PR Integration
-- 🟢 PR number display (`pr_number: Option<u32>` in `WorkspaceStats`)
-- 🟢 PR detection via `gh pr list --head <branch> --json number`
-- 🟢 `o` keybinding to open PR in browser (`gh pr view --web`)
-- 🟢 Code cleanup (consolidated `create_workspace_panes`)
-- 🟢 Stats cache invalidation after workspace operations
-  - `invalidate_stats()` and `invalidate_project_stats()` methods in App
-  - Cache refresh triggered after workspace create/delete/merge
-  - Optimistic invalidation on merge (stats refresh even if merge fails)
+### Phase 6: Agent Integration
 
-### Phase 14: Logging
-- 🟢 File-based logging per `specs/logging.md`
-- 🟢 `tracing` + `tracing-subscriber` + `tracing-appender` dependencies added
-- 🟢 Log location: `~/matcha/logs/` with daily rotation (7 days retention)
-- 🟢 Logging modules in `workspace-tui/src/logging.rs` and `matcha-cli/src/logging.rs`
-- 🟢 Default level: `info` (configurable via `MATCHA_LOG` env var)
-- 🟢 Instrumented: state.rs, zellij.rs, worktree.rs, config.rs, main.rs (both binaries)
+- 🟢 **Agent prompt generation** (`src/core/agent.ts`)
+  - buildAgentPrompt(): Build `--prompt` string per specs/agent.md
+  - Include: description, project, branch, worktree, self-review instructions
+  - Max 3 review attempts, write outcome to .orange-task
+  - parseAgentOutcome(): Parse .orange-task file
 
-### Phase 15: Notification Feature
-- 🟢 **Add `notifications` field to `AppState`** (`matcha-common/src/state.rs`)
-  - Added `notifications: HashSet<String>` field (key format: "project/workspace")
-  - Added serde attributes: `#[serde(default, skip_serializing_if = "HashSet::is_empty")]`
-  - Added `notify(project, workspace)` method
-  - Added `clear_notification(project, workspace)` method
-  - Added `is_notified(project, workspace)` method
-  - Added 9 unit tests for notification state management
+- 🟢 **Task lifecycle commands** (`src/cli/commands/task.ts` - additional)
+  - `orange task peek <task_id> [--lines N]` - Capture tmux pane output
+  - `orange task complete <task_id>` - Called by hook → needs_human
+  - `orange task stuck <task_id>` - Called by hook → stuck
+  - `orange task merge <task_id> [--strategy]` - Merge branch, release workspace, kill session
+  - `orange task cancel <task_id>` - Cancel task, release workspace, kill session
 
-- 🟢 **Add `notify` CLI command** (`matcha-cli/src/main.rs`)
-  - Added `Notify` variant to `Commands` enum
-  - Syntax: `matcha notify <workspace> -p <project>`
-  - Syntax: `matcha notify --clear <workspace> -p <project>`
-  - Added `handle_notify()` function with project/workspace validation
-  - Added 3 CLI parsing tests
+- 🟢 **Orchestrator skill** (`skills/orchestrator.md`)
+  - Created skill file per specs/cli.md
+  - `orange install` command to copy to ~/.claude/skills/orange/
 
-- 🟢 **Add TUI notification indicator** (`workspace-tui/src/ui.rs`)
-  - Renders yellow `●` before tab indicator (◉/○) when notified
-  - Works in both normal and Quick Access modes
+### Phase 7: Dashboard TUI
 
-- 🟢 **Add 5-second polling for state reload** (`workspace-tui/src/main.rs`)
-  - Polls every 5 seconds to detect CLI-initiated notifications
-  - Reloads `state.json` via `app.reload_state()` method
+- 🟢 **Dashboard** (`src/dashboard/index.ts`)
+  - TUI setup with pi-tui (ProcessTerminal, TUI, Component)
+  - Task list with status indicators (●/◉/⚠/○/✓/✗)
+  - Cursor navigation (j/k)
+  - Input handling: j/k navigate, Enter attach, p peek, m merge, x cancel, o open PR, q quit
+  - Async operation handling (fire-and-forget pattern per specs/dashboard.md)
+  - File watching with chokidar for task folder changes
+  - Periodic tmux capture for "lastOutput" display (every 5s)
 
-- 🟢 **Auto-clear notification on Enter** (`workspace-tui/src/main.rs`)
-  - When workspace is selected with Enter, clears its notification
-  - Saves state after clearing (both normal and search modes)
+### Phase 8: Start Command
 
-- 🟢 **Update spec documentation**
-  - Updated `specs/cli.md` - documented notify command
-  - Updated `specs/data.md` - documented notifications field
-  - Updated `specs/workspace-tui.md` - documented notification indicator
-
-### P4 - Code Quality (Tech Debt) - COMPLETE
-- 🟢 **PR JSON parsing** - Now uses `serde_json` in `worktree.rs`
-  - Replaced manual string parsing with proper JSON deserialization
-  - Added 4 additional tests for edge cases
-
-- 🟢 **CLI error handling** - Now uses `MatchaError` in `matcha-cli/src/main.rs`
-  - Added `ProjectNotFound`, `WorkspaceNotFound`, `Precondition` variants to `MatchaError`
-  - Removed all `.map_err(|e| format!(...))` patterns
-  - Added 9 error display tests to `error.rs`
-
-- 🟢 **Integration tests** - Git worktree operations now have integration tests
-  - Uses `tempfile` crate to create temporary git repositories
-  - 18 new tests in `worktree.rs::integration_tests` module
-  - Tests: validate_repo, branch operations, worktree create/remove/list,
-    commits ahead/behind, lines changed, merge operations, etc.
-  - Old `tests/integration_test.sh` (tmux-based) deprecated
+- 🟢 **Start command** (`src/cli/commands/start.ts`)
+  - `orange start` - Create orchestrator session
+  - Create tmux session `orange-orchestrator`
+  - Pane 0: Claude Code
+  - Pane 1: Dashboard TUI (via split and sendKeys)
+  - Handle already-running session gracefully
 
 ---
 
-## Test Coverage
+## Phase 9: Testing Infrastructure
 
-| Crate | Unit Tests | Notes |
-|-------|------------|-------|
-| matcha-cli | 20 | CLI parsing (incl. notify command), state formatting |
-| matcha-common | 103 | Worktree (unit + integration), zellij commands, types (incl. StatsCache), state (incl. notifications), config, error |
-| workspace-tui | 52 | Navigation, actions, input modes, fuzzy search, filtering |
-| **Total** | **175** | All passing |
+- 🟢 **Test mocks** (colocated in `src/core/*.ts`)
+  - MockTmux, MockGit, MockClock implementations
+  - Temp directory utilities in tests
+
+- 🟢 **Core tests** (colocated `*.test.ts`)
+  - types.test.ts: Type validation (13 tests)
+  - workspace.test.ts: Pool acquire/release/exhaustion (8 tests)
+  - state.test.ts: TASK.md parsing, history.jsonl events (10 tests)
+  - db.test.ts: SQLite index queries, rebuild from folders (10 tests)
+
+- 🟢 **CLI tests**
+  - args.test.ts: Argument parsing (15 tests)
+
+**Total: 51 tests passing**
 
 ---
 
-## Known Issues
+## Post-MVP Enhancements (P2-P5)
 
-| Issue | Location | Impact | Notes |
-|-------|----------|--------|-------|
-| None | - | - | All known issues resolved |
+### P2 - Polish
+
+- 🔴 **Error handling improvements**
+  - Graceful degradation when tmux not available
+  - Clear error messages for common failures
+
+- 🔴 **Performance optimizations**
+  - SQLite index rebuild on demand only
+  - Efficient file watching patterns
+
+### P3 - Extended Features
+
+- 🔴 **Multiple orchestrator instances**
+  - Support multiple independent orchestrator sessions
+
+- 🔴 **Task filtering in dashboard**
+  - Filter by project
+  - Filter by status
+
+### P5 - Test Coverage
+
+- 🔴 **Dashboard rendering tests**
+  - Use VirtualTerminal from pi-tui
+
+- 🔴 **Integration tests with real git repos**
+  - Create temp repos for end-to-end testing
+
+- 🔴 **CLI command integration tests**
+  - project.test.ts: Add/list projects
+  - task.test.ts: Create/spawn/complete/merge lifecycle
 
 ---
 
 ## Architecture Notes
 
-- **Zellij interaction**: `std::process::Command` via `zellij.rs`
-- **State files**: JSON in `~/matcha/` (state.json, tabs.json, stats_cache.json)
-- **Session name**: `matcha` (hardcoded)
-- **Tab naming**: `{project}-{workspace}` (e.g., `matcha-main`)
-- **Pane naming**: `"agent-claude"`, `"lazygit"`, `"shell"`, `"opencode"`
-- **PR detection**: `gh pr list --head <branch> --json number`
-- **Notifications**: External apps mark workspaces via `matcha notify`, TUI polls every 5s
+Per specs/architecture.md:
+- **Single binary**: CLI + Dashboard via pi-tui
+- **Session naming**: `orange-orchestrator` for main, `<project>/<branch>` for tasks
+- **Storage**: File-based (source of truth) + SQLite (derived cache)
+- **Workspace pool**: Reuse worktrees, don't delete
+- **Self-review**: Agent spawns review subagent internally (no external review orchestration)
 
 ---
 
@@ -184,29 +204,54 @@
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Tab spawning | Lazy | Fast workspace switch |
-| Window lifecycle | Keep all + explicit close | Preserves state |
-| Error handling | Show in TUI, auto-clear 3s | UX priority |
-| PR creation | Via Claude agent, not `gh` | Better PR descriptions |
-| Pane tracking | `dump-layout` + KDL parsing | Find agent pane by name |
-| Merge conflicts | Surface error, manual resolution | Keep it simple |
-| Lock mode | Default locked + Ctrl+g unlock | Pass keybindings to terminal apps |
-| Stats refresh | One-shot on startup | Simple first iteration |
-| PR detection | `gh pr list --head` | GitHub CLI integration |
-| Backend variants | Reserved for future | Container/Remote planned but not implemented |
-| Notification polling | 5-second interval | Balance between responsiveness and CPU usage |
+| Single user | No multi-user | Simplicity |
+| Task history | Keep forever | Audit trail |
+| Storage | File + SQLite cache | Source of truth in files |
+| Workspace pool | Reuse, not delete | Fast task switching |
+| Merge workflow | Local + PR both supported | Flexibility |
+| Self-review | Agent-internal | Agent keeps context |
+| Session naming | `project/branch` | Easy identification |
+| SQLite driver | `bun:sqlite` | Bun native, better-sqlite3 not supported |
 
 ---
 
-## Spec Alignment Summary
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `@mariozechner/pi-tui` | TUI framework |
+| `bun:sqlite` | SQLite index cache (built-in) |
+| `chokidar` | File watching (task folders) |
+| `chalk` | Terminal colors |
+| `gray-matter` | TASK.md frontmatter parsing |
+| `nanoid` | Task IDs |
+| `proper-lockfile` | File locking (workspace pool) |
+| `bun-types` | Bun TypeScript types |
+
+---
+
+## Spec Alignment
 
 | Spec | Status | Notes |
 |------|--------|-------|
-| `architecture.md` | 🟢 Complete | Zellij abstraction, AppState, crates |
-| `cli.md` | 🟢 Complete | All commands including `notify` |
-| `data.md` | 🟢 Complete | All fields including `notifications` |
-| `layout.md` | 🟢 Complete | workspace.kdl layout correct; complete config options documentation |
-| `logging.md` | 🟢 Complete | tracing + file appender with daily rotation |
-| `workspace-tui.md` | 🟢 Complete | All features including notification indicator |
-| `notification-feature.md` | 🟢 Complete | Phase 15 implementation |
-| `quick-access-feature.md` | 🟢 Complete | Toggle with Tab key, flat list view |
+| `architecture.md` | 🟢 Complete | Full implementation done |
+| `cli.md` | 🟢 Complete | All commands implemented |
+| `data.md` | 🟢 Complete | projects.json, TASK.md, history.jsonl, index.db |
+| `agent.md` | 🟢 Complete | Prompt generation, hook integration |
+| `workspace.md` | 🟢 Complete | Pool management with locking |
+| `dashboard.md` | 🟢 Complete | pi-tui implementation |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 51 tests |
+
+---
+
+## Known Issues
+
+None currently.
+
+---
+
+## Next Steps
+
+1. End-to-end testing with real tmux/git
+2. Add more comprehensive CLI command tests
+3. Consider adding hook support for agent completion detection
