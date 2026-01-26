@@ -5,7 +5,9 @@ Agent orchestration. TS + pi-tui + tmux + SQLite.
 ## Setup
 
 1. Read `specs/architecture.md`
-2. `npm run check` before commit
+2. `bun install`
+3. `bun run dev <command>` — run during development
+4. `bun run check` before commit
 
 ## Structure
 
@@ -24,14 +26,24 @@ skills/         # orchestrator skill
 
 ## Status
 
-pending → working → needs_human → done (or failed)
+```
+pending → working → needs_human → done
+                 ↘ stuck (gave up after 3 reviews)
+                 ↘ failed (crashed/errored)
+```
 
 ## Rules
 
 - No `any`
-- `npm run check` before commit
+- `bun run check` before commit
 - Integration tests preferred
 - Commits: `type(scope): msg`
+
+## Testing
+
+- Bun test runner, colocated unit tests (`*.test.ts`)
+- Dependency injection for mocking (tmux, git, clock)
+- `bun run check` = tsc + tests
 
 ## Parallel Agents
 

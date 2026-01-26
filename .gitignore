@@ -34,3 +34,4 @@ debug-*.log
 
 # Local config
 .orange-task
+.claude/
