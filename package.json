@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "orange": "./dist/index.js"
+    "orange": "./src/index.ts"
   },
   "scripts": {
     "dev": "bun run src/index.ts",

@@ -10,9 +10,8 @@ Agent orchestration. TS + pi-tui + tmux + SQLite.
 
 1. Read `specs/architecture.md`
 2. `bun install`
-3. Add alias: `alias orange="bun run ~/workspace/orange/src/index.ts"`
-4. `orange install` — symlink skill to ~/.claude/skills/
-5. `bun run check` before commit
+3. `orange install` — symlink skill to ~/.claude/skills/
+4. `bun run check` before commit
 
 ## Structure
 
