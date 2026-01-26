@@ -1,6 +1,6 @@
 # Dashboard TUI
 
-TypeScript + pi-tui. Task-centric monitoring.
+TypeScript + pi-tui. Shows all tasks from SQLite cache (including done/failed).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -43,6 +43,7 @@ TypeScript + pi-tui. Task-centric monitoring.
 | m | Merge task (local merge + cleanup) |
 | x | Cancel task (cleanup) |
 | o | Open PR in browser |
+| f | Filter by status (cycle: all → active → done) |
 | q | Quit dashboard |
 
 ## Implementation (pi-tui)

@@ -26,38 +26,32 @@ orange install                      # Install orchestrator skill to ~/.claude/sk
 
 ## Task Merge Flow
 
-Two workflows supported:
+`orange task merge <id>` auto-detects workflow:
 
-**Local merge:**
 ```bash
-orange task merge <id>
-# 1. In source repo: git fetch, git merge origin/<branch>
-# 2. Release workspace (mark available, don't delete)
-# 3. Delete remote branch
-# 4. tmux kill-session -t "$project/$branch"
-# 5. status → done, history.jsonl: task.merged event
+# 1. Check if PR exists and merged:
+gh pr view <branch> --json state,mergedAt
+
+# 2a. PR merged → skip local merge
+# 2b. No PR or PR open → local merge:
+#     git fetch origin
+#     git merge origin/<branch>
+
+# 3. Cleanup:
+#     - Release workspace (mark available)
+#     - Delete remote branch
+#     - tmux kill-session -t "$project/$branch"
+#     - status → done
+#     - history.jsonl: task.merged event
 ```
-
-**PR workflow:**
-```bash
-# Agent or human creates PR via gh
-gh pr create --fill
-
-# After PR merged on GitHub:
-orange task merge <id>
-# 1. Release workspace (mark available)
-# 2. tmux kill-session -t "$project/$branch"
-# 3. status → done, history.jsonl: task.merged event
-```
-
-Both: workspace released (reused), session killed, status = done.
 
 ## Orchestrator Skill
 
-Installed globally for orchestrator context.
+Installed globally via symlink (changes to source reflect immediately).
 
 ```bash
-orange install  # Copies skill to ~/.claude/skills/orange/
+orange install  # Symlinks skills/ → ~/.claude/skills/orange
+# ln -s $(pwd)/skills ~/.claude/skills/orange
 ```
 
 **~/.claude/skills/orange/orchestrator.md:**

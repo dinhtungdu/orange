@@ -65,7 +65,7 @@ Add dark mode support with system preference detection.
 
 ## index.db (derived cache)
 
-SQLite cache for fast dashboard queries. Rebuilt from task folders if missing/corrupted.
+SQLite cache for fast queries. Stores all tasks (including done/failed). Rebuilt from task folders if missing/corrupted.
 
 ```sql
 CREATE TABLE tasks (

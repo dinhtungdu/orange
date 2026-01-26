@@ -88,7 +88,7 @@ src/
     └── index.ts
 
 skills/
-└── orchestrator.md    # Skill file (copied by `orange install`)
+└── orchestrator.md    # Skill file (symlinked by `orange install`)
 
 package.json
 tsconfig.json
@@ -127,9 +127,13 @@ bun run build                     # creates dist/orange (single binary)
 
 **Install globally:**
 ```bash
-bun link                          # symlinks to ~/.bun/bin/orange
-# or
-cp dist/orange /usr/local/bin/    # manual install
+# Development (changes apply immediately):
+alias orange="bun run ~/workspace/orange/src/index.ts"
+# Add to ~/.zshrc or ~/.bashrc
+
+# Production (compiled binary):
+bun run build
+cp dist/orange /usr/local/bin/
 ```
 
 **tsconfig.json:**
@@ -151,17 +155,17 @@ cp dist/orange /usr/local/bin/    # manual install
 ## Startup
 
 ```bash
-orange start  # Creates orchestrator session
+orange start
+# Creates tmux session (if not exists) and attaches:
+#   - Pane 0: Claude Code (with orange skill)
+#   - Pane 1: Dashboard TUI
+# If session exists, just attaches.
+# Working directory: ~/orange/
 ```
 
-Creates:
-- tmux session `orange-orchestrator`
-- Pane 0: Claude Code (with orange skill)
-- Pane 1: Dashboard TUI
-
+Equivalent to:
 ```bash
-# Or attach if already running
-tmux attach -t orange-orchestrator
+tmux new-session -A -s orange-orchestrator -c ~/orange
 ```
 
 ## Decisions

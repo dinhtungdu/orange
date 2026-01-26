@@ -71,6 +71,16 @@ async function releaseWorkspace(workspace: string): Promise<void> {
   } finally {
     await release();
   }
+
+  // Auto-spawn next pending task for this project
+  await spawnNextPending(project);
+}
+
+async function spawnNextPending(project: string): Promise<void> {
+  const pending = await getTasksByStatus(project, 'pending');
+  if (pending.length > 0) {
+    await spawnTask(pending[0].id);  // FIFO
+  }
 }
 ```
 
