@@ -35,11 +35,12 @@ if [[ -f .orange-task ]]; then
   OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-task 2>/dev/null | head -1 | cut -d'"' -f4)
 
   if [[ -n "$TASK_ID" ]]; then
-    if [[ "$OUTCOME" == "passed" ]]; then
+    if [[ "$OUTCOME" == "passed" || "$OUTCOME" == "needs_human" ]]; then
       orange task complete "$TASK_ID"
-    else
+    elif [[ "$OUTCOME" == "stuck" ]]; then
       orange task stuck "$TASK_ID"
     fi
+    # Unknown outcomes are ignored (agent may have crashed before writing)
   fi
 fi
 `;
