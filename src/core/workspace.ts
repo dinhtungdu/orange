@@ -86,6 +86,26 @@ function getNextWorkspaceNumber(poolState: PoolState, projectName: string): numb
 }
 
 /**
+ * Default Claude settings for autonomous agents.
+ * Pre-allows common dev commands to avoid permission prompts.
+ */
+const AGENT_SETTINGS = {
+  permissions: {
+    allow: [
+      "Bash(bun run check:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(bun test:*)",
+      "Bash(bun install)",
+      "Bash(git stash:*)",
+    ],
+  },
+  sandbox: {
+    enabled: true,
+    autoAllowBashIfSandboxed: true,
+  },
+};
+
+/**
  * Create a single worktree for a project.
  * Returns the workspace name.
  */
@@ -100,6 +120,14 @@ async function createWorktree(
 
   console.log(`Creating workspace ${name}...`);
   await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
+
+  // Create .claude/settings.local.json for autonomous agent permissions
+  const claudeDir = join(worktreePath, ".claude");
+  await mkdir(claudeDir, { recursive: true });
+  await writeFile(
+    join(claudeDir, "settings.local.json"),
+    JSON.stringify(AGENT_SETTINGS, null, 2)
+  );
 
   return name;
 }
@@ -126,6 +154,14 @@ export async function initWorkspacePool(deps: Deps, project: Project): Promise<v
 
     // Create worktree
     await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
+
+    // Create .claude/settings.local.json for autonomous agent permissions
+    const claudeDir = join(worktreePath, ".claude");
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(
+      join(claudeDir, "settings.local.json"),
+      JSON.stringify(AGENT_SETTINGS, null, 2)
+    );
 
     // Add to pool state
     poolState.workspaces[name] = { status: "available" };
