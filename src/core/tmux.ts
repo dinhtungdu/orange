@@ -176,13 +176,23 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async attachOrCreate(name: string, cwd: string): Promise<void> {
-    // Use Bun.spawn with inherited stdio for interactive attach
-    const proc = Bun.spawn(["tmux", "new-session", "-A", "-s", name, "-c", cwd], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    await proc.exited;
+    // If inside tmux, switch to session instead of attach (avoids nesting warning)
+    if (process.env.TMUX) {
+      const proc = Bun.spawn(["tmux", "switch-client", "-t", name], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      await proc.exited;
+    } else {
+      // Use Bun.spawn with inherited stdio for interactive attach
+      const proc = Bun.spawn(["tmux", "new-session", "-A", "-s", name, "-c", cwd], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      await proc.exited;
+    }
   }
 }
 
