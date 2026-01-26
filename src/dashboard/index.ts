@@ -142,6 +142,9 @@ export class DashboardComponent implements Component {
     // Load initial tasks
     await this.refreshTasks();
 
+    // Check for dead sessions immediately (don't wait for first interval)
+    await this.captureOutputs();
+
     // Watch task folders for changes with efficient patterns:
     // - Only watch TASK.md files (source of truth for task state)
     // - Debounce rapid changes to avoid unnecessary rebuilds
@@ -253,7 +256,7 @@ export class DashboardComponent implements Component {
       this.state.cursor = Math.max(0, this.state.tasks.length - 1);
     }
 
-    this.tui?.requestRender();
+    this.tui?.requestRender(true);
   }
 
   private async captureOutputs(): Promise<void> {
@@ -285,7 +288,7 @@ export class DashboardComponent implements Component {
       case "\x1b[B": // Down arrow
         if (this.state.cursor < this.state.tasks.length - 1) {
           this.state.cursor++;
-          this.tui?.requestRender();
+          this.tui?.requestRender(true);
         }
         break;
 
@@ -293,7 +296,7 @@ export class DashboardComponent implements Component {
       case "\x1b[A": // Up arrow
         if (this.state.cursor > 0) {
           this.state.cursor--;
-          this.tui?.requestRender();
+          this.tui?.requestRender(true);
         }
         break;
 
@@ -348,7 +351,7 @@ export class DashboardComponent implements Component {
     const tmuxAvailable = await this.deps.tmux.isAvailable();
     if (!tmuxAvailable) {
       this.state.error = "tmux is not installed or not in PATH";
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
       return;
     }
 
@@ -356,24 +359,45 @@ export class DashboardComponent implements Component {
     const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
     if (!sessionExists) {
       this.state.error = `Session no longer exists. Press 'l' to view output log.`;
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
       return;
     }
 
-    // Exit TUI and attach to tmux session
-    this.tui?.stop();
-    const proc = Bun.spawn(["tmux", "attach", "-t", task.tmux_session], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    proc.exited.then((exitCode) => {
-      // Re-enter TUI after detaching
+    // Use switch-client if inside tmux, attach if outside
+    const insideTmux = !!process.env.TMUX;
+
+    if (insideTmux) {
+      // Switch to task session - dashboard exits, user returns here after detach
+      this.tui?.stop();
+      await this.dispose();
+      const proc = Bun.spawn(["tmux", "switch-client", "-t", task.tmux_session], {
+        stdin: "inherit",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const exitCode = await proc.exited;
       if (exitCode !== 0) {
-        this.state.error = `Failed to attach to session (exit code: ${exitCode})`;
+        const stderr = await new Response(proc.stderr).text();
+        console.error(stderr.trim() || `switch-client failed (exit code: ${exitCode})`);
       }
-      this.tui?.start();
-    });
+      process.exit(exitCode);
+    } else {
+      // Attach to session, restart TUI after detach
+      this.tui?.stop();
+      const proc = Bun.spawn(["tmux", "attach", "-t", task.tmux_session], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "pipe",
+      });
+      proc.exited.then(async (exitCode) => {
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          this.state.error = stderr.trim() || `Failed to attach (exit code: ${exitCode})`;
+        }
+        this.tui?.start();
+        this.tui?.requestRender(true); // Force full redraw
+      });
+    }
   }
 
   /**
@@ -407,7 +431,7 @@ export class DashboardComponent implements Component {
         this.state.error = `Merge failed: ${stderr.trim() || "Unknown error"}`;
       }
       await this.refreshTasks();
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
     });
   }
 
@@ -430,7 +454,7 @@ export class DashboardComponent implements Component {
         this.state.error = `Cancel failed: ${stderr.trim() || "Unknown error"}`;
       }
       await this.refreshTasks();
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
     });
   }
 
@@ -441,7 +465,7 @@ export class DashboardComponent implements Component {
     // Only allow deleting done/failed tasks
     if (task.status !== "done" && task.status !== "failed") {
       this.state.error = `Cannot delete task with status '${task.status}'. Use cancel first.`;
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
       return;
     }
 
@@ -460,7 +484,7 @@ export class DashboardComponent implements Component {
         this.state.error = `Delete failed: ${stderr.trim() || "Unknown error"}`;
       }
       await this.refreshTasks();
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
     });
   }
 
@@ -495,7 +519,7 @@ export class DashboardComponent implements Component {
     // Only allow respawn for dead sessions
     if (!this.state.deadSessions.has(task.id)) {
       this.state.error = "Task session is still active. Use 'x' to cancel first.";
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
       return;
     }
 
@@ -515,7 +539,7 @@ export class DashboardComponent implements Component {
         this.state.error = `Respawn failed: ${stderr.trim() || "Unknown error"}`;
       }
       await this.refreshTasks();
-      this.tui?.requestRender();
+      this.tui?.requestRender(true);
     });
   }
 

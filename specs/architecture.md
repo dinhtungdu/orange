@@ -2,7 +2,7 @@
 
 Agent orchestration system in TypeScript. Chat with orchestrator → agents work in parallel → auto-review → human review.
 
-**Stack:** TypeScript, pi-tui, tmux, SQLite
+**Stack:** TypeScript, pi-tui, tmux
 
 ## Specs
 
@@ -184,7 +184,7 @@ orange start
 
 1. **Single user** - No multi-user support
 2. **Task history** - Keep forever (task folders never deleted)
-3. **Storage** - File-based (source of truth) + SQLite (derived cache)
+3. **Storage** - File-based (TASK.md is source of truth)
 4. **Workspace pool** - Reuse worktrees, don't delete
 5. **Merge workflow** - Support both local merge and PR
 6. **Self-review** - Agent spawns review subagent internally
@@ -197,7 +197,6 @@ orange start
 | Package | Purpose |
 |---------|---------|
 | `@mariozechner/pi-tui` | TUI framework |
-| `bun:sqlite` | SQLite index cache (Bun built-in) |
 | `chokidar` | File watching (task folders) |
 | `chalk` | Terminal colors |
 | `gray-matter` | TASK.md frontmatter parsing |

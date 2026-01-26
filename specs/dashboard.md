@@ -1,6 +1,6 @@
 # Dashboard TUI
 
-TypeScript + pi-tui. Shows tasks from SQLite cache (including done/failed).
+TypeScript + pi-tui. Shows tasks from TASK.md files (including done/failed).
 
 ## Scoping
 
@@ -73,7 +73,7 @@ Footer shows relevant actions based on selected task's state:
 | Key | Action | When |
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
-| Enter | Attach to tmux session | Live sessions |
+| Enter | Switch to tmux session | Live sessions |
 | l | View output log | Dead/completed tasks |
 | r | Respawn agent | Dead sessions only |
 | m | Merge task | Live sessions |
@@ -83,9 +83,15 @@ Footer shows relevant actions based on selected task's state:
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
 
+**Attach behavior:**
+- Inside tmux: uses `switch-client` (switches current client to task session)
+- Outside tmux: uses `attach` (attaches to task session)
+
+To return from task session, use tmux session switcher (prefix + s) or similar.
+
 ## Dead Session Detection
 
-Dashboard periodically checks if tmux sessions still exist for active tasks. If a session died (agent crashed, tmux killed externally), the task shows:
+Dashboard checks for dead sessions immediately on startup, then periodically. If a session died (agent crashed, tmux killed externally), the task shows:
 - Icon: ✗ (failed)
 - Status: "dead"
 - Available actions: view log, respawn, or cancel

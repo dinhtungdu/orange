@@ -82,7 +82,7 @@ const app = new Orange({ tmux: new MockTmux(), git: new MockGit(), ... });
 - Task lifecycle: create → spawn → stuck → cancel
 - Workspace pool: acquire, release, exhaustion
 - Concurrent operations: locking, race conditions
-- State persistence: history.jsonl events, index.db rebuild
+- State persistence: TASK.md, history.jsonl events
 - Error handling: invalid states, missing files
 
 ### 4. Test Isolation

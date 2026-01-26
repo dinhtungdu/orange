@@ -15,7 +15,7 @@ import { MockGit } from "../core/git.js";
 import { RealClock, MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
 import { saveProjects, loadProjects, saveTask, loadTask } from "../core/state.js";
-import { listTasks, updateTaskInDb, rebuildDb } from "../core/db.js";
+import { listTasks } from "../core/db.js";
 import { initWorkspacePool, acquireWorkspace, releaseWorkspace, getPoolStats } from "../core/workspace.js";
 import { getGitRoot, detectProject, autoRegisterProject } from "../core/cwd.js";
 
@@ -245,7 +245,7 @@ describe("Integration: Full Task Lifecycle", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test("create task and verify in database", async () => {
+  test("create task and verify via listTasks", async () => {
     const task = {
       id: "task123",
       project: "test-repo",
@@ -259,20 +259,19 @@ describe("Integration: Full Task Lifecycle", () => {
     };
 
     await saveTask(deps, task);
-    await updateTaskInDb(deps, task);
 
     // Verify in file
     const loadedTask = await loadTask(deps, "test-repo", "feature-x");
     expect(loadedTask).not.toBeNull();
     expect(loadedTask?.id).toBe("task123");
 
-    // Verify in database
+    // Verify via listTasks
     const tasks = await listTasks(deps, { project: "test-repo" });
     expect(tasks).toHaveLength(1);
     expect(tasks[0].id).toBe("task123");
   });
 
-  test("rebuildDb reconstructs from files", async () => {
+  test("listTasks reads directly from TASK.md files", async () => {
     // Create tasks via file system
     const task1 = {
       id: "task1",
@@ -300,10 +299,7 @@ describe("Integration: Full Task Lifecycle", () => {
     await saveTask(deps, task1);
     await saveTask(deps, task2);
 
-    // Rebuild database
-    await rebuildDb(deps);
-
-    // Verify both tasks are in database
+    // Verify both tasks are found
     const tasks = await listTasks(deps, {});
     expect(tasks).toHaveLength(2);
     expect(tasks.map(t => t.id).sort()).toEqual(["task1", "task2"]);
@@ -323,7 +319,6 @@ describe("Integration: Full Task Lifecycle", () => {
     };
 
     await saveTask(deps, task);
-    await updateTaskInDb(deps, task);
 
     // Acquire workspace
     const workspace = await acquireWorkspace(deps, "test-repo", "test-repo/feature-y");
@@ -338,7 +333,6 @@ describe("Integration: Full Task Lifecycle", () => {
     };
 
     await saveTask(deps, updatedTask);
-    await updateTaskInDb(deps, updatedTask);
 
     // Verify updated state
     const loadedTask = await loadTask(deps, "test-repo", "feature-y");
@@ -434,8 +428,6 @@ describe("Integration: Multiple Projects", () => {
 
     await saveTask(deps, task1);
     await saveTask(deps, task2);
-    await updateTaskInDb(deps, task1);
-    await updateTaskInDb(deps, task2);
 
     // Filter by project
     const repo1Tasks = await listTasks(deps, { project: "repo1" });

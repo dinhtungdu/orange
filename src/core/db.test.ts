@@ -1,7 +1,7 @@
 /**
- * Tests for SQLite index cache.
+ * Tests for task queries.
  *
- * Tests database operations and rebuild from task folders.
+ * Tests reading tasks directly from TASK.md files.
  */
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
@@ -14,9 +14,9 @@ import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
 import { NullLogger } from "./logger.js";
 import { saveTask } from "./state.js";
-import { updateTaskInDb, listTasks, getTaskById, rebuildDb } from "./db.js";
+import { listTasks, getTaskById } from "./db.js";
 
-describe("SQLite Index Cache", () => {
+describe("Task Queries", () => {
   let tempDir: string;
   let deps: Deps;
 
@@ -48,33 +48,23 @@ describe("SQLite Index Cache", () => {
     ...overrides,
   });
 
-  test("updateTaskInDb inserts new task", async () => {
-    const task = createTask();
-    await updateTaskInDb(deps, task);
+  test("listTasks returns empty array when no tasks", async () => {
+    const tasks = await listTasks(deps, {});
+    expect(tasks).toHaveLength(0);
+  });
+
+  test("listTasks returns task from TASK.md file", async () => {
+    await saveTask(deps, createTask());
 
     const tasks = await listTasks(deps, {});
     expect(tasks).toHaveLength(1);
     expect(tasks[0].id).toBe("abc12345");
   });
 
-  test("updateTaskInDb updates existing task", async () => {
-    const task = createTask();
-    await updateTaskInDb(deps, task);
-
-    task.status = "working";
-    task.workspace = "orange--1";
-    await updateTaskInDb(deps, task);
-
-    const tasks = await listTasks(deps, {});
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0].status).toBe("working");
-    expect(tasks[0].workspace).toBe("orange--1");
-  });
-
   test("listTasks returns all tasks ordered by created_at desc", async () => {
-    await updateTaskInDb(deps, createTask({ id: "task1", created_at: "2024-01-01T00:00:00.000Z" }));
-    await updateTaskInDb(deps, createTask({ id: "task2", created_at: "2024-01-02T00:00:00.000Z" }));
-    await updateTaskInDb(deps, createTask({ id: "task3", created_at: "2024-01-03T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "task1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "task2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "task3", branch: "b3", created_at: "2024-01-03T00:00:00.000Z" }));
 
     const tasks = await listTasks(deps, {});
     expect(tasks).toHaveLength(3);
@@ -84,8 +74,8 @@ describe("SQLite Index Cache", () => {
   });
 
   test("listTasks filters by project", async () => {
-    await updateTaskInDb(deps, createTask({ id: "task1", project: "orange" }));
-    await updateTaskInDb(deps, createTask({ id: "task2", project: "coffee" }));
+    await saveTask(deps, createTask({ id: "task1", project: "orange", branch: "b1" }));
+    await saveTask(deps, createTask({ id: "task2", project: "coffee", branch: "b2" }));
 
     const tasks = await listTasks(deps, { project: "orange" });
     expect(tasks).toHaveLength(1);
@@ -93,9 +83,9 @@ describe("SQLite Index Cache", () => {
   });
 
   test("listTasks filters by status", async () => {
-    await updateTaskInDb(deps, createTask({ id: "task1", status: "pending" }));
-    await updateTaskInDb(deps, createTask({ id: "task2", status: "working" }));
-    await updateTaskInDb(deps, createTask({ id: "task3", status: "done" }));
+    await saveTask(deps, createTask({ id: "task1", branch: "b1", status: "pending" }));
+    await saveTask(deps, createTask({ id: "task2", branch: "b2", status: "working" }));
+    await saveTask(deps, createTask({ id: "task3", branch: "b3", status: "done" }));
 
     const pending = await listTasks(deps, { status: "pending" });
     expect(pending).toHaveLength(1);
@@ -107,9 +97,9 @@ describe("SQLite Index Cache", () => {
   });
 
   test("listTasks filters by both project and status", async () => {
-    await updateTaskInDb(deps, createTask({ id: "task1", project: "orange", status: "pending" }));
-    await updateTaskInDb(deps, createTask({ id: "task2", project: "orange", status: "working" }));
-    await updateTaskInDb(deps, createTask({ id: "task3", project: "coffee", status: "pending" }));
+    await saveTask(deps, createTask({ id: "task1", project: "orange", branch: "b1", status: "pending" }));
+    await saveTask(deps, createTask({ id: "task2", project: "orange", branch: "b2", status: "working" }));
+    await saveTask(deps, createTask({ id: "task3", project: "coffee", branch: "b3", status: "pending" }));
 
     const tasks = await listTasks(deps, { project: "orange", status: "pending" });
     expect(tasks).toHaveLength(1);
@@ -117,7 +107,7 @@ describe("SQLite Index Cache", () => {
   });
 
   test("getTaskById returns task", async () => {
-    await updateTaskInDb(deps, createTask({ id: "abc12345" }));
+    await saveTask(deps, createTask({ id: "abc12345" }));
 
     const task = await getTaskById(deps, "abc12345");
     expect(task).not.toBeNull();
@@ -129,31 +119,23 @@ describe("SQLite Index Cache", () => {
     expect(task).toBeNull();
   });
 
-  test("rebuildDb populates from task folders", async () => {
-    // Create tasks using file system
-    await saveTask(deps, createTask({ id: "task1", project: "orange", branch: "feature-1" }));
-    await saveTask(deps, createTask({ id: "task2", project: "orange", branch: "feature-2" }));
-    await saveTask(deps, createTask({ id: "task3", project: "coffee", branch: "fix-bug" }));
+  test("listTasks reflects changes to TASK.md files", async () => {
+    const task = createTask({ id: "task1" });
+    await saveTask(deps, task);
 
-    // Rebuild from files
-    await rebuildDb(deps);
+    // Verify initial state
+    let tasks = await listTasks(deps, {});
+    expect(tasks[0].status).toBe("pending");
 
-    const tasks = await listTasks(deps, {});
-    expect(tasks).toHaveLength(3);
-  });
+    // Update the task file
+    task.status = "working";
+    task.workspace = "orange--1";
+    await saveTask(deps, task);
 
-  test("rebuildDb clears existing data", async () => {
-    // Insert directly
-    await updateTaskInDb(deps, createTask({ id: "old-task" }));
-
-    // Create only one task file
-    await saveTask(deps, createTask({ id: "new-task", project: "orange", branch: "feature" }));
-
-    // Rebuild
-    await rebuildDb(deps);
-
-    const tasks = await listTasks(deps, {});
+    // Verify updated state
+    tasks = await listTasks(deps, {});
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].id).toBe("new-task");
+    expect(tasks[0].status).toBe("working");
+    expect(tasks[0].workspace).toBe("orange--1");
   });
 });

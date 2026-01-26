@@ -15,9 +15,7 @@ import { MockGit } from "../core/git.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
-import { saveTask } from "../core/state.js";
-import { saveProjects } from "../core/state.js";
-import { updateTaskInDb } from "../core/db.js";
+import { saveTask, saveProjects } from "../core/state.js";
 
 /**
  * Mock Terminal for testing TUI components.
@@ -127,7 +125,6 @@ describe("Dashboard Component", () => {
     // Create a task
     const task = createTask({ id: "task1", status: "pending" });
     await saveTask(deps, task);
-    await updateTaskInDb(deps, task);
 
     // Import and create dashboard component
     const { DashboardComponent } = await import("./index.js");
@@ -152,16 +149,9 @@ describe("Dashboard Component", () => {
   test("renders status icons for different task statuses", async () => {
     // Create tasks with different statuses
     await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "pending" }));
-    await updateTaskInDb(deps, createTask({ id: "t1", branch: "b1", status: "pending" }));
-
     await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "working" }));
-    await updateTaskInDb(deps, createTask({ id: "t2", branch: "b2", status: "working" }));
-
     await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "needs_human" }));
-    await updateTaskInDb(deps, createTask({ id: "t3", branch: "b3", status: "needs_human" }));
-
     await saveTask(deps, createTask({ id: "t4", branch: "b4", status: "done" }));
-    await updateTaskInDb(deps, createTask({ id: "t4", branch: "b4", status: "done" }));
 
     const { DashboardComponent } = await import("./index.js");
     const dashboard = new DashboardComponent(deps, { project: "testproj" });
@@ -203,10 +193,7 @@ describe("Dashboard Component", () => {
   test("cursor navigation with j/k keys", async () => {
     // Create multiple tasks
     await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
-    await updateTaskInDb(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
-
     await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
-    await updateTaskInDb(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
 
     const { DashboardComponent } = await import("./index.js");
     const dashboard = new DashboardComponent(deps, { project: "testproj" });

@@ -9,12 +9,12 @@ All data in `~/orange/`.
 │   ├── orange--1/
 │   ├── orange--2/
 │   └── coffee--1/
-├── tasks/
-│   └── <project>/
-│       └── <branch>/
-│           ├── TASK.md         # Description, metadata
-│           └── history.jsonl   # Event log (source of truth)
-└── index.db                # SQLite cache (derived, rebuildable)
+└── tasks/                  # Task folders (source of truth)
+    └── <project>/
+        └── <branch>/
+            ├── TASK.md         # Description, metadata
+            ├── output.log      # Terminal output (script capture)
+            └── history.jsonl   # Event log
 ```
 
 ## projects.json
@@ -61,32 +61,6 @@ Add dark mode support with system preference detection.
 {"type":"agent.stopped","at":"2024-01-15T10:30:00Z","outcome":"completed"}
 {"type":"status.changed","at":"2024-01-15T10:30:01Z","from":"working","to":"needs_human"}
 {"type":"task.merged","at":"2024-01-15T11:00:00Z","commit":"abc123"}
-```
-
-## index.db (derived cache)
-
-SQLite cache for fast queries. Stores all tasks (including done/failed). Rebuilt from task folders if missing/corrupted.
-
-```sql
-CREATE TABLE tasks (
-    id TEXT PRIMARY KEY,
-    project TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    status TEXT NOT NULL,
-    workspace TEXT,
-    tmux_session TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_project ON tasks(project);
-```
-
-**Rebuild logic:**
-```
-for each ~/orange/tasks/<project>/<branch>/TASK.md:
-    parse frontmatter → upsert into index.db
 ```
 
 ## Task Status

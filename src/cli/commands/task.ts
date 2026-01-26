@@ -29,7 +29,7 @@ import {
   appendHistory,
   getTaskDir,
 } from "../../core/state.js";
-import { listTasks, updateTaskInDb, deleteTaskFromDb } from "../../core/db.js";
+import { listTasks } from "../../core/db.js";
 import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
@@ -200,9 +200,6 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     description,
   });
 
-  // Update SQLite index
-  await updateTaskInDb(deps, task);
-
   log.info("Task created", { taskId: id, project: projectName, branch });
   console.log(`Created task ${id} (${projectName}/${branch})`);
 }
@@ -326,8 +323,13 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Attach to session - this replaces the current process
-  const proc = Bun.spawn(["tmux", "attach-session", "-t", task.tmux_session], {
+  // Use switch-client if inside tmux, attach if outside
+  const insideTmux = !!process.env.TMUX;
+  const cmd = insideTmux
+    ? ["tmux", "switch-client", "-t", task.tmux_session]
+    : ["tmux", "attach-session", "-t", task.tmux_session];
+
+  const proc = Bun.spawn(cmd, {
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
@@ -452,7 +454,6 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await updateTaskInDb(deps, task);
   await appendHistory(deps, task.project, task.branch, {
     type: "agent.spawned",
     timestamp: now,
@@ -504,7 +505,6 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     from: previousStatus,
     to: "needs_human",
   });
-  await updateTaskInDb(deps, task);
 
   console.log(`Task ${taskId} marked as needs_human`);
 }
@@ -550,7 +550,6 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     from: previousStatus,
     to: "stuck",
   });
-  await updateTaskInDb(deps, task);
 
   console.log(`Task ${taskId} marked as stuck`);
 }
@@ -668,7 +667,6 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     from: previousStatus,
     to: "done",
   });
-  await updateTaskInDb(deps, task);
 
   log.info("Task merged", { taskId, mergeVia, commitHash });
   const mergeMsg = mergeVia === "pr" ? "via PR" : "locally";
@@ -731,7 +729,6 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     from: previousStatus,
     to: "failed",
   });
-  await updateTaskInDb(deps, task);
 
   log.info("Task cancelled", { taskId, from: previousStatus });
   console.log(`Task ${taskId} cancelled`);
@@ -773,9 +770,6 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Delete task folder
   const taskDir = getTaskDir(deps, task.project, task.branch);
   await rm(taskDir, { recursive: true, force: true });
-
-  // Remove from database
-  await deleteTaskFromDb(deps, taskId);
 
   log.info("Task deleted", { taskId, project: task.project, branch: task.branch });
   console.log(`Task ${taskId} deleted`);

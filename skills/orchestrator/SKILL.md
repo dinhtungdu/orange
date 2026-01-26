@@ -24,7 +24,8 @@ All commands operate on the current project (inferred from your working director
 orange task create <branch> <description>
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
-orange task peek <task_id> [--lines N]
+orange task log <task_id> [--lines N]    # View output log
+orange task respawn <task_id>            # Restart dead session
 orange task merge <task_id> [--strategy ff|merge]
 orange task cancel <task_id>
 
@@ -39,7 +40,7 @@ orange workspace list [--all]    # Show pool status
 2. **Break down tasks**: Identify independent pieces of work that can be done in parallel
 3. **Create tasks**: Use `orange task create` for each independent task
 4. **Spawn agents**: Use `orange task spawn` to start agents working on tasks
-5. **Monitor progress**: Check status with `orange task list` and `orange task peek`
+5. **Monitor progress**: Check status with `orange task list`
 6. **Notify user**: When tasks reach `needs_human` status, inform the user for review
 
 ## Task Design Guidelines
@@ -69,7 +70,7 @@ orange task spawn def456
 orange task spawn ghi789
 ```
 
-"I've spawned three agents working on authentication features. You can monitor progress in the dashboard pane, or use `orange task peek <id>` to see their output. I'll let you know when they're ready for review."
+"I've spawned three agents working on authentication features. You can monitor progress in the dashboard pane. I'll let you know when they're ready for review."
 
 ## Status Indicators
 
@@ -79,34 +80,38 @@ orange task spawn ghi789
 - `stuck` - Agent gave up after 3 review attempts
 - `done` - Task merged
 - `failed` - Task cancelled or errored
+- `dead` - Session died unexpectedly (shown in dashboard)
 
 ## Handling Common Scenarios
+
+### Task session died
+If dashboard shows a task as "dead" (✗ icon):
+```bash
+orange task log <task_id>      # See what happened before it died
+orange task respawn <task_id>  # Restart the agent
+# or
+orange task cancel <task_id>   # Give up and release workspace
+```
 
 ### Task gets stuck
 If a task shows `stuck` status, the agent gave up after 3 review attempts:
 ```bash
-orange task peek <task_id> --lines 100  # See what went wrong
+orange task log <task_id> --lines 100  # See what went wrong
 ```
 Inform the user and suggest: attach to session, help the agent, or cancel and retry.
 
 ### Workspace pool exhausted
-If `orange task spawn` fails with "No available workspace for project ... (pool exhausted)", check pool status:
+If `orange task spawn` fails with "pool exhausted", check status:
 ```bash
 orange workspace list
 ```
-Wait for a working task to complete, or ask user to increase pool_size in `projects.json`.
+Wait for a working task to complete, or ask user to increase pool_size.
 
 ### Dependent tasks
 For tasks that MUST run sequentially (B depends on A):
 1. Create and spawn task A
 2. Wait for A to reach `needs_human` or `done`
 3. Then create and spawn task B
-
-### Canceling tasks
-```bash
-orange task cancel <task_id>  # Cancel single task
-```
-This releases the workspace and kills the tmux session.
 
 ## Best Practices
 
@@ -122,4 +127,4 @@ This releases the workspace and kills the tmux session.
 - You don't need to orchestrate reviews - just monitor status
 - When tasks show `needs_human`, the user should review in the dashboard
 - The dashboard pane next to you shows tasks for this project
-- Use `orange task peek <id>` to see what an agent is doing without attaching
+- All agent output is captured to `output.log` for debugging

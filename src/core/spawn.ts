@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskDir } from "./state.js";
-import { listTasks, updateTaskInDb } from "./db.js";
+import { listTasks } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
 
@@ -123,7 +123,6 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     from: "pending",
     to: "working",
   });
-  await updateTaskInDb(deps, task);
 
   log.info("Task spawned", { taskId, workspace, session: tmuxSession });
 }
