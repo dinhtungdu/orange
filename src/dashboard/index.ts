@@ -367,20 +367,18 @@ export class DashboardComponent implements Component {
     const insideTmux = !!process.env.TMUX;
 
     if (insideTmux) {
-      // Switch to task session - dashboard exits, user returns here after detach
-      this.tui?.stop();
-      await this.dispose();
+      // Switch to task session - dashboard keeps running in background
       const proc = Bun.spawn(["tmux", "switch-client", "-t", task.tmux_session], {
-        stdin: "inherit",
         stdout: "pipe",
         stderr: "pipe",
       });
       const exitCode = await proc.exited;
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        console.error(stderr.trim() || `switch-client failed (exit code: ${exitCode})`);
+        this.state.error = stderr.trim() || `switch-client failed (exit code: ${exitCode})`;
+        this.tui?.requestRender(true);
       }
-      process.exit(exitCode);
+      // Dashboard stays running - user sees it when they switch back
     } else {
       // Attach to session, restart TUI after detach
       this.tui?.stop();
