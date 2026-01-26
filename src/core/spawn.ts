@@ -96,7 +96,7 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   // Create tmux session with output logging
   const tmuxSession = `${task.project}/${task.branch}`;
   const prompt = buildAgentPrompt(task, workspacePath);
-  const command = `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`;
+  const command = `claude "${shellEscape(prompt)}"`;
   const taskDir = getTaskDir(deps, task.project, task.branch);
   const logFile = join(taskDir, "output.log");
 
