@@ -440,7 +440,7 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tmuxSession = `${task.project}/${task.branch}`;
   const { buildRespawnPrompt } = await import("../../core/agent.js");
   const prompt = buildRespawnPrompt(task, workspacePath);
-  const command = `claude "${prompt.replace(/"/g, '\\"')}"`;
+  const command = `claude --permission-mode acceptEdits "${prompt.replace(/"/g, '\\"')}"`;
   const taskDir = getTaskDir(deps, task.project, task.branch);
   const logFile = join(taskDir, "output.log");
 
