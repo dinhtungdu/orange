@@ -176,12 +176,11 @@ class DashboardComponent implements Component {
   private async captureOutputs(): Promise<void> {
     for (const task of this.state.tasks) {
       if (task.tmux_session && task.status === "working") {
-        try {
-          const output = await this.deps.tmux.capturePane(task.tmux_session, 5);
+        // Use safe capture to handle case where session may have disappeared
+        const output = await this.deps.tmux.capturePaneSafe(task.tmux_session, 5);
+        if (output !== null) {
           const lastLine = output.trim().split("\n").pop() ?? "";
           this.state.lastOutput.set(task.id, lastLine);
-        } catch {
-          // Session might not exist anymore
         }
       }
     }
@@ -239,9 +238,25 @@ class DashboardComponent implements Component {
     // Nothing cached to invalidate
   }
 
-  private attachToTask(): void {
+  private async attachToTask(): Promise<void> {
     const task = this.state.tasks[this.state.cursor];
     if (!task?.tmux_session) return;
+
+    // Check if tmux is available before attempting attach
+    const tmuxAvailable = await this.deps.tmux.isAvailable();
+    if (!tmuxAvailable) {
+      this.state.error = "tmux is not installed or not in PATH";
+      this.tui?.requestRender();
+      return;
+    }
+
+    // Check if session still exists
+    const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
+    if (!sessionExists) {
+      this.state.error = `Session '${task.tmux_session}' no longer exists`;
+      this.tui?.requestRender();
+      return;
+    }
 
     // Exit TUI and attach to tmux session
     this.tui?.stop();
@@ -250,8 +265,11 @@ class DashboardComponent implements Component {
       stdout: "inherit",
       stderr: "inherit",
     });
-    proc.exited.then(() => {
+    proc.exited.then((exitCode) => {
       // Re-enter TUI after detaching
+      if (exitCode !== 0) {
+        this.state.error = `Failed to attach to session (exit code: ${exitCode})`;
+      }
       this.tui?.start();
     });
   }
@@ -260,9 +278,14 @@ class DashboardComponent implements Component {
     const task = this.state.tasks[this.state.cursor];
     if (!task?.tmux_session) return;
 
-    // Fire async peek
-    this.deps.tmux.capturePane(task.tmux_session, 50)
+    // Fire async peek using safe capture
+    this.deps.tmux.capturePaneSafe(task.tmux_session, 50)
       .then((output) => {
+        if (output === null) {
+          this.state.error = `Session '${task.tmux_session}' no longer exists`;
+          this.tui?.requestRender();
+          return;
+        }
         // Show in a temporary view
         console.clear();
         console.log(chalk.bold(`Task: ${task.project}/${task.branch}`));
@@ -270,10 +293,6 @@ class DashboardComponent implements Component {
         console.log(output);
         console.log(chalk.dim("─".repeat(60)));
         console.log(chalk.gray("Press any key to return..."));
-      })
-      .catch((err) => {
-        this.state.error = `Failed to peek: ${err.message}`;
-        this.tui?.requestRender();
       });
   }
 

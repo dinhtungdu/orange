@@ -30,16 +30,23 @@ function shellEscape(str: string): string {
  * Spawn an agent for a task by ID.
  *
  * This function:
- * 1. Validates the task exists and is pending
- * 2. Acquires a workspace from the pool
- * 3. Sets up the git branch
- * 4. Writes the .orange-task file
- * 5. Creates a tmux session with Claude
- * 6. Updates task state to "working"
+ * 1. Validates tmux is available
+ * 2. Validates the task exists and is pending
+ * 3. Acquires a workspace from the pool
+ * 4. Sets up the git branch
+ * 5. Writes the .orange-task file
+ * 6. Creates a tmux session with Claude
+ * 7. Updates task state to "working"
  *
- * @throws Error if task not found, not pending, or no workspace available
+ * @throws Error if tmux not available, task not found, not pending, or no workspace available
  */
 export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
+  // Check if tmux is available before spawning
+  const tmuxAvailable = await deps.tmux.isAvailable();
+  if (!tmuxAvailable) {
+    throw new Error("tmux is not installed or not in PATH. Install tmux to spawn agents.");
+  }
+
   // Find task by ID
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);

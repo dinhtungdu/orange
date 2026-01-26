@@ -67,16 +67,22 @@ export interface Project {
  * Abstracted to support both real tmux and mock implementations for testing.
  */
 export interface TmuxExecutor {
+  /** Check if tmux is installed and available */
+  isAvailable(): Promise<boolean>;
   /** Create a new tmux session */
   newSession(name: string, cwd: string, command: string): Promise<void>;
   /** Kill an existing tmux session */
   killSession(name: string): Promise<void>;
+  /** Kill a session, ignoring errors if session doesn't exist */
+  killSessionSafe(name: string): Promise<void>;
   /** List all tmux session names */
   listSessions(): Promise<string[]>;
   /** Check if a session exists */
   sessionExists(name: string): Promise<boolean>;
   /** Capture pane output from a session */
   capturePane(session: string, lines: number): Promise<string>;
+  /** Capture pane output, returning null if session doesn't exist */
+  capturePaneSafe(session: string, lines: number): Promise<string | null>;
   /** Send keys to a session */
   sendKeys(session: string, keys: string): Promise<void>;
   /** Attach to session if exists, create and attach if not (tmux new-session -A) */

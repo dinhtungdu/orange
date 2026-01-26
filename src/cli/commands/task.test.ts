@@ -877,4 +877,120 @@ describe("task peek command", () => {
     ).rejects.toThrow("process.exit(1)");
     expect(consoleErrors[0]).toContain("no active session");
   });
+
+  test("errors when session no longer exists", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "testproj", "peek-gone", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "peek-gone");
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
+
+    // Kill the session to simulate it disappearing
+    await mockTmux.killSession("testproj/peek-gone");
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "peek", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors[0]).toContain("no longer exists");
+  });
+});
+
+describe("MockTmux availability", () => {
+  let tempDir: string;
+  let deps: Deps;
+  let mockGit: MockGit;
+  let mockTmux: MockTmux;
+  let consoleErrors: string[];
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-test-"));
+    mockGit = new MockGit();
+    mockTmux = new MockTmux();
+
+    deps = {
+      tmux: mockTmux,
+      git: mockGit,
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      dataDir: tempDir,
+    };
+
+    const project: Project = {
+      name: "testproj",
+      path: "/path/to/testproj",
+      default_branch: "main",
+      pool_size: 2,
+    };
+    await saveProjects(deps, [project]);
+    await initWorkspacePool(deps, project);
+    mockGit.initRepo(join(tempDir, "workspaces", "testproj--1"), "main");
+
+    consoleErrors = [];
+    originalError = console.error;
+    originalExit = process.exit;
+    console.error = (...args: unknown[]) => {
+      consoleErrors.push(args.map(String).join(" "));
+    };
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit;
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.error = originalError;
+    process.exit = originalExit;
+  });
+
+  test("isAvailable returns true by default", async () => {
+    const available = await mockTmux.isAvailable();
+    expect(available).toBe(true);
+  });
+
+  test("isAvailable can be set to false", async () => {
+    mockTmux.setAvailable(false);
+    const available = await mockTmux.isAvailable();
+    expect(available).toBe(false);
+  });
+
+  test("spawn fails when tmux not available", async () => {
+    mockTmux.setAvailable(false);
+
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "testproj", "unavail-feature", "Work"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "unavail-feature");
+
+    // Clear errors from task creation
+    consoleErrors = [];
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors[0]).toContain("tmux is not installed");
+  });
+
+  test("killSessionSafe ignores errors", async () => {
+    // Should not throw when session doesn't exist
+    await mockTmux.killSessionSafe("nonexistent-session");
+  });
+
+  test("capturePaneSafe returns null when session doesn't exist", async () => {
+    const output = await mockTmux.capturePaneSafe("nonexistent-session", 10);
+    expect(output).toBeNull();
+  });
+
+  test("capturePaneSafe returns output when session exists", async () => {
+    await mockTmux.newSession("test-session", "/tmp", "command");
+    mockTmux.addOutput("test-session", "line 1");
+    mockTmux.addOutput("test-session", "line 2");
+
+    const output = await mockTmux.capturePaneSafe("test-session", 10);
+    expect(output).toContain("line 1");
+    expect(output).toContain("line 2");
+  });
 });

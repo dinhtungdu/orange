@@ -1,6 +1,6 @@
 # Orange Implementation Plan
 
-## Status: Phase 1-10 Complete
+## Status: Phase 1-10 Complete, P2 Error Handling Complete
 
 **Goal**: Agent orchestration system - Chat with orchestrator → agents work in parallel → auto-review → human review
 
@@ -38,9 +38,9 @@
 ### Phase 2: External Abstractions (Required for Testing)
 
 - 🟢 **Tmux abstraction** (`src/core/tmux.ts`)
-  - TmuxExecutor interface: newSession, killSession, listSessions, sessionExists, capturePane, sendKeys
+  - TmuxExecutor interface: isAvailable, newSession, killSession, killSessionSafe, listSessions, sessionExists, capturePane, capturePaneSafe, sendKeys, attachOrCreate
   - RealTmux class implementing TmuxExecutor
-  - MockTmux class for testing
+  - MockTmux class for testing with setAvailable() helper
 
 - 🟢 **Git abstraction** (`src/core/git.ts`)
   - GitExecutor interface: fetch, checkout, resetHard, createBranch, deleteBranch, merge, currentBranch, clean, addWorktree, removeWorktree
@@ -160,9 +160,9 @@
 - 🟢 **CLI tests**
   - args.test.ts: Argument parsing (15 tests)
   - project.test.ts: Project add/list commands (16 tests)
-  - task.test.ts: Full task lifecycle (20 tests)
+  - task.test.ts: Full task lifecycle (27 tests - includes tmux availability and safe method tests)
 
-**Total: 87 tests passing**
+**Total: 94 tests passing**
 
 ---
 
@@ -200,9 +200,16 @@
 
 ### P2 - Polish
 
-- 🔴 **Error handling improvements**
-  - Graceful degradation when tmux not available
-  - Clear error messages for common failures
+- 🟢 **Error handling improvements**
+  - Added `isAvailable()` to TmuxExecutor for checking if tmux is installed
+  - Added `killSessionSafe()` and `capturePaneSafe()` for graceful error handling
+  - `orange start` checks tmux availability with clear install instructions
+  - `orange task spawn` checks tmux availability before attempting spawn
+  - `orange task peek` handles missing sessions gracefully
+  - `orange task merge/cancel` use safe session killing
+  - Dashboard attachment validates tmux availability and session existence
+  - Dashboard peek/capture uses safe methods
+  - All error messages are clear and actionable
 
 - 🔴 **Performance optimizations**
   - SQLite index rebuild on demand only
@@ -281,7 +288,7 @@ Per specs/architecture.md:
 | `agent.md` | 🟢 Complete | Prompt generation, hook integration |
 | `workspace.md` | 🟢 Complete | Auto-spawn next pending implemented |
 | `dashboard.md` | 🟢 Complete | Status filter (`f` key) implemented |
-| `testing.md` | 🟢 Complete | DI pattern, mocks, 87 tests |
+| `testing.md` | 🟢 Complete | DI pattern, mocks, 94 tests |
 
 ---
 

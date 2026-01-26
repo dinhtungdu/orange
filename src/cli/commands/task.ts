@@ -258,7 +258,14 @@ async function peekTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  const output = await deps.tmux.capturePane(task.tmux_session, lines);
+  // Use safe capture to handle case where session may have disappeared
+  const output = await deps.tmux.capturePaneSafe(task.tmux_session, lines);
+  if (output === null) {
+    console.error(`Session '${task.tmux_session}' no longer exists`);
+    console.error("The task's tmux session may have been terminated");
+    process.exit(1);
+  }
+
   console.log(output);
 }
 
@@ -418,9 +425,9 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await releaseWorkspace(deps, task.workspace);
   }
 
-  // Kill tmux session
+  // Kill tmux session (safe - ignores errors if session already gone)
   if (task.tmux_session) {
-    await deps.tmux.killSession(task.tmux_session);
+    await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
   // Update task
@@ -474,9 +481,9 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await releaseWorkspace(deps, task.workspace);
   }
 
-  // Kill tmux session
+  // Kill tmux session (safe - ignores errors if session already gone)
   if (task.tmux_session) {
-    await deps.tmux.killSession(task.tmux_session);
+    await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
   // Update task

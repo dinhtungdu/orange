@@ -30,6 +30,18 @@ async function exec(
  * RealTmux implements TmuxExecutor using actual tmux commands.
  */
 export class RealTmux implements TmuxExecutor {
+  private tmuxAvailable: boolean | null = null;
+
+  async isAvailable(): Promise<boolean> {
+    if (this.tmuxAvailable !== null) {
+      return this.tmuxAvailable;
+    }
+
+    const { exitCode } = await exec("which", ["tmux"]);
+    this.tmuxAvailable = exitCode === 0;
+    return this.tmuxAvailable;
+  }
+
   async newSession(name: string, cwd: string, command: string): Promise<void> {
     const { exitCode, stderr } = await exec("tmux", [
       "new-session",
@@ -55,6 +67,14 @@ export class RealTmux implements TmuxExecutor {
 
     if (exitCode !== 0 && !stderr.includes("no server running")) {
       throw new Error(`Failed to kill tmux session '${name}': ${stderr}`);
+    }
+  }
+
+  async killSessionSafe(name: string): Promise<void> {
+    try {
+      await this.killSession(name);
+    } catch {
+      // Ignore errors - session may not exist
     }
   }
 
@@ -100,6 +120,15 @@ export class RealTmux implements TmuxExecutor {
     return stdout;
   }
 
+  async capturePaneSafe(session: string, lines: number): Promise<string | null> {
+    try {
+      return await this.capturePane(session, lines);
+    } catch {
+      // Session may not exist
+      return null;
+    }
+  }
+
   async sendKeys(session: string, keys: string): Promise<void> {
     const { exitCode, stderr } = await exec("tmux", [
       "send-keys",
@@ -135,6 +164,20 @@ export class MockTmux implements TmuxExecutor {
   sessions: Map<string, { cwd: string; command: string; output: string[] }> =
     new Map();
 
+  /** Mock availability state - defaults to true for tests */
+  private available = true;
+
+  async isAvailable(): Promise<boolean> {
+    return this.available;
+  }
+
+  /**
+   * Test helper: Set whether tmux is available.
+   */
+  setAvailable(available: boolean): void {
+    this.available = available;
+  }
+
   async newSession(name: string, cwd: string, command: string): Promise<void> {
     if (this.sessions.has(name)) {
       throw new Error(`Session '${name}' already exists`);
@@ -143,6 +186,10 @@ export class MockTmux implements TmuxExecutor {
   }
 
   async killSession(name: string): Promise<void> {
+    this.sessions.delete(name);
+  }
+
+  async killSessionSafe(name: string): Promise<void> {
     this.sessions.delete(name);
   }
 
@@ -158,6 +205,14 @@ export class MockTmux implements TmuxExecutor {
     const sessionData = this.sessions.get(session);
     if (!sessionData) {
       throw new Error(`Session '${session}' not found`);
+    }
+    return sessionData.output.slice(-lines).join("\n");
+  }
+
+  async capturePaneSafe(session: string, lines: number): Promise<string | null> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      return null;
     }
     return sessionData.output.slice(-lines).join("\n");
   }

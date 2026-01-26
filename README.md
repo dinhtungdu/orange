@@ -84,6 +84,7 @@ pending → working → needs_human → done
 | m | Merge task |
 | x | Cancel task |
 | o | Open PR in browser |
+| f | Filter by status (all → active → done) |
 | q | Quit |
 
 ## Architecture
