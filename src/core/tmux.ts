@@ -149,12 +149,15 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async splitWindow(session: string, command: string): Promise<void> {
+    // Wrap command to keep pane open after exit
+    const wrappedCommand = `bash -c 'tmux set-option remain-on-exit on; ${command.replace(/'/g, "'\\''")}'`;
+
     const { exitCode, stderr } = await exec("tmux", [
       "split-window",
       "-t",
       session,
       "-h", // Horizontal split (side by side)
-      command,
+      wrappedCommand,
     ]);
 
     if (exitCode !== 0) {
