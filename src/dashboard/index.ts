@@ -317,6 +317,10 @@ export class DashboardComponent implements Component {
         this.viewLog();
         break;
 
+      case "r":
+        this.respawnTask();
+        break;
+
       case "o":
         this.openPR();
         break;
@@ -484,6 +488,37 @@ export class DashboardComponent implements Component {
     });
   }
 
+  private respawnTask(): void {
+    const task = this.state.tasks[this.state.cursor];
+    if (!task || this.state.pendingOps.has(task.id)) return;
+
+    // Only allow respawn for dead sessions
+    if (!this.state.deadSessions.has(task.id)) {
+      this.state.error = "Task session is still active. Use 'x' to cancel first.";
+      this.tui?.requestRender();
+      return;
+    }
+
+    this.state.pendingOps.add(task.id);
+
+    // Fire async respawn
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "respawn", task.id]), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.state.pendingOps.delete(task.id);
+      this.state.deadSessions.delete(task.id);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.state.error = `Respawn failed: ${stderr.trim() || "Unknown error"}`;
+      }
+      await this.refreshTasks();
+      this.tui?.requestRender();
+    });
+  }
+
   private openPR(): void {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
@@ -493,6 +528,41 @@ export class DashboardComponent implements Component {
       stdout: "pipe",
       stderr: "pipe",
     });
+  }
+
+  /**
+   * Get context-aware keybindings based on selected task
+   */
+  private getContextKeys(): string {
+    const task = this.state.tasks[this.state.cursor];
+    if (!task) {
+      return " j/k:nav  f:filter  q:quit";
+    }
+
+    const isDead = this.state.deadSessions.has(task.id);
+    const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+    const completedStatuses: TaskStatus[] = ["done", "failed"];
+
+    let keys = " j/k:nav";
+
+    if (activeStatuses.includes(task.status)) {
+      if (isDead) {
+        // Dead session: can view log, respawn, or cancel
+        keys += "  l:log  r:respawn  x:cancel";
+      } else {
+        // Live session: can attach, merge, or cancel
+        keys += "  Enter:attach  m:merge  x:cancel";
+      }
+    } else if (completedStatuses.includes(task.status)) {
+      // Completed: can view log or delete
+      keys += "  l:log  d:del";
+    } else if (task.status === "pending") {
+      // Pending: no actions in dashboard (spawn via CLI)
+      keys += "  (spawn via CLI)";
+    }
+
+    keys += "  f:filter  q:quit";
+    return keys;
   }
 
   /**
@@ -632,10 +702,10 @@ export class DashboardComponent implements Component {
       }
     }
 
-    // Footer with keybindings
+    // Footer with context-aware keybindings
     lines.push("");
     lines.push(chalk.dim("─".repeat(width)));
-    const keys = " j/k:nav  Enter:attach  l:log  m:merge  x:cancel  d:del  f:filter  q:quit";
+    const keys = this.getContextKeys();
     lines.push(chalk.gray(keys.length > width ? keys.slice(0, width - 1) + "…" : keys));
 
     return lines;

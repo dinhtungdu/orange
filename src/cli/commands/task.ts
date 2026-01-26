@@ -9,6 +9,7 @@
  * - orange task spawn <task_id>
  * - orange task attach <task_id>            (attach to running session)
  * - orange task log <task_id> [--lines N]   (view task output log)
+ * - orange task respawn <task_id>           (restart dead session)
  * - orange task complete <task_id>
  * - orange task stuck <task_id>
  * - orange task merge <task_id> [--strategy ff|merge]
@@ -120,12 +121,16 @@ export async function runTaskCommand(
       await logTask(parsed, deps);
       break;
 
+    case "respawn":
+      await respawnTask(parsed, deps);
+      break;
+
     default:
       console.error(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|log|complete|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|attach|log|respawn|complete|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -372,6 +377,90 @@ async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   } else {
     console.log(content);
   }
+}
+
+/**
+ * Respawn a task whose session died.
+ * Reuses the existing workspace and branch, just starts a new agent session.
+ */
+async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task respawn <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Must be an active task (working/needs_human/stuck)
+  const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+  if (!activeStatuses.includes(task.status)) {
+    console.error(`Task '${taskId}' is ${task.status}, cannot respawn`);
+    process.exit(1);
+  }
+
+  // Must have a workspace assigned
+  if (!task.workspace) {
+    console.error(`Task '${taskId}' has no workspace. Use 'spawn' instead.`);
+    process.exit(1);
+  }
+
+  // Check session is actually dead
+  if (task.tmux_session) {
+    const exists = await deps.tmux.sessionExists(task.tmux_session);
+    if (exists) {
+      console.error(`Task '${taskId}' session is still active. Use 'attach' instead.`);
+      process.exit(1);
+    }
+  }
+
+  // Get project for prompt building
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === task.project);
+  if (!project) {
+    console.error(`Project '${task.project}' not found`);
+    process.exit(1);
+  }
+
+  // Get workspace path
+  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+
+  // Create new tmux session
+  const tmuxSession = `${task.project}/${task.branch}`;
+  const { buildAgentPrompt } = await import("../../core/agent.js");
+  const prompt = buildAgentPrompt(task, workspacePath);
+  const command = `claude --prompt "${prompt.replace(/"/g, '\\"')}"`;
+  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const logFile = join(taskDir, "output.log");
+
+  log.info("Respawning task", { taskId, session: tmuxSession });
+  await deps.tmux.newSession(tmuxSession, workspacePath, command, logFile);
+
+  // Update task
+  const now = deps.clock.now();
+  task.tmux_session = tmuxSession;
+  task.status = "working";
+  task.updated_at = now;
+
+  await saveTask(deps, task);
+  await updateTaskInDb(deps, task);
+  await appendHistory(deps, task.project, task.branch, {
+    type: "agent.spawned",
+    timestamp: now,
+    workspace: task.workspace,
+    tmux_session: tmuxSession,
+  });
+
+  console.log(`Respawned agent for task ${taskId} in ${tmuxSession}`);
 }
 
 /**

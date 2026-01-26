@@ -195,10 +195,9 @@ describe("Dashboard Component", () => {
     const lines = dashboard.render(80);
     const output = lines.join("\n");
 
-    // Check footer has key hints
+    // Check footer has key hints (context-aware, so no task = minimal keys)
     expect(output).toContain("j/k");
-    expect(output).toContain("Enter");
-    expect(output).toContain("q:");
+    expect(output).toContain("q:quit");
   });
 
   test("cursor navigation with j/k keys", async () => {

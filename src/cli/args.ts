@@ -148,6 +148,7 @@ Task Management (project inferred from cwd):
   orange task attach <task_id>        Attach to task's tmux session
   orange task log <task_id> [options] View task's output log
     --lines <n>                       Last N lines (default: all)
+  orange task respawn <task_id>       Restart dead session
   orange task complete <task_id>      Mark task complete (hook)
   orange task stuck <task_id>         Mark task stuck (hook)
   orange task merge <task_id> [options] Merge and cleanup
