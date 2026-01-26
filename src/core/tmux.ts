@@ -43,9 +43,9 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async newSession(name: string, cwd: string, command: string): Promise<void> {
-    // Wrap command to keep pane open after exit, so humans can review agent output.
-    // Uses bash -c with trap to ensure remain-on-exit is set before command runs.
-    const wrappedCommand = `bash -c 'tmux set-option remain-on-exit on; ${command.replace(/'/g, "'\\''")}'`;
+    // Wrap command to drop into shell after exit, so humans can review output and run commands.
+    // The shell inherits the working directory and environment.
+    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec bash'`;
 
     const { exitCode, stderr } = await exec("tmux", [
       "new-session",
@@ -149,8 +149,8 @@ export class RealTmux implements TmuxExecutor {
   }
 
   async splitWindow(session: string, command: string): Promise<void> {
-    // Wrap command to keep pane open after exit
-    const wrappedCommand = `bash -c 'tmux set-option remain-on-exit on; ${command.replace(/'/g, "'\\''")}'`;
+    // Wrap command to drop into shell after exit
+    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec bash'`;
 
     const { exitCode, stderr } = await exec("tmux", [
       "split-window",
