@@ -29,19 +29,21 @@ Table format with columns:
 ────────────────────────────────────────────────────────
  ● coffee/login-fix            working       2m ago
  └ Fix OAuth redirect loop on mobile
+ ✗ coffee/crashed-task         dead         10m ago
  ◉ coffee/password-reset       needs_human  15m ago
  ✓ orange/dark-mode            done          1h ago
- ✗ orange/broken-feature       failed        2h ago
 ────────────────────────────────────────────────────────
- j/k:nav  Enter:attach  l:log  m:merge  x:cancel  d:del  f:filter  q:quit
+ j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit
 ```
 
 **Columns:**
 - Task: status icon + project/branch (or just branch if project-scoped)
-- Status: working/needs_human/stuck/done/failed/pending
+- Status: working/needs_human/stuck/done/failed/pending/dead
 - Activity: relative time since last update (2m ago, 3h ago)
 
 **Selected row** shows description underneath.
+
+**Dead sessions:** Tasks with active status but no live tmux session show as "dead" with ✗ icon.
 
 ## Status Icons
 
@@ -52,31 +54,41 @@ Table format with columns:
 | ⚠ | stuck - agent needs help |
 | ○ | pending - waiting to spawn |
 | ✓ | done - merged |
-| ✗ | failed - cancelled/errored |
+| ✗ | failed/dead - cancelled/errored/session died |
 
-## Keybindings
+## Context-Aware Keybindings
 
-| Key | Action |
-|-----|--------|
-| j/k | Navigate tasks |
-| Enter | Attach to task's tmux session |
-| l | View output log (works for any task with log) |
-| m | Merge task (local merge + cleanup) |
-| x | Cancel task (cleanup) |
-| d | Delete task (only done/failed) |
-| o | Open PR in browser |
-| f | Filter by status (cycle: all → active → done) |
-| q | Quit dashboard |
+Footer shows relevant actions based on selected task's state:
 
-## Session Handling
+| Task State | Available Keys |
+|------------|----------------|
+| No task selected | j/k:nav  f:filter  q:quit |
+| Live session (working/needs_human/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit |
+| Dead session | j/k:nav  l:log  r:respawn  x:cancel  f:filter  q:quit |
+| Completed (done/failed) | j/k:nav  l:log  d:del  f:filter  q:quit |
+| Pending | j/k:nav  (spawn via CLI)  f:filter  q:quit |
 
-- **Active tasks** (working/needs_human/stuck): Have live tmux session
-  - `Enter` attaches to session
-  - If session died unexpectedly, error suggests using `l` to view log
+### Key Actions
 
-- **Completed tasks** (done/failed): Session killed
-  - `l` views output.log captured during session
-  - `d` deletes task folder
+| Key | Action | When |
+|-----|--------|------|
+| j/k | Navigate tasks | Always |
+| Enter | Attach to tmux session | Live sessions |
+| l | View output log | Dead/completed tasks |
+| r | Respawn agent | Dead sessions only |
+| m | Merge task | Live sessions |
+| x | Cancel task | Active tasks |
+| d | Delete task folder | Completed tasks only |
+| o | Open PR in browser | Any task |
+| f | Filter by status (cycle: all → active → done) | Always |
+| q | Quit dashboard | Always |
+
+## Dead Session Detection
+
+Dashboard periodically checks if tmux sessions still exist for active tasks. If a session died (agent crashed, tmux killed externally), the task shows:
+- Icon: ✗ (failed)
+- Status: "dead"
+- Available actions: view log, respawn, or cancel
 
 ## Output Logging
 
@@ -85,4 +97,4 @@ All terminal output is captured to `~/orange/tasks/<project>/<branch>/output.log
 ## Polling
 
 - File watcher on `~/orange/tasks/` for TASK.md changes
-- Periodic refresh of task list from SQLite
+- Periodic session health check (detects dead sessions)

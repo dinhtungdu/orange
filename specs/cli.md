@@ -14,6 +14,7 @@ orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>        # Attach to running session
 orange task log <task_id>           # View output log
+orange task respawn <task_id>       # Restart dead session
 orange task complete <task_id>      # Called by hook → needs_human
 orange task stuck <task_id>         # Called by hook → stuck
 orange task merge <task_id> [--strategy ff|merge]
@@ -34,56 +35,11 @@ orange                              # In project: project-scoped dashboard
 orange dashboard [--all] [--project <name>]
 ```
 
-## CWD Detection
-
-Commands detect the current project by:
-1. Finding git root of current directory
-2. Looking up path in `projects.json`
-3. If not found: auto-register (for `orange start`) or error (for other commands)
-
-```bash
-cd ~/workspace/coffee
-orange task create fix-login "Fix the login bug"
-# Equivalent to: orange task create --project coffee fix-login "Fix the login bug"
-
-cd ~/Downloads
-orange task create fix-login "Fix the login bug"
-# Error: Not in a registered project. Run `orange start` from a project directory.
-```
-
-## orange start
-
-Must be run from a project directory (git repository).
-
-```bash
-cd ~/workspace/coffee
-orange start
-```
-
-**What happens:**
-1. Checks tmux is available (with helpful install instructions if not)
-2. Detects git root, infers project name from folder
-3. Auto-registers project in `projects.json` if not exists (pool_size=2)
-4. Creates/attaches tmux session `coffee-orchestrator`
-   - Pane 0: Claude Code (with orange skill)
-   - Pane 1: Dashboard TUI (project-scoped)
-5. Working directory is the project repo (orchestrator has full context)
-
-**If session exists:** Just attaches (no duplicate sessions).
-
-## orange (no args) / orange dashboard
-
-**Scoping rules:**
-- In a registered project directory → shows only that project's tasks
-- Not in a project directory → shows all tasks (global view)
-- `--all` flag → always shows all tasks
-- `--project <name>` flag → shows specific project's tasks
-
 ## Task Commands
 
 ### orange task attach <task_id>
 
-Attach to a running task's tmux session. Only works for active tasks (working, needs_human, stuck).
+Attach to a running task's tmux session. Only works for active tasks with live sessions.
 
 ```bash
 orange task attach abc123
@@ -99,7 +55,19 @@ orange task log abc123           # Show full log
 orange task log abc123 --lines 50  # Show last 50 lines
 ```
 
-All terminal output is captured to `~/orange/tasks/<project>/<branch>/output.log` during the session.
+### orange task respawn <task_id>
+
+Restart a task whose session died unexpectedly. Reuses the existing workspace and branch.
+
+```bash
+orange task respawn abc123
+# Creates new tmux session, starts agent with same context
+```
+
+Only works for:
+- Active tasks (working/needs_human/stuck)
+- With an assigned workspace
+- Where the tmux session no longer exists
 
 ### orange task delete <task_id>
 
@@ -121,22 +89,17 @@ Active tasks must be cancelled first (to release workspace/session).
 gh pr view <branch> --json state,mergedAt
 
 # 2a. PR merged → skip local merge
-# 2b. No PR or PR open → local merge:
-#     git fetch origin
-#     git merge origin/<branch>
+# 2b. No PR or PR open → local merge
 
 # 3. Cleanup:
-#     - Release workspace (mark available)
-#     - Delete remote branch
-#     - tmux kill-session -t "$project/$branch"
+#     - Release workspace
+#     - Kill tmux session
 #     - status → done
-#     - history.jsonl: task.merged event
 ```
 
-## Skills Installation
+## CWD Detection
 
-```bash
-orange install  # Symlinks skills to ~/.claude/skills/
-```
-
-Creates symlinks for easy development (changes reflect immediately).
+Commands detect the current project by:
+1. Finding git root of current directory
+2. Looking up path in `projects.json`
+3. If not found: auto-register (for `orange start`) or error (for other commands)
