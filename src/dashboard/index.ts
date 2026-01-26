@@ -81,6 +81,7 @@ interface DashboardState {
   cursor: number;
   lastOutput: Map<string, string>;
   pendingOps: Set<string>;
+  deadSessions: Set<string>;  // Task IDs with dead tmux sessions
   error: string | null;
   width: number;
   statusFilter: StatusFilter;
@@ -99,6 +100,7 @@ export class DashboardComponent implements Component {
     cursor: 0,
     lastOutput: new Map(),
     pendingOps: new Set(),
+    deadSessions: new Set(),
     error: null,
     width: 80,
     statusFilter: "all",
@@ -255,13 +257,23 @@ export class DashboardComponent implements Component {
   }
 
   private async captureOutputs(): Promise<void> {
+    const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
     for (const task of this.state.tasks) {
-      if (task.tmux_session && task.status === "working") {
-        // Use safe capture to handle case where session may have disappeared
-        const output = await this.deps.tmux.capturePaneSafe(task.tmux_session, 5);
-        if (output !== null) {
-          const lastLine = output.trim().split("\n").pop() ?? "";
-          this.state.lastOutput.set(task.id, lastLine);
+      if (task.tmux_session && activeStatuses.includes(task.status)) {
+        // Check if session still exists
+        const exists = await this.deps.tmux.sessionExists(task.tmux_session);
+        if (!exists) {
+          this.state.deadSessions.add(task.id);
+        } else {
+          this.state.deadSessions.delete(task.id);
+          // Capture output for working tasks
+          if (task.status === "working") {
+            const output = await this.deps.tmux.capturePaneSafe(task.tmux_session, 5);
+            if (output !== null) {
+              const lastLine = output.trim().split("\n").pop() ?? "";
+              this.state.lastOutput.set(task.id, lastLine);
+            }
+          }
         }
       }
     }
@@ -577,9 +589,12 @@ export class DashboardComponent implements Component {
         const task = this.state.tasks[i];
         const selected = i === this.state.cursor;
         const pending = this.state.pendingOps.has(task.id);
+        const isDead = this.state.deadSessions.has(task.id);
 
-        const icon = STATUS_ICON[task.status];
-        const color = STATUS_COLOR[task.status];
+        // If session is dead, show as failed
+        const displayStatus = isDead ? "failed" as TaskStatus : task.status;
+        const icon = STATUS_ICON[displayStatus];
+        const color = isDead ? STATUS_COLOR.failed : STATUS_COLOR[task.status];
         const activity = this.formatRelativeTime(task.updated_at);
 
         // Task column: icon + branch (or project/branch if showing all)
@@ -588,8 +603,8 @@ export class DashboardComponent implements Component {
           : `${task.project}/${task.branch}`;
         const taskCol = `${icon} ${taskName}`;
         
-        // Status column
-        let statusCol: string = task.status;
+        // Status column - show "dead" if session died unexpectedly
+        let statusCol: string = isDead ? "dead" : task.status;
         if (pending) {
           statusCol = "processing…";
         }
