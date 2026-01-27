@@ -9,7 +9,7 @@ import { watch } from "chokidar";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { customAlphabet } from "nanoid";
-import type { Deps, Task, TaskStatus } from "../core/types.js";
+import type { Deps, Task, TaskStatus, PRStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 import { loadProjects, saveTask, appendHistory, getTaskDir } from "../core/state.js";
@@ -46,6 +46,14 @@ export const STATUS_ICON: Record<TaskStatus, string> = {
   done: "✓",
   failed: "✗",
   cancelled: "⊘",
+};
+
+/** CI checks icons. */
+export const CHECKS_ICON: Record<string, string> = {
+  pass: "✓",
+  fail: "✗",
+  pending: "⏳",
+  none: "",
 };
 
 /** Status colors (hex). */
@@ -99,6 +107,7 @@ export interface DashboardStateData {
   projectFilter: string | null;
   projectLabel: string;
   diffStats: Map<string, DiffStats>;
+  prStatuses: Map<string, PRStatus>;
   createMode: CreateModeData;
 }
 
@@ -122,6 +131,7 @@ export class DashboardState {
     projectFilter: null,
     projectLabel: "all",
     diffStats: new Map(),
+    prStatuses: new Map(),
     createMode: {
       active: false,
       branch: "",
@@ -134,6 +144,7 @@ export class DashboardState {
   private listeners: ChangeListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private captureInterval: ReturnType<typeof setInterval> | null = null;
+  private prPollInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(deps: Deps, options: DashboardOptions = {}) {
     this.deps = deps;
@@ -194,11 +205,18 @@ export class DashboardState {
     this.captureInterval = setInterval(() => {
       this.captureOutputs().then(() => this.emit());
     }, 5000);
+
+    // Poll PR statuses every 30s
+    await this.refreshPRStatuses();
+    this.prPollInterval = setInterval(() => {
+      this.refreshPRStatuses().then(() => this.emit());
+    }, 30000);
   }
 
   async dispose(): Promise<void> {
     if (this.watcher) await this.watcher.close();
     if (this.captureInterval) clearInterval(this.captureInterval);
+    if (this.prPollInterval) clearInterval(this.prPollInterval);
   }
 
   /** Load tasks without starting watchers. For testing. */
@@ -479,6 +497,30 @@ export class DashboardState {
       })
     );
     this.emit();
+  }
+
+  private async refreshPRStatuses(): Promise<void> {
+    const tasksWithPR = this.data.tasks.filter((t) => t.pr_url);
+    if (tasksWithPR.length === 0) return;
+
+    const ghAvailable = await this.deps.github.isAvailable();
+    if (!ghAvailable) return;
+
+    const projects = await loadProjects(this.deps);
+    const projectMap = new Map(projects.map((p) => [p.name, p]));
+
+    await Promise.all(
+      tasksWithPR.map(async (task) => {
+        const project = projectMap.get(task.project);
+        if (!project) return;
+        try {
+          const status = await this.deps.github.getPRStatus(project.path, task.branch);
+          this.data.prStatuses.set(task.id, status);
+        } catch {
+          // Ignore errors
+        }
+      })
+    );
   }
 
   private applyStatusFilter(): void {

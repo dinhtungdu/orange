@@ -24,6 +24,7 @@ import {
   DashboardState,
   STATUS_ICON,
   STATUS_COLOR,
+  CHECKS_ICON,
   type DashboardOptions,
 } from "./state.js";
 
@@ -32,7 +33,7 @@ export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
 
 // Column widths (fixed)
-const COL_STATUS = 12;
+const COL_STATUS = 18;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
@@ -330,7 +331,10 @@ function buildDashboard(
       let statusCol: string = isDead ? "dead" : task.status;
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
+        const prStatus = s.prStatuses.get(task.id);
+        const checksIcon = prStatus?.checks ? CHECKS_ICON[prStatus.checks] : "";
         if (prNum) statusCol += ` #${prNum}`;
+        if (checksIcon) statusCol += ` ${checksIcon}`;
       }
       if (pending) statusCol = "processing…";
 
