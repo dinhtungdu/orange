@@ -11,6 +11,7 @@ Agent orchestration system. Chat with orchestrator, agents work in parallel, aut
 - [Workspace Pool](./workspace.md) — worktree management
 - [Logging](./logging.md) — structured logging, debugging
 - [Testing](./testing.md) — setup, strategy
+- [GitHub](./github.md) — PR creation, merge detection
 
 ## Overview
 
@@ -70,6 +71,7 @@ tmux sessions (per-project orchestrators):
 | db | Task queries |
 | deps | Dependency injection container |
 | git | Git operations abstraction (real + mock) |
+| github | GitHub CLI abstraction for PR operations (real + mock) |
 | logger | Structured JSON logger |
 | spawn | Task spawning lifecycle |
 | state | Task/project persistence (TASK.md, projects.json) |
