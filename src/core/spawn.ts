@@ -7,8 +7,7 @@
  */
 
 import { join } from "node:path";
-import { writeFile, symlink, appendFile, readFile, unlink, mkdir, stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { writeFile, symlink, readFile, unlink, stat } from "node:fs/promises";
 import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
@@ -37,7 +36,7 @@ export async function getGitDir(workspacePath: string): Promise<string> {
 }
 
 /**
- * Symlink TASK.md to worktree and add orange files to git exclude.
+ * Symlink TASK.md to worktree.
  */
 async function linkTaskFile(
   deps: Deps,
@@ -47,8 +46,6 @@ async function linkTaskFile(
 ): Promise<void> {
   const taskMdPath = getTaskPath(deps, project, branch);
   const symlinkPath = join(workspacePath, "TASK.md");
-  const gitDir = await getGitDir(workspacePath);
-  const excludePath = join(gitDir, "info", "exclude");
 
   // Remove existing symlink if present
   try {
@@ -59,26 +56,6 @@ async function linkTaskFile(
 
   // Create symlink
   await symlink(taskMdPath, symlinkPath);
-
-  // Add orange files to .git/info/exclude
-  const excludeDir = join(gitDir, "info");
-  await mkdir(excludeDir, { recursive: true });
-
-  let excludeContent = "";
-  try {
-    excludeContent = await readFile(excludePath, "utf-8");
-  } catch {
-    // File doesn't exist, will create
-  }
-
-  const excludeEntries = ["TASK.md", ".orange-outcome", ".claude/"];
-  for (const entry of excludeEntries) {
-    if (!excludeContent.includes(entry)) {
-      const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
-      excludeContent += `${newLine}${entry}\n`;
-    }
-  }
-  await writeFile(excludePath, excludeContent);
 }
 
 /**
