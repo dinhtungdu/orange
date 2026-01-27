@@ -930,6 +930,18 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  // Release workspace if still bound (defensive - should already be released)
+  if (task.workspace) {
+    log.debug("Releasing workspace", { workspace: task.workspace });
+    await releaseWorkspace(deps, task.workspace);
+  }
+
+  // Kill tmux session if still exists (defensive)
+  if (task.tmux_session) {
+    log.debug("Killing tmux session", { session: task.tmux_session });
+    await deps.tmux.killSessionSafe(task.tmux_session);
+  }
+
   // Delete task folder
   const taskDir = getTaskDir(deps, task.project, task.branch);
   await rm(taskDir, { recursive: true, force: true });

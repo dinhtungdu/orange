@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
-import { acquireWorkspace } from "./workspace.js";
+import { acquireWorkspace, releaseWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
 
 /**
@@ -147,52 +147,59 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   const workspace = await acquireWorkspace(deps, task.project, `${task.project}/${task.branch}`);
   log.debug("Workspace acquired", { workspace, project: task.project });
 
-  // Setup git branch in workspace
-  const workspacePath = join(deps.dataDir, "workspaces", workspace);
-  log.debug("Setting up git branch", { workspacePath, branch: task.branch });
+  try {
+    // Setup git branch in workspace
+    const workspacePath = join(deps.dataDir, "workspaces", workspace);
+    log.debug("Setting up git branch", { workspacePath, branch: task.branch });
 
-  await deps.git.fetch(workspacePath);
-  await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
-  log.debug("Created branch", { branch: task.branch });
+    await deps.git.fetch(workspacePath);
+    await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
+    log.debug("Created branch", { branch: task.branch });
 
-  // Symlink TASK.md to worktree
-  await linkTaskFile(deps, workspacePath, task.project, task.branch);
-  log.debug("Linked task file to worktree", { workspacePath });
+    // Symlink TASK.md to worktree
+    await linkTaskFile(deps, workspacePath, task.project, task.branch);
+    log.debug("Linked task file to worktree", { workspacePath });
 
-  // Write .orange-outcome file for hook integration (agent writes outcome here)
-  const outcomeFile = join(workspacePath, ".orange-outcome");
-  await writeFile(outcomeFile, JSON.stringify({ id: task.id }), "utf-8");
+    // Write .orange-outcome file for hook integration (agent writes outcome here)
+    const outcomeFile = join(workspacePath, ".orange-outcome");
+    await writeFile(outcomeFile, JSON.stringify({ id: task.id }), "utf-8");
 
-  // Create tmux session
-  const tmuxSession = `${task.project}/${task.branch}`;
-  const prompt = buildAgentPrompt(task);
-  const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
+    // Create tmux session
+    const tmuxSession = `${task.project}/${task.branch}`;
+    const prompt = buildAgentPrompt(task);
+    const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
 
-  log.debug("Creating tmux session", { session: tmuxSession });
-  await deps.tmux.newSession(tmuxSession, workspacePath, command);
+    log.debug("Creating tmux session", { session: tmuxSession });
+    await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
-  // Update task
-  const now = deps.clock.now();
-  task.status = "working";
-  task.workspace = workspace;
-  task.tmux_session = tmuxSession;
-  task.updated_at = now;
+    // Update task
+    const now = deps.clock.now();
+    task.status = "working";
+    task.workspace = workspace;
+    task.tmux_session = tmuxSession;
+    task.updated_at = now;
 
-  await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
-    type: "agent.spawned",
-    timestamp: now,
-    workspace,
-    tmux_session: tmuxSession,
-  });
-  await appendHistory(deps, task.project, task.branch, {
-    type: "status.changed",
-    timestamp: now,
-    from: "pending",
-    to: "working",
-  });
+    await saveTask(deps, task);
+    await appendHistory(deps, task.project, task.branch, {
+      type: "agent.spawned",
+      timestamp: now,
+      workspace,
+      tmux_session: tmuxSession,
+    });
+    await appendHistory(deps, task.project, task.branch, {
+      type: "status.changed",
+      timestamp: now,
+      from: "pending",
+      to: "working",
+    });
 
-  log.info("Task spawned", { taskId, workspace, session: tmuxSession });
+    log.info("Task spawned", { taskId, workspace, session: tmuxSession });
+  } catch (err) {
+    // Release workspace on failure to prevent leaks
+    log.error("Spawn failed, releasing workspace", { workspace, error: String(err) });
+    await releaseWorkspace(deps, workspace);
+    throw err;
+  }
 }
 
 /**
