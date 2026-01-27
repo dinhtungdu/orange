@@ -33,7 +33,7 @@ export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
 
 // Column widths (fixed)
-const COL_STATUS = 18;
+const COL_STATUS = 22;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
