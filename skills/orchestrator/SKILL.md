@@ -52,13 +52,14 @@ orange workspace list [--all]    # Show pool status
 
 ## Passing Context to Agents
 
-Before spawning, write implementation details to the task's CONTEXT.md file:
+After creating a task, write implementation details to its CONTEXT.md file before spawning:
 
 ```bash
-# Task folder location
-~/orange/tasks/<project>/<branch>/CONTEXT.md
+# 1. Create task first (this creates the task folder)
+orange task create add-login "Implement login form with email/password"
+# Output: Created task abc123 (myproject/add-login)
 
-# Example: write context before task is auto-spawned
+# 2. Write context to the task folder
 cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
 ## Implementation Notes
 
@@ -72,7 +73,8 @@ cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
 - src/components/SignupForm.tsx - reference implementation
 EOF
 
-orange task create add-login "Implement login form with email/password"
+# 3. Spawn the agent
+orange task spawn abc123
 ```
 
 The agent will read CONTEXT.md first for your implementation guidance.
@@ -83,6 +85,10 @@ User: "I want to add user authentication. It needs login, logout, and password r
 
 Orchestrator:
 ```bash
+# Create first task
+orange task create add-login "Implement login form and authentication flow"
+# Output: Created task abc123 (myproject/add-login)
+
 # Write context for first task
 cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
 ## Implementation Notes
@@ -91,8 +97,12 @@ cat > ~/orange/tasks/myproject/add-login/CONTEXT.md << 'EOF'
 - Redirect to /dashboard on success
 EOF
 
-orange task create add-login "Implement login form and authentication flow"
-# Output: Created task abc123, Spawned agent in myproject/add-login
+# Spawn first task
+orange task spawn abc123
+
+# Create second task
+orange task create add-logout "Implement logout functionality"
+# Output: Created task def456 (myproject/add-logout)
 
 # Write context for second task
 cat > ~/orange/tasks/myproject/add-logout/CONTEXT.md << 'EOF'
@@ -102,11 +112,11 @@ cat > ~/orange/tasks/myproject/add-logout/CONTEXT.md << 'EOF'
 - Redirect to /login
 EOF
 
-orange task create add-logout "Implement logout functionality"
-# Output: Created task def456, Spawned agent in myproject/add-logout
+# Spawn second task
+orange task spawn def456
 ```
 
-"I've created and spawned agents for login and logout. Writing context for password reset next..."
+"I've created and spawned agents for login and logout. Creating password reset next..."
 
 ## Status Indicators
 
