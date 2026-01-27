@@ -83,6 +83,7 @@ interface DashboardState {
   pendingOps: Set<string>;
   deadSessions: Set<string>;  // Task IDs with dead tmux sessions
   error: string | null;
+  message: string | null;  // Success message (auto-clears on next poll)
   width: number;
   statusFilter: StatusFilter;
   projectFilter: string | null;  // null = global view
@@ -102,6 +103,7 @@ export class DashboardComponent implements Component {
     pendingOps: new Set(),
     deadSessions: new Set(),
     error: null,
+    message: null,
     width: 80,
     statusFilter: "all",
     projectFilter: null,
@@ -169,6 +171,8 @@ export class DashboardComponent implements Component {
         clearTimeout(debounceTimer);
       }
       debounceTimer = setTimeout(() => {
+        // Clear transient messages on refresh
+        this.state.message = null;
         this.refreshTasks().then(() => tui.requestRender());
         debounceTimer = null;
       }, 100);
@@ -414,7 +418,9 @@ export class DashboardComponent implements Component {
     const task = this.state.tasks[this.state.cursor];
     if (!task || this.state.pendingOps.has(task.id)) return;
 
+    const taskBranch = task.branch;
     this.state.pendingOps.add(task.id);
+    this.tui?.requestRender(true);
 
     // Fire async merge
     const proc = Bun.spawn(this.getOrangeCommand(["task", "merge", task.id]), {
@@ -427,6 +433,8 @@ export class DashboardComponent implements Component {
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.state.error = `Merge failed: ${stderr.trim() || "Unknown error"}`;
+      } else {
+        this.state.message = `Merged ${taskBranch}`;
       }
       await this.refreshTasks();
       this.tui?.requestRender(true);
@@ -437,7 +445,9 @@ export class DashboardComponent implements Component {
     const task = this.state.tasks[this.state.cursor];
     if (!task || this.state.pendingOps.has(task.id)) return;
 
+    const taskBranch = task.branch;
     this.state.pendingOps.add(task.id);
+    this.tui?.requestRender(true);
 
     // Fire async cancel
     const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id]), {
@@ -450,6 +460,8 @@ export class DashboardComponent implements Component {
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.state.error = `Cancel failed: ${stderr.trim() || "Unknown error"}`;
+      } else {
+        this.state.message = `Cancelled ${taskBranch}`;
       }
       await this.refreshTasks();
       this.tui?.requestRender(true);
@@ -467,7 +479,9 @@ export class DashboardComponent implements Component {
       return;
     }
 
+    const taskBranch = task.branch;
     this.state.pendingOps.add(task.id);
+    this.tui?.requestRender(true);
 
     // Fire async delete
     const proc = Bun.spawn(this.getOrangeCommand(["task", "delete", task.id]), {
@@ -480,6 +494,8 @@ export class DashboardComponent implements Component {
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.state.error = `Delete failed: ${stderr.trim() || "Unknown error"}`;
+      } else {
+        this.state.message = `Deleted ${taskBranch}`;
       }
       await this.refreshTasks();
       this.tui?.requestRender(true);
@@ -521,7 +537,9 @@ export class DashboardComponent implements Component {
       return;
     }
 
+    const taskBranch = task.branch;
     this.state.pendingOps.add(task.id);
+    this.tui?.requestRender(true);
 
     // Fire async respawn
     const proc = Bun.spawn(this.getOrangeCommand(["task", "respawn", task.id]), {
@@ -535,6 +553,8 @@ export class DashboardComponent implements Component {
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.state.error = `Respawn failed: ${stderr.trim() || "Unknown error"}`;
+      } else {
+        this.state.message = `Respawned ${taskBranch}`;
       }
       await this.refreshTasks();
       this.tui?.requestRender(true);
@@ -665,6 +685,12 @@ export class DashboardComponent implements Component {
     // Error message
     if (this.state.error) {
       lines.push(chalk.red(` Error: ${this.state.error}`));
+      lines.push("");
+    }
+
+    // Success message
+    if (this.state.message) {
+      lines.push(chalk.green(` ✓ ${this.state.message}`));
       lines.push("");
     }
 
