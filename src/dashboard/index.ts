@@ -625,13 +625,18 @@ export class DashboardComponent implements Component {
       this.tui?.stop();
       process.stdout.write("\x1b[?1049l");
 
-      const lessProc = Bun.spawn(["less", "-R"], {
-        stdin: new Response(output).body,
+      // Write to temp file for less (stdin pipe doesn't work reliably)
+      const tmpFile = `/tmp/orange-log-${task.id}.txt`;
+      await Bun.write(tmpFile, output);
+
+      const lessProc = Bun.spawn(["less", "-R", tmpFile], {
+        stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
       });
 
       await lessProc.exited;
+      await Bun.file(tmpFile).exists() && (await import("node:fs/promises")).unlink(tmpFile).catch(() => {});
       process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
       if (this.tui) {
         await this.init(this.tui, { project: this.state.projectFilter ?? undefined });
