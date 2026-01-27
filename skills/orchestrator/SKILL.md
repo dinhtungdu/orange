@@ -68,10 +68,10 @@ orange task create add-login "Implement login form with email/password" --contex
 - src/components/SignupForm.tsx - reference implementation
 EOF
 # Output: Created task abc123 (myproject/add-login)
-# Agent spawns automatically with context available in .orange-task.md
+# Agent spawns automatically with context in TASK.md
 ```
 
-The agent reads `.orange-task.md` (symlinked to TASK.md) for the task description and your context.
+The agent reads `TASK.md` (symlinked from task folder) for description and context.
 
 ## Example Session
 
@@ -103,7 +103,7 @@ EOF
 - `pending` - Task created but not spawned
 - `working` - Agent is actively working (includes self-review)
 - `needs_human` - Agent completed and passed self-review, ready for human review
-- `stuck` - Agent gave up after 3 review attempts
+- `stuck` - Agent gave up after 2 review attempts
 - `done` - Task merged
 - `failed` - Task cancelled or errored
 - `dead` - Session died unexpectedly (shown in dashboard)
@@ -120,7 +120,7 @@ orange task cancel <task_id>   # Give up and release workspace
 ```
 
 ### Task gets stuck
-If a task shows `stuck` status, the agent gave up after 3 review attempts:
+If a task shows `stuck` status, the agent gave up after 2 review attempts:
 ```bash
 orange task log <task_id> --lines 100  # See what went wrong
 ```

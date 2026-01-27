@@ -10,13 +10,13 @@ import { join } from "node:path";
 import { writeFile, symlink, appendFile, readFile, unlink, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import type { Deps, Task, Project, Logger } from "./types.js";
-import { loadProjects, saveTask, appendHistory, getTaskDir, getTaskPath } from "./state.js";
+import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
 
 /**
- * Symlink TASK.md to worktree and add to git exclude.
+ * Symlink TASK.md to worktree and add orange files to git exclude.
  */
 async function linkTaskFile(
   deps: Deps,
@@ -25,7 +25,7 @@ async function linkTaskFile(
   branch: string
 ): Promise<void> {
   const taskMdPath = getTaskPath(deps, project, branch);
-  const symlinkPath = join(workspacePath, ".orange-task.md");
+  const symlinkPath = join(workspacePath, "TASK.md");
   const excludePath = join(workspacePath, ".git", "info", "exclude");
 
   // Remove existing symlink if present
@@ -38,8 +38,7 @@ async function linkTaskFile(
   // Create symlink
   await symlink(taskMdPath, symlinkPath);
 
-  // Add to .git/info/exclude if not already there
-  const excludeEntry = ".orange-task.md";
+  // Add orange files to .git/info/exclude
   const excludeDir = join(workspacePath, ".git", "info");
   await mkdir(excludeDir, { recursive: true });
 
@@ -50,10 +49,14 @@ async function linkTaskFile(
     // File doesn't exist, will create
   }
 
-  if (!excludeContent.includes(excludeEntry)) {
-    const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
-    await appendFile(excludePath, `${newLine}${excludeEntry}\n`);
+  const excludeEntries = ["TASK.md", ".orange-outcome"];
+  for (const entry of excludeEntries) {
+    if (!excludeContent.includes(entry)) {
+      const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
+      excludeContent += `${newLine}${entry}\n`;
+    }
   }
+  await writeFile(excludePath, excludeContent);
 }
 
 /**
@@ -131,18 +134,17 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   // Workspace is in detached HEAD state, so no need to checkout first
   await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
 
-  // Symlink TASK.md to worktree as .orange-task.md
+  // Symlink TASK.md to worktree
   await linkTaskFile(deps, workspacePath, task.project, task.branch);
   log.debug("Linked task file to worktree", { workspacePath });
 
-  // Write .orange-task file for hook integration
-  const orangeTaskFile = join(workspacePath, ".orange-task");
-  await writeFile(orangeTaskFile, JSON.stringify({ id: task.id }), "utf-8");
+  // Write .orange-outcome file for hook integration (agent writes outcome here)
+  const outcomeFile = join(workspacePath, ".orange-outcome");
+  await writeFile(outcomeFile, JSON.stringify({ id: task.id }), "utf-8");
 
   // Create tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
-  const taskDir = getTaskDir(deps, task.project, task.branch);
-  const prompt = buildAgentPrompt(task, workspacePath, taskDir);
+  const prompt = buildAgentPrompt(task);
   const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
 
   log.debug("Creating tmux session", { session: tmuxSession });

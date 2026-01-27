@@ -590,12 +590,11 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Get workspace path
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
-  const taskDir = getTaskDir(deps, task.project, task.branch);
 
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
   const { buildRespawnPrompt } = await import("../../core/agent.js");
-  const prompt = buildRespawnPrompt(task, workspacePath, taskDir);
+  const prompt = buildRespawnPrompt(task);
   const command = `claude --permission-mode acceptEdits "${prompt.replace(/"/g, '\\"')}"`;
 
   log.info("Respawning task", { taskId, session: tmuxSession });
