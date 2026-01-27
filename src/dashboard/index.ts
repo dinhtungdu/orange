@@ -264,7 +264,8 @@ function buildDashboard(
       s.projectLabel === "all"
         ? `Orange Dashboard (all)${statusLabel}`
         : `${s.projectLabel}${statusLabel}`;
-    header.content = ` ${headerLabel}`;
+    const poolLabel = s.poolTotal > 0 ? `  pool: ${s.poolUsed}/${s.poolTotal}` : "";
+    header.content = ` ${headerLabel}${poolLabel}`;
 
     // Separator
     separator.content = "─".repeat(width);
@@ -377,14 +378,15 @@ function buildDashboard(
 
       // Description for selected task
       if (selected) {
-        const descMaxLen = width - 4;
+        const idLabel = task.id;
+        const descMaxLen = width - 6 - idLabel.length;
         const desc =
           task.description.length > descMaxLen
             ? task.description.slice(0, descMaxLen - 1) + "…"
             : task.description;
         const descText = new TextRenderable(renderer, {
           id: `task-desc-${i}`,
-          content: ` └ ${desc}`,
+          content: ` └ ${desc} (${idLabel})`,
           fg: "#888888",
         });
         rowContainer.add(descText);

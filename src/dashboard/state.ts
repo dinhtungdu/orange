@@ -13,7 +13,7 @@ import type { Deps, Task, TaskStatus, PRStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 import { loadProjects, saveTask, appendHistory, getTaskDir } from "../core/state.js";
-import { getWorkspacePath } from "../core/workspace.js";
+import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
 
 const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 8);
@@ -108,6 +108,8 @@ export interface DashboardStateData {
   projectLabel: string;
   diffStats: Map<string, DiffStats>;
   prStatuses: Map<string, PRStatus>;
+  poolUsed: number;
+  poolTotal: number;
   createMode: CreateModeData;
 }
 
@@ -132,6 +134,8 @@ export class DashboardState {
     projectLabel: "all",
     diffStats: new Map(),
     prStatuses: new Map(),
+    poolUsed: 0,
+    poolTotal: 0,
     createMode: {
       active: false,
       branch: "",
@@ -465,9 +469,26 @@ export class DashboardState {
         this.data.cursor = Math.max(0, this.data.tasks.length - 1);
       }
       this.refreshDiffStats();
+      this.refreshPoolStatus();
     } catch (err) {
       this.data.error =
         err instanceof Error ? err.message : "Failed to load tasks";
+    }
+  }
+
+  private async refreshPoolStatus(): Promise<void> {
+    try {
+      const poolState = await loadPoolState(this.deps);
+      const entries = Object.values(poolState.workspaces);
+      // If project-scoped, only count that project's workspaces
+      const projectFilter = this.data.projectFilter;
+      const relevant = projectFilter
+        ? Object.entries(poolState.workspaces).filter(([name]) => name.startsWith(`${projectFilter}--`))
+        : Object.entries(poolState.workspaces);
+      this.data.poolTotal = relevant.length;
+      this.data.poolUsed = relevant.filter(([, e]) => e.status === "bound").length;
+    } catch {
+      // Pool not initialized yet
     }
   }
 
