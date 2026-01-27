@@ -328,7 +328,10 @@ function buildDashboard(
         : `${task.project}/${task.branch}`;
 
       let statusCol: string = isDead ? "dead" : task.status;
-      if (task.pr_url) statusCol += " PR";
+      if (task.pr_url) {
+        const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
+        if (prNum) statusCol += ` #${prNum}`;
+      }
       if (pending) statusCol = "processing…";
 
       const stats = s.diffStats.get(task.id);
