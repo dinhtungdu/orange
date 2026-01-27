@@ -71,7 +71,7 @@ async function linkTaskFile(
     // File doesn't exist, will create
   }
 
-  const excludeEntries = ["TASK.md", ".orange-outcome"];
+  const excludeEntries = ["TASK.md", ".orange-outcome", ".claude/"];
   for (const entry of excludeEntries) {
     if (!excludeContent.includes(entry)) {
       const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";

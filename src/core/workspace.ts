@@ -8,7 +8,7 @@
  * when task spawn requests a workspace and none are available.
  */
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import type { Deps, Project, PoolState, WorkspaceEntry, Logger } from "./types.js";
@@ -129,7 +129,48 @@ async function createWorktree(
     JSON.stringify(AGENT_SETTINGS, null, 2)
   );
 
+  // Add orange files to .git/info/exclude (local-only, not shared)
+  await addGitExcludes(worktreePath);
+
   return name;
+}
+
+/**
+ * Add orange-managed files to .git/info/exclude so they don't show as untracked.
+ * Works for both regular repos and worktrees.
+ */
+async function addGitExcludes(worktreePath: string): Promise<void> {
+  const gitPath = join(worktreePath, ".git");
+  let gitDir: string;
+  const stats = await stat(gitPath);
+  if (stats.isDirectory()) {
+    gitDir = gitPath;
+  } else {
+    const content = await readFile(gitPath, "utf-8");
+    const match = content.match(/^gitdir:\s*(.+)$/m);
+    if (!match) return;
+    gitDir = match[1].trim();
+  }
+
+  const excludeDir = join(gitDir, "info");
+  await mkdir(excludeDir, { recursive: true });
+  const excludePath = join(excludeDir, "exclude");
+
+  let excludeContent = "";
+  try {
+    excludeContent = await readFile(excludePath, "utf-8");
+  } catch {
+    // File doesn't exist
+  }
+
+  const entries = ["TASK.md", ".orange-outcome", ".claude/"];
+  for (const entry of entries) {
+    if (!excludeContent.includes(entry)) {
+      const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
+      excludeContent += `${newLine}${entry}\n`;
+    }
+  }
+  await writeFile(excludePath, excludeContent);
 }
 
 /**
@@ -162,6 +203,9 @@ export async function initWorkspacePool(deps: Deps, project: Project): Promise<v
       join(claudeDir, "settings.local.json"),
       JSON.stringify(AGENT_SETTINGS, null, 2)
     );
+
+    // Add orange files to local git exclude
+    await addGitExcludes(worktreePath);
 
     // Add to pool state
     poolState.workspaces[name] = { status: "available" };
