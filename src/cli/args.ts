@@ -111,7 +111,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "cancel",
       "delete",
     ],
-    workspace: ["init", "list"],
+    workspace: ["init", "list", "gc"],
   };
 
   return subcommands[command]?.includes(arg) ?? false;
