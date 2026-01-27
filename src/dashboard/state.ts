@@ -266,6 +266,9 @@ export class DashboardState {
       case "s":
         this.spawnTask();
         break;
+      case "a":
+        this.approveTask();
+        break;
       case "o":
         this.openPR();
         break;
@@ -568,6 +571,38 @@ export class DashboardState {
     // Note: non-tmux attach requires TUI suspend/resume — handled by the view layer
   }
 
+  private approveTask(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    if (task.status !== "reviewing") {
+      this.data.error = "Only reviewing tasks can be approved.";
+      this.emit();
+      return;
+    }
+
+    const taskBranch = task.branch;
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "approve", task.id]), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.data.pendingOps.delete(task.id);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.data.error = `Approve failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+      } else {
+        this.data.message = `Approved ${taskBranch}`;
+      }
+      await this.refreshTasks();
+      this.emit();
+    });
+  }
+
   private mergeTask(): void {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
@@ -754,8 +789,10 @@ export class DashboardState {
       keys += "  Enter:attach  m:merge  x:cancel";
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  r:respawn  x:cancel";
+    } else if (task.status === "reviewing") {
+      keys += "  Enter:attach  a:approve  x:cancel";
     } else {
-      // working, reviewing
+      // working
       keys += "  Enter:attach  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;

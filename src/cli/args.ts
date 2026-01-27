@@ -105,6 +105,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "respawn",
       "peek",
       "complete",
+      "approve",
       "stuck",
       "merge",
       "cancel",

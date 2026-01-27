@@ -98,6 +98,10 @@ export async function runTaskCommand(
       await completeTask(parsed, deps);
       break;
 
+    case "approve":
+      await approveTask(parsed, deps);
+      break;
+
     case "stuck":
       await stuckTask(parsed, deps);
       break;
@@ -127,7 +131,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|respawn|complete|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -490,6 +494,49 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
 
   console.log(`Task ${taskId} marked as reviewing`);
+}
+
+/**
+ * Mark task as reviewed (human approved).
+ */
+async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task approve <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error("Task not found for approve", { taskId });
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  if (task.status !== "reviewing") {
+    log.error("Task not in reviewing status", { taskId, status: task.status });
+    console.error(`Task '${taskId}' is not in reviewing status (status: ${task.status})`);
+    process.exit(1);
+  }
+
+  const now = deps.clock.now();
+  task.status = "reviewed";
+  task.updated_at = now;
+
+  await saveTask(deps, task);
+  await appendHistory(deps, task.project, task.branch, {
+    type: "status.changed",
+    timestamp: now,
+    from: "reviewing",
+    to: "reviewed",
+  });
+
+  log.info("Task approved", { taskId });
+  console.log(`Task ${taskId} approved (reviewed)`);
 }
 
 /**
