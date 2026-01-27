@@ -332,9 +332,15 @@ function buildDashboard(
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
         const prStatus = s.prStatuses.get(task.id);
-        const checksIcon = prStatus?.checks ? CHECKS_ICON[prStatus.checks] : "";
         if (prNum) statusCol += ` #${prNum}`;
-        if (checksIcon) statusCol += ` ${checksIcon}`;
+        if (prStatus?.state === "MERGED") {
+          statusCol += " merged";
+        } else if (prStatus?.state === "CLOSED") {
+          statusCol += " closed";
+        } else if (prStatus?.checks) {
+          const checksIcon = CHECKS_ICON[prStatus.checks];
+          if (checksIcon) statusCol += ` ${checksIcon}`;
+        }
       }
       if (pending) statusCol = "processing…";
 
