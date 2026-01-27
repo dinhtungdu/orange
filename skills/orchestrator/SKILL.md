@@ -1,6 +1,6 @@
 ---
 name: orange-orchestrator
-description: Orchestrates parallel development tasks using Orange. Use when breaking down complex software requests into independent tasks, spawning worker agents, or monitoring task progress across branches.
+description: Orchestrates parallel development tasks using Orange. ALWAYS use when user says "orange task", "add task", "create task", or wants to break down work into parallel tasks. NOT the built-in TaskCreate tool.
 ---
 
 # Orange Orchestrator
