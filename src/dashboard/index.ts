@@ -171,8 +171,9 @@ export class DashboardComponent implements Component {
         clearTimeout(debounceTimer);
       }
       debounceTimer = setTimeout(() => {
-        // Clear transient messages on refresh
+        // Clear transient messages/errors on refresh
         this.state.message = null;
+        this.state.error = null;
         this.refreshTasks().then(() => tui.requestRender());
         debounceTimer = null;
       }, 100);
@@ -220,7 +221,6 @@ export class DashboardComponent implements Component {
         project: this.state.projectFilter ?? undefined,
       });
       this.applyStatusFilter();
-      this.state.error = null;
 
       // Clamp cursor
       if (this.state.cursor >= this.state.tasks.length) {
