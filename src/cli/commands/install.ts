@@ -1,9 +1,10 @@
 /**
- * Install command - installs Orange skills and stop hook.
+ * Install command - installs Orange skills, stop hook, and permissions.
  *
  * - Symlinks each skill folder to ~/.claude/skills/<skill-name> (dev changes reflect immediately)
  * - Adds stop hook to ~/.claude/settings.json
  * - Creates hook script at ~/.claude/hooks/stop-orange.sh
+ * - Adds Bash(orange:*) permission to ~/.claude/settings.json
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
  * is symlinked as a separate skill (e.g., skills/orchestrator -> ~/.claude/skills/orange-orchestrator).
@@ -59,6 +60,10 @@ interface HookMatcher {
 interface Settings {
   hooks?: {
     Stop?: HookMatcher[];
+  };
+  permissions?: {
+    allow?: string[];
+    [key: string]: unknown;
   };
   [key: string]: unknown;
 }
@@ -131,6 +136,43 @@ async function installStopHook(): Promise<void> {
 }
 
 /**
+ * Install the Bash(orange:*) permission into settings.json.
+ */
+async function installPermission(): Promise<void> {
+  // Load existing settings
+  let settings: Settings = {};
+  try {
+    const content = await readFile(SETTINGS_PATH, "utf-8");
+    settings = JSON.parse(content);
+  } catch {
+    // File doesn't exist or invalid JSON, start fresh
+  }
+
+  // Ensure permissions.allow structure exists
+  if (!settings.permissions) {
+    settings.permissions = {};
+  }
+  if (!settings.permissions.allow) {
+    settings.permissions.allow = [];
+  }
+
+  const permission = "Bash(orange:*)";
+
+  // Check if permission already exists
+  if (settings.permissions.allow.includes(permission)) {
+    console.log("Permission already installed in settings.json");
+    return;
+  }
+
+  // Add permission
+  settings.permissions.allow.unshift(permission);
+
+  // Write back settings
+  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  console.log("Added Bash(orange:*) permission to settings.json");
+}
+
+/**
  * Run the install command.
  */
 export async function runInstallCommand(): Promise<void> {
@@ -167,4 +209,7 @@ export async function runInstallCommand(): Promise<void> {
 
   // Add hook to settings.json
   await installStopHook();
+
+  // Add permission to settings.json
+  await installPermission();
 }
