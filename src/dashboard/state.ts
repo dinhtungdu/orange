@@ -262,6 +262,9 @@ export class DashboardState {
       case "r":
         this.respawnTask();
         break;
+      case "s":
+        this.spawnTask();
+        break;
       case "o":
         this.openPR();
         break;
@@ -706,6 +709,33 @@ export class DashboardState {
     });
   }
 
+  private spawnTask(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    if (task.status !== "pending") {
+      this.data.error = "Only pending tasks can be spawned.";
+      this.emit();
+      return;
+    }
+
+    const taskBranch = task.branch;
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    spawnTaskById(this.deps, task.id).then(async () => {
+      this.data.pendingOps.delete(task.id);
+      this.data.message = `Spawned ${taskBranch}`;
+      await this.refreshTasks();
+      this.emit();
+    }).catch(async (err) => {
+      this.data.pendingOps.delete(task.id);
+      this.data.error = `Spawn failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      await this.refreshTasks();
+      this.emit();
+    });
+  }
+
   private openPR(): void {
     const task = this.data.tasks[this.data.cursor];
     if (!task) return;
@@ -742,7 +772,7 @@ export class DashboardState {
     } else if (completedStatuses.includes(task.status)) {
       keys += "  l:log  d:del";
     } else if (task.status === "pending") {
-      keys += "  (spawn via CLI)";
+      keys += "  s:spawn  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;
     return keys;
