@@ -809,11 +809,10 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
-  // Update task
+  // Update task (keep workspace for log lookup)
   const now = deps.clock.now();
   const previousStatus = task.status;
   task.status = "done";
-  task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;
 
@@ -872,11 +871,10 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
-  // Update task
+  // Update task (keep workspace for log lookup)
   const now = deps.clock.now();
   const previousStatus = task.status;
   task.status = "failed";
-  task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;
 

@@ -675,7 +675,7 @@ describe("task merge command", () => {
 
     const task = await loadTask(deps, "testproj", "merge-feature");
     expect(task!.status).toBe("done");
-    expect(task!.workspace).toBeNull();
+    expect(task!.workspace).toBe("testproj--1"); // Kept for log lookup
     expect(task!.tmux_session).toBeNull();
 
     // Verify tmux session killed
@@ -772,7 +772,7 @@ describe("task cancel command", () => {
 
     const task = await loadTask(deps, "testproj", "cancel-feature");
     expect(task!.status).toBe("failed");
-    expect(task!.workspace).toBeNull();
+    expect(task!.workspace).toBe("testproj--1"); // Kept for log lookup
     expect(task!.tmux_session).toBeNull();
 
     expect(consoleLogs[0]).toContain("cancelled");
