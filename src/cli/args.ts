@@ -163,6 +163,7 @@ Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project
   orange workspace list [options]     Show workspace pool status
     --all                             Show all projects' workspaces
+  orange workspace gc                 Release orphaned workspaces
 
 Logging:
   orange log [options]                View application logs
