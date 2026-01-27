@@ -152,8 +152,16 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     const workspacePath = join(deps.dataDir, "workspaces", workspace);
     log.debug("Setting up git branch", { workspacePath, branch: task.branch });
 
-    await deps.git.fetch(workspacePath);
-    await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
+    // Pull latest default branch from origin if available
+    try {
+      await deps.git.fetch(workspacePath);
+      await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
+    } catch {
+      // No remote — use local default branch as-is
+    }
+
+    // Create local branch from default branch (no remote tracking)
+    await deps.git.createBranch(workspacePath, task.branch);
     log.debug("Created branch", { branch: task.branch });
 
     // Symlink TASK.md to worktree

@@ -129,13 +129,11 @@ export class RealGit implements GitExecutor {
     }
   }
 
-  async addWorktree(cwd: string, path: string, branch: string): Promise<void> {
-    // Use --detach to avoid "branch already checked out" error when creating
-    // worktrees for the same branch that's checked out in the main repo.
-    // We point at origin/<branch> to get the latest remote state.
+  async addWorktree(cwd: string, path: string, _branch: string): Promise<void> {
+    // Detached at HEAD — the actual task branch is created during spawn.
     const { exitCode, stderr } = await exec(
       "git",
-      ["worktree", "add", "--detach", path, `origin/${branch}`],
+      ["worktree", "add", "--detach", path],
       cwd
     );
     if (exitCode !== 0) {
