@@ -130,14 +130,8 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   log.debug("Setting up git branch", { workspacePath, branch: task.branch });
 
   await deps.git.fetch(workspacePath);
-  // Checkout existing branch or create new one from origin/<default_branch>
-  if (await deps.git.branchExists(workspacePath, task.branch)) {
-    await deps.git.checkout(workspacePath, task.branch);
-    log.debug("Checked out existing branch", { branch: task.branch });
-  } else {
-    await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
-    log.debug("Created new branch", { branch: task.branch });
-  }
+  await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
+  log.debug("Created branch", { branch: task.branch });
 
   // Symlink TASK.md to worktree
   await linkTaskFile(deps, workspacePath, task.project, task.branch);

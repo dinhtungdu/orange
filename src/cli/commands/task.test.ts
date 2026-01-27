@@ -852,14 +852,14 @@ describe("task delete command", () => {
   });
 
   test("deletes done task, removes folder and db entry", async () => {
-    // Simulate branch being pushed to origin (add branch to source repo)
-    mockGit.branches.get("/path/to/testproj")!.add("delete-done");
     // Create and complete a task
     await runTaskCommand(
       parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "delete-done", "Work"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "delete-done");
+    // Add branch to project repo for merge step (simulates it being pushed)
+    mockGit.branches.get("/path/to/testproj")!.add("delete-done");
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "merge", taskId]), deps);
     consoleLogs = [];
