@@ -15,7 +15,6 @@ All data in `~/orange/`.
     └── <project>/
         └── <branch>/
             ├── TASK.md         # Description, metadata (frontmatter)
-            ├── log.txt         # Conversation log (snapshotted on merge/cancel)
             └── history.jsonl   # Event log
 ```
 

@@ -8,7 +8,6 @@
  * - orange task list [--status <status>] [--all]
  * - orange task spawn <task_id>
  * - orange task attach <task_id>            (attach to running session)
- * - orange task log <task_id> [--lines N]   (view task output log)
  * - orange task respawn <task_id>           (restart dead session)
  * - orange task complete <task_id>
  * - orange task stuck <task_id>
@@ -17,9 +16,8 @@
  * - orange task delete <task_id>
  */
 
-import { mkdir, rm, readFile, appendFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { customAlphabet } from "nanoid";
 
 // Custom alphabet without - to avoid CLI parsing issues
@@ -120,10 +118,6 @@ export async function runTaskCommand(
       await attachTask(parsed, deps);
       break;
 
-    case "log":
-      await logTask(parsed, deps);
-      break;
-
     case "respawn":
       await respawnTask(parsed, deps);
       break;
@@ -133,7 +127,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|log|respawn|complete|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|attach|respawn|complete|stuck|merge|cancel|delete>"
       );
       process.exit(1);
   }
@@ -368,217 +362,6 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     stderr: "inherit",
   });
   await proc.exited;
-}
-
-/**
- * Convert workspace path to Claude project folder name.
- * Example: /Users/tung/orange/workspaces/orange--1 → -Users-tung-orange-workspaces-orange--1
- */
-function workspaceToClaudeProjectPath(workspacePath: string): string {
-  return "-" + workspacePath.slice(1).replace(/\//g, "-");
-}
-
-/**
- * Truncate string to max length with ellipsis.
- */
-function truncate(s: string, maxLen: number): string {
-  if (s.length <= maxLen) return s;
-  return s.slice(0, maxLen - 3) + "...";
-}
-
-/**
- * Format a conversation entry for display.
- */
-function formatEntry(entry: ConversationEntry): string | null {
-  // Skip queue operations
-  if (entry.type === "queue-operation") return null;
-
-  // Handle user messages
-  if (entry.type === "user" && entry.message) {
-    const content = entry.message.content;
-    if (typeof content === "string") {
-      // Regular user text message
-      const text = content.replace(/\n/g, " ").trim();
-      return `[user] ${truncate(text, 80)}`;
-    } else if (Array.isArray(content)) {
-      // Tool result - skip, shown contextually with tool call
-      return null;
-    }
-  }
-
-  // Handle assistant messages
-  if (entry.type === "assistant" && entry.message?.content) {
-    const content = entry.message.content;
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        // Skip thinking blocks
-        if (block.type === "thinking") continue;
-
-        // Text responses
-        if (block.type === "text" && block.text) {
-          const text = block.text.replace(/\n/g, " ").trim();
-          return `[assistant] ${truncate(text, 80)}`;
-        }
-
-        // Tool calls
-        if (block.type === "tool_use") {
-          const toolName = block.name || "unknown";
-          const input = block.input || {};
-          // Extract brief description from tool input
-          let desc = "";
-          if (input.file_path) desc = input.file_path as string;
-          else if (input.command) desc = truncate(input.command as string, 40);
-          else if (input.pattern) desc = input.pattern as string;
-          else if (input.description) desc = input.description as string;
-
-          return `[tool] ${toolName}${desc ? `: ${desc}` : ""}`;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-interface ConversationEntry {
-  type: "user" | "assistant" | "queue-operation";
-  message?: {
-    role?: string;
-    content?: string | ContentBlock[];
-  };
-}
-
-interface ContentBlock {
-  type: string;
-  text?: string;
-  name?: string;
-  input?: Record<string, unknown>;
-}
-
-interface SessionIndexEntry {
-  sessionId: string;
-  gitBranch: string;
-  modified: string;
-}
-
-interface SessionsIndex {
-  entries: SessionIndexEntry[];
-}
-
-/**
- * Generate formatted log from Claude session history.
- * Returns null if no sessions found.
- */
-async function generateLogFromSessions(deps: Deps, task: Task): Promise<string | null> {
-  if (!task.workspace) return null;
-
-  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
-  const claudeProjectName = workspaceToClaudeProjectPath(workspacePath);
-  const claudeDir = join(process.env.HOME || "", ".claude", "projects", claudeProjectName);
-
-  const indexPath = join(claudeDir, "sessions-index.json");
-  if (!existsSync(indexPath)) return null;
-
-  const indexContent = await readFile(indexPath, "utf-8");
-  const index: SessionsIndex = JSON.parse(indexContent);
-
-  const branchSessions = index.entries
-    .filter((e) => e.gitBranch === task.branch)
-    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
-
-  if (branchSessions.length === 0) return null;
-
-  const formatted: string[] = [];
-
-  for (let i = branchSessions.length - 1; i >= 0; i--) {
-    const session = branchSessions[i];
-    const sessionPath = join(claudeDir, `${session.sessionId}.jsonl`);
-
-    if (!existsSync(sessionPath)) continue;
-
-    if (branchSessions.length > 1) {
-      formatted.push(`--- Session ${branchSessions.length - i}/${branchSessions.length} ---`);
-    }
-
-    const sessionContent = await readFile(sessionPath, "utf-8");
-    const lines = sessionContent.trim().split("\n");
-
-    for (const line of lines) {
-      try {
-        const entry: ConversationEntry = JSON.parse(line);
-        const output = formatEntry(entry);
-        if (output) formatted.push(output);
-      } catch {
-        // Skip malformed lines
-      }
-    }
-  }
-
-  return formatted.length > 0 ? formatted.join("\n") : null;
-}
-
-/**
- * Snapshot task log to task dir.
- * Called on merge/cancel so log survives workspace reuse.
- */
-async function snapshotLog(deps: Deps, task: Task): Promise<void> {
-  try {
-    const log = await generateLogFromSessions(deps, task);
-    if (log) {
-      const taskDir = getTaskDir(deps, task.project, task.branch);
-      await mkdir(taskDir, { recursive: true });
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(join(taskDir, "log.txt"), log);
-    }
-  } catch {
-    // Best-effort - don't fail merge/cancel if log snapshot fails
-  }
-}
-
-/**
- * View task's conversation history.
- * Reads from task dir (log.txt) first, falls back to live Claude sessions.
- */
-async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange task log <task_id> [--lines N]");
-    process.exit(1);
-  }
-
-  const taskId = parsed.args[0];
-  const maxEntries = parseInt(parsed.options.lines as string) || 0;
-
-  const tasks = await listTasks(deps, {});
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task) {
-    console.error(`Task '${taskId}' not found`);
-    process.exit(1);
-  }
-
-  // Check for snapshotted log first
-  const taskDir = getTaskDir(deps, task.project, task.branch);
-  const logPath = join(taskDir, "log.txt");
-  let logContent: string | null = null;
-
-  if (existsSync(logPath)) {
-    logContent = await readFile(logPath, "utf-8");
-  } else {
-    // Fall back to live Claude sessions
-    logContent = await generateLogFromSessions(deps, task);
-  }
-
-  if (!logContent?.trim()) {
-    console.error(`No log available for task '${taskId}'`);
-    process.exit(1);
-  }
-
-  // Apply --lines limit (last N lines)
-  if (maxEntries > 0) {
-    const lines = logContent.split("\n");
-    console.log(lines.slice(-maxEntries).join("\n"));
-  } else {
-    console.log(logContent);
-  }
 }
 
 /**
@@ -839,9 +622,6 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     // Ignore errors - remote branch may not exist
   }
 
-  // Snapshot log before releasing workspace
-  await snapshotLog(deps, task);
-
   // Release workspace
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
@@ -904,9 +684,6 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
-
-  // Snapshot log before releasing workspace
-  await snapshotLog(deps, task);
 
   // Release workspace
   if (task.workspace) {

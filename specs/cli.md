@@ -13,7 +13,6 @@ orange task create <branch> <description> [--context -] [--no-spawn] [--project 
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
-orange task log <task_id> [--lines N]
 orange task respawn <task_id>
 orange task complete <task_id>      # Called by hook → needs_human
 orange task stuck <task_id>         # Called by hook → stuck
@@ -43,10 +42,6 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 - `--context -` reads implementation context from stdin
 - `--project` specifies project explicitly (otherwise inferred from cwd)
 - Branch deduplication: if branch exists, appends `-2`, `-3`, etc.
-
-## Task Log
-
-View agent conversation log. Reads from snapshotted `log.txt` first, falls back to live Claude session files.
 
 ## Task Respawn
 

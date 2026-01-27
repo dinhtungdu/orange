@@ -52,8 +52,8 @@ Footer shows relevant actions based on selected task's state:
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
 | Live session (working/needs_human/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  c:create  f:filter  q:quit |
-| Dead session | j/k:nav  l:log  r:respawn  x:cancel  c:create  f:filter  q:quit |
-| Completed (done/failed) | j/k:nav  l:log  d:del  c:create  f:filter  q:quit |
+| Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |
+| Completed (done/failed) | j/k:nav  d:del  c:create  f:filter  q:quit |
 | Pending | j/k:nav  c:create  f:filter  q:quit |
 
 ### Key Actions
@@ -106,7 +106,7 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
 
 ## Dead Session Detection
 
-Checked immediately on startup, then periodically. If session died, task shows as "dead" with ✗ icon. Available actions: view log, respawn, or cancel.
+Checked immediately on startup, then periodically. If session died, task shows as "dead" with ✗ icon. Available actions: respawn or cancel.
 
 ## Polling
 

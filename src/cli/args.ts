@@ -102,7 +102,6 @@ function isSubcommand(command: string, arg: string): boolean {
       "list",
       "spawn",
       "attach",
-      "log",
       "respawn",
       "peek",
       "complete",
@@ -149,8 +148,6 @@ Task Management (project inferred from cwd):
     --all                             Show all projects' tasks
   orange task spawn <task_id>         Spawn agent for task
   orange task attach <task_id>        Attach to task's tmux session
-  orange task log <task_id> [options] View task's output log
-    --lines <n>                       Last N lines (default: all)
   orange task respawn <task_id>       Restart dead session
   orange task complete <task_id>      Mark task complete (hook)
   orange task stuck <task_id>         Mark task stuck (hook)

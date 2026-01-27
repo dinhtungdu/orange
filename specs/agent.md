@@ -57,7 +57,6 @@ Claude's stop hook reads the file and calls:
 1. Dashboard shows task needing attention
 2. Human options:
    - `Enter` — attach to session (if still active)
-   - `l` — view conversation log (if session died or completed)
 3. Review changes, interact with agent if needed
 4. Merge options:
    - `m` in dashboard → merges to main, releases workspace, kills session
@@ -65,4 +64,4 @@ Claude's stop hook reads the file and calls:
 
 ## 7. Logging
 
-Agent conversation logs are read from Claude's session files. On merge/cancel, log is snapshotted to `log.txt` in the task dir so it survives workspace reuse. View with `orange task log <id>` or `l` in dashboard.
+Agent conversation logs are available by attaching to the tmux session directly.
