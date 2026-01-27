@@ -1,9 +1,8 @@
 /**
- * Tests for Dashboard TUI component.
+ * Tests for Dashboard state machine.
  *
- * Tests rendering output and keyboard navigation using a mock terminal.
- * The dashboard component renders directly to string arrays, so we can
- * test the render output without a full terminal.
+ * Tests state logic, keyboard navigation, and filtering
+ * independently of the TUI rendering layer.
  */
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
@@ -16,59 +15,6 @@ import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
 import { saveTask, saveProjects } from "../core/state.js";
-
-/**
- * Mock Terminal for testing TUI components.
- * Captures output and simulates input.
- */
-class MockTerminal {
-  private _columns = 80;
-  private _rows = 24;
-  private _output: string[] = [];
-  private _inputHandler?: (data: string) => void;
-  private _resizeHandler?: () => void;
-
-  get columns(): number { return this._columns; }
-  get rows(): number { return this._rows; }
-  get kittyProtocolActive(): boolean { return false; }
-  get output(): string[] { return this._output; }
-
-  start(onInput: (data: string) => void, onResize: () => void): void {
-    this._inputHandler = onInput;
-    this._resizeHandler = onResize;
-  }
-
-  stop(): void {
-    this._inputHandler = undefined;
-    this._resizeHandler = undefined;
-  }
-
-  write(data: string): void {
-    this._output.push(data);
-  }
-
-  sendInput(data: string): void {
-    this._inputHandler?.(data);
-  }
-
-  resize(columns: number, rows: number): void {
-    this._columns = columns;
-    this._rows = rows;
-    this._resizeHandler?.();
-  }
-
-  clearOutput(): void {
-    this._output = [];
-  }
-
-  moveBy(_lines: number): void {}
-  hideCursor(): void {}
-  showCursor(): void {}
-  clearLine(): void {}
-  clearFromCursor(): void {}
-  clearScreen(): void { this._output = []; }
-  setTitle(_title: string): void {}
-}
 
 /**
  * Helper to create a task.
@@ -87,14 +33,12 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   ...overrides,
 });
 
-describe("Dashboard Component", () => {
+describe("Dashboard State", () => {
   let tempDir: string;
   let deps: Deps;
-  let mockTerminal: MockTerminal;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "orange-dashboard-test-"));
-    mockTerminal = new MockTerminal();
 
     deps = {
       tmux: new MockTmux(),
@@ -118,132 +62,199 @@ describe("Dashboard Component", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  // Import dashboard dynamically to test the component
-  // We test the DashboardComponent's render method directly
-  // since it implements the Component interface
-
-  test("renders header with project name when scoped", async () => {
-    // Create a task
+  test("loads tasks for project scope", async () => {
     const task = createTask({ id: "task1", status: "pending" });
     await saveTask(deps, task);
 
-    // Import and create dashboard component
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { project: "testproj" });
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
-    // Render
-    const lines = dashboard.render(80);
-
-    // Check header contains project name
-    expect(lines.some(line => line.includes("testproj"))).toBe(true);
+    expect(state.data.tasks.length).toBe(1);
+    expect(state.data.projectLabel).toBe("testproj");
   });
 
-  test("renders header with 'all' when global view", async () => {
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { all: true });
+  test("initializes with 'all' label for global view", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
 
-    const lines = dashboard.render(80);
-
-    expect(lines.some(line => line.includes("all"))).toBe(true);
+    expect(state.data.projectLabel).toBe("all");
   });
 
-  test("renders status icons for different task statuses", async () => {
-    // Create tasks with different statuses
+  test("loads tasks with different statuses", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "pending" }));
     await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "working" }));
     await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "needs_human" }));
     await saveTask(deps, createTask({ id: "t4", branch: "b4", status: "done" }));
 
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { project: "testproj" });
-    await dashboard.loadTasks();
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
-    const lines = dashboard.render(80);
-    const output = lines.join("\n");
-
-    // Check status icons exist
-    expect(output).toContain("○"); // pending
-    expect(output).toContain("●"); // working
-    expect(output).toContain("◉"); // needs_human
-    expect(output).toContain("✓"); // done
+    expect(state.data.tasks.length).toBe(4);
   });
 
-  test("renders 'no tasks' message when empty", async () => {
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { project: "testproj" });
-    await dashboard.loadTasks();
+  test("shows empty tasks when none exist", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
-    const lines = dashboard.render(80);
-    const output = lines.join("\n");
-
-    expect(output).toContain("No tasks");
+    expect(state.data.tasks.length).toBe(0);
   });
 
-  test("renders keybindings in footer", async () => {
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { all: true });
+  test("context keys include basic nav and quit", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
 
-    const lines = dashboard.render(80);
-    const output = lines.join("\n");
-
-    // Check footer has key hints (context-aware, so no task = minimal keys)
-    expect(output).toContain("j/k");
-    expect(output).toContain("q:quit");
+    const keys = state.getContextKeys();
+    expect(keys).toContain("j/k");
+    expect(keys).toContain("q:quit");
   });
 
   test("cursor navigation with j/k keys", async () => {
-    // Create multiple tasks
     await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
     await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
 
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { project: "testproj" });
-    await dashboard.loadTasks();
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     // Initial cursor at 0
-    expect(dashboard.getCursor()).toBe(0);
+    expect(state.getCursor()).toBe(0);
 
     // Move down
-    dashboard.handleInput("j");
-    expect(dashboard.getCursor()).toBe(1);
+    state.handleInput("j");
+    expect(state.getCursor()).toBe(1);
 
     // Move up
-    dashboard.handleInput("k");
-    expect(dashboard.getCursor()).toBe(0);
+    state.handleInput("k");
+    expect(state.getCursor()).toBe(0);
 
     // Can't move above 0
-    dashboard.handleInput("k");
-    expect(dashboard.getCursor()).toBe(0);
+    state.handleInput("k");
+    expect(state.getCursor()).toBe(0);
+  });
+
+  test("cursor navigation with arrow keys", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("down");
+    expect(state.getCursor()).toBe(1);
+
+    state.handleInput("up");
+    expect(state.getCursor()).toBe(0);
   });
 
   test("status filter cycling with f key", async () => {
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { all: true });
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
 
     // Initial filter is "all"
-    expect(dashboard.getStatusFilter()).toBe("all");
+    expect(state.getStatusFilter()).toBe("all");
 
     // Cycle to "active"
-    dashboard.handleInput("f");
-    expect(dashboard.getStatusFilter()).toBe("active");
+    state.handleInput("f");
+    expect(state.getStatusFilter()).toBe("active");
 
     // Cycle to "done"
-    dashboard.handleInput("f");
-    expect(dashboard.getStatusFilter()).toBe("done");
+    state.handleInput("f");
+    expect(state.getStatusFilter()).toBe("done");
 
     // Cycle back to "all"
-    dashboard.handleInput("f");
-    expect(dashboard.getStatusFilter()).toBe("all");
+    state.handleInput("f");
+    expect(state.getStatusFilter()).toBe("all");
   });
 
-  test("filter shows in header", async () => {
-    const { DashboardComponent } = await import("./index.js");
-    const dashboard = new DashboardComponent(deps, { all: true });
+  test("filter changes project label indicator", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
 
-    dashboard.handleInput("f"); // Switch to "active"
-    const lines = dashboard.render(80);
-    const output = lines.join("\n");
+    state.handleInput("f"); // Switch to "active"
+    expect(state.data.statusFilter).toBe("active");
+  });
 
-    expect(output).toContain("[active]");
+  test("active filter shows only active tasks", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "pending" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "working" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "done" }));
+    await saveTask(deps, createTask({ id: "t4", branch: "b4", status: "failed" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // All tasks visible initially
+    expect(state.data.tasks.length).toBe(4);
+
+    // Switch to active filter
+    state.handleInput("f");
+    expect(state.data.tasks.length).toBe(2); // pending + working
+
+    // Switch to done filter
+    state.handleInput("f");
+    expect(state.data.tasks.length).toBe(2); // done + failed
+  });
+
+  test("getSelectedTask returns current task", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    const task = state.getSelectedTask();
+    expect(task).toBeDefined();
+    expect(task!.project).toBe("testproj");
+  });
+
+  test("getSelectedTask returns undefined when no tasks", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    expect(state.getSelectedTask()).toBeUndefined();
+  });
+
+  test("onChange listener fires on state changes", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    let changeCount = 0;
+    state.onChange(() => changeCount++);
+
+    state.handleInput("j");
+    expect(changeCount).toBe(1);
+
+    state.handleInput("f");
+    expect(changeCount).toBe(2);
+  });
+
+  test("onChange unsubscribe works", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    let changeCount = 0;
+    const unsub = state.onChange(() => changeCount++);
+
+    state.handleInput("j");
+    expect(changeCount).toBe(1);
+
+    unsub();
+    state.handleInput("k");
+    expect(changeCount).toBe(1); // No change after unsub
   });
 });
