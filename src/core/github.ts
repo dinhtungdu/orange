@@ -11,6 +11,7 @@ import type { GitHubExecutor, PRStatus } from "./types.js";
 
 /**
  * Execute a shell command and return result.
+ * Inherits environment and adds proxy settings if configured.
  */
 async function exec(
   command: string,
@@ -21,6 +22,10 @@ async function exec(
     cwd,
     stdout: "pipe",
     stderr: "pipe",
+    env: {
+      ...process.env,
+      ...getProxyEnv(),
+    },
   });
 
   const stdout = await new Response(proc.stdout).text();
@@ -28,6 +33,19 @@ async function exec(
   const exitCode = await proc.exited;
 
   return { stdout, stderr, exitCode };
+}
+
+/**
+ * Get proxy environment variables for gh CLI.
+ * Reads from GH_PROXY or standard proxy env vars.
+ */
+function getProxyEnv(): Record<string, string> {
+  const proxy = process.env.GH_PROXY;
+  if (!proxy) return {};
+  return {
+    HTTPS_PROXY: proxy,
+    HTTP_PROXY: proxy,
+  };
 }
 
 /**
