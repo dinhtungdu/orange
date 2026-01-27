@@ -26,6 +26,7 @@ describe("Task types", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
 
     expect(task.id).toBe("abc12345");
@@ -60,6 +61,7 @@ describe("Task types", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
 
     // Simulate state transitions

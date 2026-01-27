@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import type { Deps } from "../../core/types.js";
 import { MockGit } from "../../core/git.js";
+import { MockGitHub } from "../../core/github.js";
 import { MockTmux } from "../../core/tmux.js";
 import { MockClock } from "../../core/clock.js";
 import { NullLogger } from "../../core/logger.js";
@@ -60,6 +61,7 @@ describe("project add command", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -210,6 +212,7 @@ describe("project list command", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -295,6 +298,7 @@ describe("project remove command", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -376,6 +380,7 @@ describe("project command error handling", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),

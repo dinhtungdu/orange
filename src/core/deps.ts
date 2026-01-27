@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { Deps } from "./types.js";
 import { createTmux } from "./tmux.js";
 import { createGit } from "./git.js";
+import { createGitHub } from "./github.js";
 import { createClock } from "./clock.js";
 import { createLogger } from "./logger.js";
 
@@ -21,6 +22,7 @@ export function createDeps(): Deps {
   return {
     tmux: createTmux(),
     git: createGit(),
+    github: createGitHub(),
     clock: createClock(),
     logger: createLogger({ dataDir }),
     dataDir,
@@ -41,6 +43,7 @@ export function createTestDeps(overrides: Partial<Deps> | string): Deps {
   const defaults: Deps = {
     tmux: createTmux(),
     git: createGit(),
+    github: createGitHub(),
     clock: createClock(),
     logger: new NullLogger(),
     dataDir,

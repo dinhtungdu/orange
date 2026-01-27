@@ -35,44 +35,7 @@ import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
 
-/**
- * Check if a PR exists for a branch and whether it's merged.
- * Returns: { exists: false } | { exists: true, merged: boolean }
- */
-async function checkPRStatus(
-  cwd: string,
-  branch: string
-): Promise<{ exists: boolean; merged: boolean; mergeCommit?: string }> {
-  try {
-    const proc = Bun.spawn(
-      ["gh", "pr", "view", branch, "--json", "state,mergeCommit"],
-      {
-        cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
-
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      // No PR exists for this branch
-      return { exists: false, merged: false };
-    }
-
-    const stdout = await new Response(proc.stdout).text();
-    const data = JSON.parse(stdout);
-
-    const merged = data.state === "MERGED";
-    return {
-      exists: true,
-      merged,
-      mergeCommit: merged ? data.mergeCommit?.oid : undefined,
-    };
-  } catch {
-    // gh CLI not available or other error - assume no PR
-    return { exists: false, merged: false };
-  }
-}
+import { buildPRBody } from "../../core/github.js";
 
 /**
  * Run a task subcommand.
@@ -208,6 +171,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     context,
     created_at: now,
     updated_at: now,
+    pr_url: null,
   };
 
   // Create task directory
@@ -498,6 +462,7 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * Mark task as reviewed (human approved).
+ * Also pushes branch and creates a GitHub PR if gh is available.
  */
 async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
@@ -523,6 +488,15 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  // Get project for PR creation
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === task.project);
+  if (!project) {
+    log.error("Project not found for approve", { project: task.project });
+    console.error(`Project '${task.project}' not found`);
+    process.exit(1);
+  }
+
   const now = deps.clock.now();
   task.status = "reviewed";
   task.updated_at = now;
@@ -537,6 +511,56 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   log.info("Task approved", { taskId });
   console.log(`Task ${taskId} approved (reviewed)`);
+
+  // Push branch and create PR if gh is available
+  const ghAvailable = await deps.github.isAvailable();
+  if (!ghAvailable) {
+    log.debug("gh CLI not available, skipping PR creation");
+    return;
+  }
+
+  // Push from workspace
+  if (task.workspace) {
+    const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+    try {
+      log.debug("Pushing branch to remote", { branch: task.branch });
+      await deps.git.push(workspacePath);
+    } catch (err) {
+      log.warn("Push failed, skipping PR creation", { error: String(err) });
+      console.error(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+  }
+
+  // Create PR
+  try {
+    const title = task.description.split("\n")[0];
+    const body = await buildPRBody(project.path, task.description, task.context);
+
+    log.debug("Creating PR", { branch: task.branch, base: project.default_branch });
+    const prUrl = await deps.github.createPR(project.path, {
+      branch: task.branch,
+      base: project.default_branch,
+      title,
+      body,
+    });
+
+    task.pr_url = prUrl;
+    task.updated_at = deps.clock.now();
+    await saveTask(deps, task);
+    await appendHistory(deps, task.project, task.branch, {
+      type: "pr.created",
+      timestamp: deps.clock.now(),
+      url: prUrl,
+    });
+
+    log.info("PR created", { taskId, prUrl });
+    console.log(`PR created: ${prUrl}`);
+  } catch (err) {
+    log.warn("PR creation failed", { error: String(err) });
+    console.error(`PR creation failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Task is still approved, just no PR
+  }
 }
 
 /**
@@ -587,29 +611,33 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 /**
  * Merge task and cleanup.
  *
- * Auto-detects workflow:
- * 1. Check if PR exists and is merged via `gh pr view`
- * 2. If PR merged → skip local merge, use PR's merge commit
- * 3. If no PR or PR open → do local merge
- * 4. Cleanup: release workspace, delete remote branch, kill tmux session
+ * When task has pr_url:
+ * - PR merged → fetch latest, cleanup
+ * - PR still open → error (merge on GitHub or use --local)
+ * - PR closed → error
+ * - --local flag → force local merge
+ *
+ * When task has no pr_url:
+ * - Local merge + push + cleanup (original behavior)
  */
 async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
   if (parsed.args.length < 1) {
-    console.error("Usage: orange task merge <task_id> [--strategy ff|merge]");
+    console.error("Usage: orange task merge <task_id> [--strategy ff|merge] [--local]");
     process.exit(1);
   }
 
   const taskId = parsed.args[0];
   const strategy = (parsed.options.strategy as string) || "ff";
+  const forceLocal = parsed.options.local === true;
 
   if (strategy !== "ff" && strategy !== "merge") {
     console.error("Invalid merge strategy. Use 'ff' or 'merge'");
     process.exit(1);
   }
 
-  log.info("Merging task", { taskId, strategy });
+  log.info("Merging task", { taskId, strategy, forceLocal });
 
   // Find task
   const tasks = await listTasks(deps, {});
@@ -632,23 +660,43 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   let commitHash: string;
   let mergeVia: "local" | "pr" = "local";
 
-  // Check if PR exists and is already merged
-  log.debug("Checking PR status", { branch: task.branch });
-  const prStatus = await checkPRStatus(project.path, task.branch);
+  if (task.pr_url && !forceLocal) {
+    // PR-based flow: check PR status via GitHub executor
+    log.debug("Checking PR status", { branch: task.branch });
+    const prStatus = await deps.github.getPRStatus(project.path, task.branch);
 
-  if (prStatus.merged && prStatus.mergeCommit) {
-    // PR was merged on GitHub - skip local merge, use PR's merge commit
-    log.info("PR already merged on GitHub", { branch: task.branch, commit: prStatus.mergeCommit });
-    console.log(`PR for ${task.branch} already merged on GitHub`);
-    commitHash = prStatus.mergeCommit;
-    mergeVia = "pr";
+    if (!prStatus.exists) {
+      // PR was deleted or gh unavailable — fall through to local merge
+      log.warn("PR not found, falling back to local merge", { prUrl: task.pr_url });
+    } else if (prStatus.state === "MERGED" && prStatus.mergeCommit) {
+      // PR merged on GitHub
+      log.info("PR merged on GitHub", { branch: task.branch, commit: prStatus.mergeCommit });
+      console.log(`PR for ${task.branch} already merged on GitHub`);
+      commitHash = prStatus.mergeCommit;
+      mergeVia = "pr";
 
-    // Fetch to get the latest changes from merged PR
-    await deps.git.fetch(project.path);
-    await deps.git.checkout(project.path, project.default_branch);
-    await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
-  } else {
-    // No PR or PR not merged - do local merge and push
+      await deps.git.fetch(project.path);
+      await deps.git.checkout(project.path, project.default_branch);
+      await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
+
+      // Log PR merged event
+      await appendHistory(deps, task.project, task.branch, {
+        type: "pr.merged",
+        timestamp: deps.clock.now(),
+        url: task.pr_url,
+        merge_commit: commitHash,
+      });
+    } else if (prStatus.state === "OPEN") {
+      console.error(`PR is still open at ${prStatus.url ?? task.pr_url}. Merge on GitHub or use --local to merge locally.`);
+      process.exit(1);
+    } else if (prStatus.state === "CLOSED") {
+      console.error(`PR was closed without merging.`);
+      process.exit(1);
+    }
+  }
+
+  // Local merge (no PR, or PR not found, or --local)
+  if (mergeVia === "local") {
     log.debug("Performing local merge", { branch: task.branch, strategy });
     await deps.git.checkout(project.path, project.default_branch);
     await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
@@ -668,7 +716,6 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.git.deleteRemoteBranch(project.path, task.branch);
   } catch {
     log.debug("Remote branch deletion failed (may not exist)", { branch: task.branch });
-    // Ignore errors - remote branch may not exist
   }
 
   // Release workspace
@@ -695,7 +742,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   await appendHistory(deps, task.project, task.branch, {
     type: "task.merged",
     timestamp: now,
-    commit_hash: commitHash,
+    commit_hash: commitHash!,
     strategy: mergeVia === "pr" ? "merge" : (strategy as "ff" | "merge"),
   });
   await appendHistory(deps, task.project, task.branch, {
@@ -705,7 +752,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     to: "done",
   });
 
-  log.info("Task merged", { taskId, mergeVia, commitHash });
+  log.info("Task merged", { taskId, mergeVia, commitHash: commitHash! });
   const mergeMsg = mergeVia === "pr" ? "via PR" : "locally";
   console.log(`Task ${taskId} merged ${mergeMsg} and cleaned up`);
 }

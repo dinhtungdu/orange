@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Deps, Project } from "./types.js";
 import { MockGit } from "./git.js";
+import { MockGitHub } from "./github.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
 import { NullLogger } from "./logger.js";
@@ -41,6 +42,7 @@ describe("Workspace Pool", () => {
     deps = {
       tmux: new MockTmux(),
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -201,6 +203,7 @@ describe("Lazy Workspace Initialization", () => {
     deps = {
       tmux: new MockTmux(),
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),

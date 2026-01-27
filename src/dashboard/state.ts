@@ -397,6 +397,7 @@ export class DashboardState {
         context: null,
         created_at: now,
         updated_at: now,
+        pr_url: null,
       };
 
       const taskDir = getTaskDir(this.deps, project.name, finalBranch);

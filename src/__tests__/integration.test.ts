@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import type { Deps, Project } from "../core/types.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockGit } from "../core/git.js";
+import { MockGitHub } from "../core/github.js";
 import { RealClock, MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
 import { saveProjects, loadProjects, saveTask, loadTask } from "../core/state.js";
@@ -62,7 +63,8 @@ describe("Integration: Git Operations", () => {
 
     deps = {
       tmux: new MockTmux(),
-      git: new MockGit(), // Use MockGit for these tests - we're testing CWD detection, not git operations
+      git: new MockGit(),
+      github: new MockGitHub(), // Use MockGit for these tests - we're testing CWD detection, not git operations
       clock: new RealClock(),
       dataDir: join(tempDir, "orange"),
       logger: new NullLogger(),
@@ -134,6 +136,7 @@ describe("Integration: Workspace Pool", () => {
     deps = {
       tmux: new MockTmux(),
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
       logger: new NullLogger(),
@@ -225,6 +228,7 @@ describe("Integration: Full Task Lifecycle", () => {
     deps = {
       tmux: new MockTmux(),
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
       logger: new NullLogger(),
@@ -257,6 +261,7 @@ describe("Integration: Full Task Lifecycle", () => {
       context: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -285,6 +290,7 @@ describe("Integration: Full Task Lifecycle", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
     const task2 = {
       id: "task2",
@@ -297,6 +303,7 @@ describe("Integration: Full Task Lifecycle", () => {
       context: null,
       created_at: "2024-01-02T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
+      pr_url: null,
     };
 
     await saveTask(deps, task1);
@@ -320,6 +327,7 @@ describe("Integration: Full Task Lifecycle", () => {
       context: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -334,6 +342,7 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "working" as const,
       tmux_session: "test-repo/feature-y",
       updated_at: new Date().toISOString(),
+      pr_url: null,
     };
 
     await saveTask(deps, updatedTask);
@@ -357,6 +366,7 @@ describe("Integration: Multiple Projects", () => {
     deps = {
       tmux: new MockTmux(),
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: join(tempDir, "orange"),
       logger: new NullLogger(),
@@ -423,11 +433,13 @@ describe("Integration: Multiple Projects", () => {
       id: "t1", project: "repo1", branch: "feat1", status: "pending" as const,
       workspace: null, tmux_session: null, description: "Repo 1 task", context: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      pr_url: null,
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", status: "working" as const,
       workspace: null, tmux_session: null, description: "Repo 2 task", context: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      pr_url: null,
     };
 
     await saveTask(deps, task1);

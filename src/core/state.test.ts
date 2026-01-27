@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Deps, Task, Project } from "./types.js";
 import { MockGit } from "./git.js";
+import { MockGitHub } from "./github.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
 import { NullLogger } from "./logger.js";
@@ -32,6 +33,7 @@ describe("Projects state", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -89,6 +91,7 @@ describe("Task state (TASK.md)", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: mockClock,
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -111,6 +114,7 @@ describe("Task state (TASK.md)", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -135,6 +139,7 @@ describe("Task state (TASK.md)", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T01:00:00.000Z",
+      pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -160,6 +165,7 @@ describe("Task state (TASK.md)", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -186,6 +192,7 @@ describe("History (history.jsonl)", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -209,6 +216,7 @@ describe("History (history.jsonl)", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
     await saveTask(deps, task);
 
@@ -238,6 +246,7 @@ describe("History (history.jsonl)", () => {
       context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
+      pr_url: null,
     };
     await saveTask(deps, task);
 

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Deps, Task } from "./types.js";
 import { MockGit } from "./git.js";
+import { MockGitHub } from "./github.js";
 import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
 import { NullLogger } from "./logger.js";
@@ -25,6 +26,7 @@ describe("Task Queries", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(),
       logger: new NullLogger(),
       dataDir: tempDir,
@@ -46,6 +48,7 @@ describe("Task Queries", () => {
     context: null,
     created_at: "2024-01-01T00:00:00.000Z",
     updated_at: "2024-01-01T00:00:00.000Z",
+    pr_url: null,
     ...overrides,
   });
 

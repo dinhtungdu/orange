@@ -13,6 +13,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { BoxRenderable, TextRenderable } from "@opentui/core";
 import type { Deps, Task, Project } from "../core/types.js";
 import { MockGit } from "../core/git.js";
+import { MockGitHub } from "../core/github.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
@@ -30,6 +31,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   context: null,
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
+    pr_url: null,
   ...overrides,
 });
 
@@ -195,6 +197,7 @@ describe("Dashboard Visual", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       logger: new NullLogger(),
       dataDir: tempDir,

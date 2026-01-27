@@ -20,6 +20,7 @@ import type {
   AgentStoppedEvent,
 } from "../../core/types.js";
 import { MockGit } from "../../core/git.js";
+import { MockGitHub } from "../../core/github.js";
 import { MockTmux } from "../../core/tmux.js";
 import { MockClock } from "../../core/clock.js";
 import { NullLogger } from "../../core/logger.js";
@@ -55,6 +56,7 @@ describe("task create command", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -187,6 +189,7 @@ describe("task list command", () => {
     deps = {
       tmux: new MockTmux(),
       git: new MockGit(),
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -326,6 +329,7 @@ describe("task spawn command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -459,6 +463,7 @@ describe("task complete command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -546,6 +551,7 @@ describe("task stuck command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -617,6 +623,7 @@ describe("task merge command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -722,6 +729,7 @@ describe("task cancel command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -812,6 +820,7 @@ describe("task delete command", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),
@@ -960,6 +969,7 @@ describe("MockTmux availability", () => {
     deps = {
       tmux: mockTmux,
       git: mockGit,
+      github: new MockGitHub(),
       clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
       dataDir: tempDir,
       logger: new NullLogger(),

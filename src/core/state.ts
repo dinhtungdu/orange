@@ -100,6 +100,7 @@ export async function loadTask(
       context: ctx,
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
+      pr_url: (data.pr_url as string) ?? null,
     };
   } catch {
     return null;
@@ -113,7 +114,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
   const taskDir = getTaskDir(deps, task.project, task.branch);
   await mkdir(taskDir, { recursive: true });
 
-  const frontmatter = {
+  const frontmatter: Record<string, unknown> = {
     id: task.id,
     project: task.project,
     branch: task.branch,
@@ -123,6 +124,9 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     created_at: task.created_at,
     updated_at: task.updated_at,
   };
+  if (task.pr_url) {
+    frontmatter.pr_url = task.pr_url;
+  }
 
   // Combine description and context in body
   const body = task.context

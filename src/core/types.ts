@@ -50,6 +50,8 @@ export interface Task {
   created_at: string;
   /** ISO 8601 timestamp of last update */
   updated_at: string;
+  /** GitHub PR URL, null if no PR created */
+  pr_url: string | null;
 }
 
 /**
@@ -138,6 +140,36 @@ export interface GitExecutor {
 }
 
 /**
+ * PR status from GitHub.
+ */
+export interface PRStatus {
+  exists: boolean;
+  url?: string;
+  state?: "OPEN" | "CLOSED" | "MERGED";
+  mergeCommit?: string;
+  /** CI check rollup */
+  checks?: "pending" | "pass" | "fail" | "none";
+  /** Review decision */
+  reviewDecision?: string;
+}
+
+/**
+ * GitHubExecutor interface for GitHub CLI operations.
+ * Abstracted to support both real gh CLI and mock implementations for testing.
+ */
+export interface GitHubExecutor {
+  /** Check if gh CLI is available and authenticated */
+  isAvailable(): Promise<boolean>;
+  /** Create a PR. Returns PR URL. */
+  createPR(
+    cwd: string,
+    opts: { branch: string; base: string; title: string; body: string }
+  ): Promise<string>;
+  /** Get PR status for a branch */
+  getPRStatus(cwd: string, branch: string): Promise<PRStatus>;
+}
+
+/**
  * Clock interface for time operations.
  * Abstracted to support deterministic time in tests.
  */
@@ -168,6 +200,8 @@ export interface Deps {
   tmux: TmuxExecutor;
   /** Git operations */
   git: GitExecutor;
+  /** GitHub CLI operations */
+  github: GitHubExecutor;
   /** Time operations */
   clock: Clock;
   /** Structured logger */
@@ -209,7 +243,9 @@ export type HistoryEventType =
   | "agent.stopped"
   | "status.changed"
   | "task.merged"
-  | "task.cancelled";
+  | "task.cancelled"
+  | "pr.created"
+  | "pr.merged";
 
 /**
  * Base history event structure.
@@ -301,6 +337,23 @@ export interface TaskCancelledEvent extends HistoryEventBase {
 }
 
 /**
+ * PR created event.
+ */
+export interface PRCreatedEvent extends HistoryEventBase {
+  type: "pr.created";
+  url: string;
+}
+
+/**
+ * PR merged event.
+ */
+export interface PRMergedEvent extends HistoryEventBase {
+  type: "pr.merged";
+  url: string;
+  merge_commit: string;
+}
+
+/**
  * Union type of all history events.
  */
 export type HistoryEvent =
@@ -312,7 +365,9 @@ export type HistoryEvent =
   | AgentStoppedEvent
   | StatusChangedEvent
   | TaskMergedEvent
-  | TaskCancelledEvent;
+  | TaskCancelledEvent
+  | PRCreatedEvent
+  | PRMergedEvent;
 
 /**
  * Agent task outcome written to .orange-task file.
