@@ -128,6 +128,10 @@ export interface GitExecutor {
   isDirty(cwd: string): Promise<boolean>;
   /** Push current branch to remote */
   push(cwd: string, remote?: string): Promise<void>;
+  /** Get diff stats (lines added/removed) vs a base ref */
+  getDiffStats(cwd: string, base: string): Promise<{ added: number; removed: number }>;
+  /** Get number of commits ahead of a base ref */
+  getCommitCount(cwd: string, base: string): Promise<number>;
 }
 
 /**

@@ -19,6 +19,8 @@ import chalk from "chalk";
 import type { Deps, Task, TaskStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
+import { loadProjects } from "../core/state.js";
+import { getWorkspacePath } from "../core/workspace.js";
 
 /**
  * Clean up nested error messages for display.
@@ -167,6 +169,7 @@ interface DashboardState {
   statusFilter: StatusFilter;
   projectFilter: string | null;  // null = global view
   projectLabel: string;  // Display label for header
+  diffStats: Map<string, { added: number; removed: number; commits: number }>;
 }
 
 /**
@@ -187,6 +190,7 @@ export class DashboardComponent implements Component {
     statusFilter: "all",
     projectFilter: null,
     projectLabel: "all",
+    diffStats: new Map(),
   };
 
   private deps: Deps;
@@ -306,10 +310,42 @@ export class DashboardComponent implements Component {
       if (this.state.cursor >= this.state.tasks.length) {
         this.state.cursor = Math.max(0, this.state.tasks.length - 1);
       }
+
+      // Refresh diff stats in background (non-blocking)
+      this.refreshDiffStats();
     } catch (err) {
       this.state.error =
         err instanceof Error ? err.message : "Failed to load tasks";
     }
+  }
+
+  private async refreshDiffStats(): Promise<void> {
+    const projects = await loadProjects(this.deps);
+    const projectMap = new Map(projects.map((p) => [p.name, p]));
+
+    await Promise.all(
+      this.state.tasks.map(async (task) => {
+        if (!task.workspace) return;
+        const project = projectMap.get(task.project);
+        if (!project) return;
+
+        try {
+          const cwd = getWorkspacePath(this.deps, task.workspace);
+          const [diff, commits] = await Promise.all([
+            this.deps.git.getDiffStats(cwd, project.default_branch),
+            this.deps.git.getCommitCount(cwd, project.default_branch),
+          ]);
+          this.state.diffStats.set(task.id, {
+            added: diff.added,
+            removed: diff.removed,
+            commits,
+          });
+        } catch {
+          // Workspace may not exist (done/failed tasks)
+        }
+      })
+    );
+    this.tui?.requestRender();
   }
 
   private applyStatusFilter(): void {
@@ -758,7 +794,9 @@ export class DashboardComponent implements Component {
     // Column widths (adjust based on terminal width)
     const colActivity = 9;  // "12h ago" + padding
     const colStatus = 12;   // "needs_human" is longest
-    const colTask = Math.max(20, width - colStatus - colActivity - 4); // rest for task
+    const colCommits = 8;   // "999" + padding
+    const colChanges = 14;  // "+1234 -5678" + padding
+    const colTask = Math.max(20, width - colStatus - colCommits - colChanges - colActivity - 4);
 
     // Header with project and filter indicator
     const statusLabel = this.state.statusFilter === "all"
@@ -770,9 +808,11 @@ export class DashboardComponent implements Component {
     lines.push(chalk.bold.cyan(` ${header}`));
     
     // Column headers
-    const headerLine = " " + 
+    const headerLine = " " +
       this.fitWidth(chalk.dim("Task"), colTask) +
       this.fitWidth(chalk.dim("Status"), colStatus) +
+      this.fitWidth(chalk.dim("Commits"), colCommits) +
+      this.fitWidth(chalk.dim("Changes"), colChanges) +
       this.fitWidth(chalk.dim("Activity"), colActivity, "right");
     lines.push(headerLine);
     lines.push(chalk.dim("─".repeat(width)));
@@ -822,10 +862,23 @@ export class DashboardComponent implements Component {
           statusCol = "processing…";
         }
 
+        // Diff stats columns
+        const stats = this.state.diffStats.get(task.id);
+        const commitsCol = stats && stats.commits > 0 ? String(stats.commits) : "";
+        let changesCol = "";
+        if (stats && (stats.added > 0 || stats.removed > 0)) {
+          const parts: string[] = [];
+          if (stats.added > 0) parts.push(chalk.green(`+${stats.added}`));
+          if (stats.removed > 0) parts.push(chalk.red(`-${stats.removed}`));
+          changesCol = parts.join(" ");
+        }
+
         // Build the row
         let row = " " +
           this.fitWidth(color(taskCol), colTask) +
           this.fitWidth(color(statusCol), colStatus) +
+          this.fitWidth(commitsCol, colCommits) +
+          this.fitWidth(changesCol, colChanges) +
           this.fitWidth(chalk.dim(activity), colActivity, "right");
 
         if (selected) {

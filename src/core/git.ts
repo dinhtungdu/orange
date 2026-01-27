@@ -174,6 +174,34 @@ export class RealGit implements GitExecutor {
   async push(cwd: string, remote: string = "origin"): Promise<void> {
     await exec("git", ["push", remote], cwd);
   }
+
+  async getDiffStats(cwd: string, base: string): Promise<{ added: number; removed: number }> {
+    const { stdout, exitCode } = await exec(
+      "git",
+      ["diff", "--numstat", `${base}...HEAD`],
+      cwd
+    );
+    if (exitCode !== 0) return { added: 0, removed: 0 };
+    let added = 0, removed = 0;
+    for (const line of stdout.trim().split("\n")) {
+      if (!line) continue;
+      const [a, r] = line.split("\t");
+      // Binary files show "-" for stats
+      if (a !== "-") added += parseInt(a, 10) || 0;
+      if (r !== "-") removed += parseInt(r, 10) || 0;
+    }
+    return { added, removed };
+  }
+
+  async getCommitCount(cwd: string, base: string): Promise<number> {
+    const { stdout, exitCode } = await exec(
+      "git",
+      ["rev-list", "--count", `${base}..HEAD`],
+      cwd
+    );
+    if (exitCode !== 0) return 0;
+    return parseInt(stdout.trim(), 10) || 0;
+  }
 }
 
 /**
@@ -305,6 +333,14 @@ export class MockGit implements GitExecutor {
 
   async push(_cwd: string, _remote: string = "origin"): Promise<void> {
     // No-op in mock
+  }
+
+  async getDiffStats(_cwd: string, _base: string): Promise<{ added: number; removed: number }> {
+    return { added: 0, removed: 0 };
+  }
+
+  async getCommitCount(_cwd: string, _base: string): Promise<number> {
+    return 0;
   }
 
   /**
