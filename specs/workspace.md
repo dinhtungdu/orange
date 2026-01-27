@@ -26,6 +26,8 @@ git -C /path/to/source worktree add --detach ~/orange/workspaces/coffee--1 origi
 
 **Why detached?** Git doesn't allow the same branch to be checked out in multiple worktrees. Since the user runs `orange start` from the project directory (which has `main` checked out), we can't create worktrees that also checkout `main`. Using `--detach` at `origin/main` avoids this limitation.
 
+On creation, each worktree also gets `.claude/settings.local.json` with agent permissions.
+
 ## Pool Status
 
 ```
@@ -73,26 +75,23 @@ async function acquireWorkspace(project: string): Promise<string> {
 async function releaseWorkspace(workspace: string): Promise<void> {
   const release = await lockfile.lock(POOL_LOCK);
   try {
-    // Clean workspace - return to detached HEAD at origin/main
-    execSync(`git -C ${workspacePath} checkout origin/main && git -C ${workspacePath} clean -fd`);
+    // Fail if workspace has uncommitted changes
+    if (await git.isDirty(workspacePath)) {
+      throw new Error("Workspace has uncommitted changes");
+    }
 
-    const pool = JSON.parse(fs.readFileSync(POOL_FILE, 'utf8'));
-    pool.workspaces[workspace].status = 'available';
-    pool.workspaces[workspace].task = null;
-    fs.writeFileSync(POOL_FILE, JSON.stringify(pool, null, 2));
+    // Clean workspace - reset to origin/default_branch, clean untracked
+    await git.fetch(workspacePath);
+    await git.resetHard(workspacePath, `origin/${defaultBranch}`);
+    await git.clean(workspacePath);
+
+    pool.workspaces[workspace] = { status: 'available' };
   } finally {
     await release();
   }
 
-  // Auto-spawn next pending task for this project
+  // Auto-spawn next pending task for this project (FIFO)
   await spawnNextPending(project);
-}
-
-async function spawnNextPending(project: string): Promise<void> {
-  const pending = await getTasksByStatus(project, 'pending');
-  if (pending.length > 0) {
-    await spawnTask(pending[0].id);  // FIFO
-  }
 }
 ```
 

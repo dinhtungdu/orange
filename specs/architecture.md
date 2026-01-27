@@ -68,33 +68,32 @@ src/
 ├── index.ts           # Entry point
 ├── cli/
 │   ├── args.ts        # Argument parsing
-│   ├── commands/      # CLI commands
-│   │   ├── project.ts # project add/list
-│   │   ├── task.ts    # task create/spawn/list/merge
-│   │   ├── workspace.ts # workspace init/list
-│   │   └── start.ts   # start orchestrator session
-│   └── index.ts
+│   └── commands/
+│       ├── install.ts   # install skill
+│       ├── log.ts       # orange log (structured logger output)
+│       ├── project.ts   # project add/list/remove
+│       ├── start.ts     # start orchestrator session
+│       ├── task.ts      # task create/spawn/list/merge/cancel/delete/log/respawn
+│       └── workspace.ts # workspace init/list
 ├── dashboard/
-│   ├── index.ts       # Dashboard TUI
-│   ├── components/
-│   │   ├── task-list.ts
-│   │   ├── task-row.ts
-│   │   └── status-bar.ts
-│   └── state.ts
+│   └── index.ts       # Dashboard TUI (single file)
 ├── core/
-│   ├── state.ts       # Task/project state management
+│   ├── agent.ts       # Agent prompt generation
+│   ├── clock.ts       # Clock abstraction (real + mock)
+│   ├── cwd.ts         # CWD project detection
+│   ├── db.ts          # Task queries (list, getById)
+│   ├── deps.ts        # Dependency injection container
+│   ├── git.ts         # Git abstraction (real + mock)
+│   ├── logger.ts      # Structured JSON logger
+│   ├── spawn.ts       # Task spawning logic
+│   ├── state.ts       # Task/project state persistence
 │   ├── tmux.ts        # tmux abstraction
-│   ├── workspace.ts   # Workspace pool management
-│   └── types.ts       # Shared types
-└── utils/
-    └── index.ts
+│   ├── types.ts       # Shared types (Deps, Task, Project, interfaces)
+│   └── workspace.ts   # Workspace pool management
 
 skills/
 └── orchestrator/
     └── SKILL.md       # Orchestrator skill (symlinked to ~/.claude/skills/orange-orchestrator)
-
-package.json
-tsconfig.json
 ```
 
 ## Build & Development

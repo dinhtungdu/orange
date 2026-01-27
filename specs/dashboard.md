@@ -25,20 +25,22 @@ Table format with columns:
 
 ```
  Orange Dashboard (all) [active]
- Task                          Status       Activity
-────────────────────────────────────────────────────────
- ● coffee/login-fix            working       2m ago
+ Task                          Status       Commits  Changes        Activity
+──────────────────────────────────────────────────────────────────────────────
+ ● coffee/login-fix            working      3        +144 -12        2m ago
  └ Fix OAuth redirect loop on mobile
- ✗ coffee/crashed-task         dead         10m ago
- ◉ coffee/password-reset       needs_human  15m ago
- ✓ orange/dark-mode            done          1h ago
-────────────────────────────────────────────────────────
+ ✗ coffee/crashed-task         dead                                 10m ago
+ ◉ coffee/password-reset       needs_human  7        +89 -34        15m ago
+ ✓ orange/dark-mode            done                                  1h ago
+──────────────────────────────────────────────────────────────────────────────
  j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit
 ```
 
 **Columns:**
 - Task: status icon + project/branch (or just branch if project-scoped)
 - Status: working/needs_human/stuck/done/failed/pending/dead
+- Commits: number of commits ahead of default branch (blank if none)
+- Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
 - Activity: relative time since last update (2m ago, 3h ago)
 
 **Selected row** shows description underneath.

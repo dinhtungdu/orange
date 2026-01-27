@@ -13,7 +13,7 @@ All data in `~/orange/`.
     └── <project>/
         └── <branch>/
             ├── TASK.md         # Description, metadata
-            ├── output.log      # Terminal output (script capture)
+            ├── log.txt         # Conversation log (snapshotted on merge/cancel)
             └── history.jsonl   # Event log
 ```
 
@@ -42,13 +42,15 @@ status: working
 workspace: orange--1
 tmux_session: orange/dark-mode
 created_at: 2024-01-15T10:00:00Z
+updated_at: 2024-01-15T10:30:00Z
 ---
 
 Add dark mode support with system preference detection.
 
-- Toggle in settings
-- Persist preference
-- Match system theme by default
+---
+
+Optional implementation context (separated by `---`).
+Piped via `--context -` on task create.
 ```
 
 **history.jsonl** - Append-only event log (source of truth):

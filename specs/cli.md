@@ -9,11 +9,11 @@ orange project list
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create <branch> <description>
+orange task create <branch> <description> [--context -] [--no-spawn] [--project <name>]
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>        # Attach to running session
-orange task log <task_id>           # View output log
+orange task log <task_id> [--lines N]  # View conversation log
 orange task respawn <task_id>       # Restart dead session
 orange task complete <task_id>      # Called by hook → needs_human
 orange task stuck <task_id>         # Called by hook → stuck
@@ -46,9 +46,22 @@ orange task attach abc123
 # Attaches to tmux session, press Ctrl+b d to detach
 ```
 
+### orange task create <branch> <description>
+
+Creates a task and auto-spawns an agent (unless `--no-spawn`).
+
+```bash
+orange task create login-fix "Fix OAuth redirect loop"
+orange task create login-fix "Fix OAuth" --no-spawn       # Create without spawning
+echo "detailed context" | orange task create login-fix "Fix OAuth" --context -  # Pipe context from stdin
+orange task create login-fix "Fix OAuth" --project coffee  # Explicit project
+```
+
+Branch auto-deduplication: if `login-fix` exists, uses `login-fix-2`, etc.
+
 ### orange task log <task_id>
 
-View the output log for a task. Works for any task with an output.log file.
+View agent conversation log. Reads from snapshotted `log.txt` first, falls back to live Claude session files.
 
 ```bash
 orange task log abc123           # Show full log

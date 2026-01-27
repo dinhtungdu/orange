@@ -13,51 +13,55 @@ cd $workspace
 git fetch origin
 git checkout -b $branch origin/$default_branch
 
-# 3. Write .orange-task file for hook integration
-echo '{"id":"$TASK_ID"}' > .orange-task
+# 3. Symlink TASK.md from task dir to worktree
+# 4. Write .orange-outcome file for hook integration
+echo '{"id":"$TASK_ID"}' > .orange-outcome
+# 5. Add TASK.md and .orange-outcome to .git/info/exclude
 
-# 4. Create tmux session with output logging
+# 6. Create tmux session
 session_name="$project/$branch"
-log_file="~/orange/tasks/$project/$branch/output.log"
 tmux new-session -d -s "$session_name" -c "$workspace" \
-  "script -q -a $log_file bash -c 'claude --prompt \"$AGENT_PROMPT\"; exec $SHELL'"
+  "claude --dangerously-skip-permissions \"$AGENT_PROMPT\""
 
-# 5. Update task metadata
-# - TASK.md: workspace, tmux_session
-# - history.jsonl: agent.spawned event
+# 7. Update task metadata
+# - TASK.md: workspace, tmux_session, status → working
+# - history.jsonl: agent.spawned, status.changed events
 ```
-
-**Shell fallback:** When agent exits, drops to user's shell (via `exec $SHELL`) so humans can review output and run commands. Output captured to `output.log` for later review.
 
 ## 2. Agent Prompt
 
-Injected via `--prompt`:
+Injected as first argument to `claude --dangerously-skip-permissions`:
 
 ```
-You are working on: $description
+# Task: $description
 
 Project: $project
 Branch: $branch
-Worktree: $worktree
 
-Instructions:
-1. Read CLAUDE.md for project context
-2. Implement the task
-3. Run tests and lint
-4. Self-review by spawning a review subagent:
-   claude --print --prompt "Review the changes in this branch..."
-5. If review finds issues → fix them → re-review
-6. Max 3 review attempts. If still failing, mark as stuck.
-7. Before stopping, write outcome to .orange-task:
-   - Passed: {"id":"$TASK_ID","outcome":"passed"}
-   - Stuck: {"id":"$TASK_ID","outcome":"stuck","reason":"..."}
-8. Only stop when review passes OR you're stuck.
+## Workflow
 
-Important:
-- Commit changes with descriptive messages
-- Do not push - merge handled by orchestrator
-- Write .orange-task BEFORE stopping so hook can read outcome
+1. Read TASK.md for task description and implementation context
+2. Read CLAUDE.md for project conventions
+3. Implement the task
+4. Run tests and lint
+5. Self-review using /code-review skill
+6. If review finds issues, fix and re-review (max 2 attempts)
+7. Write outcome to .orange-outcome before stopping
+
+## Rules
+
+- Commit with descriptive messages, keep commits atomic
+- Do not push - orchestrator handles merge
+- Write .orange-outcome BEFORE stopping so hook can read it
+
+## Outcome Format
+
+Write to .orange-outcome:
+- Passed: {"id":"$TASK_ID","outcome":"passed"}
+- Stuck (after 2 failed reviews): {"id":"$TASK_ID","outcome":"stuck","reason":"..."}
 ```
+
+**Respawn prompt** (for dead sessions) checks `.orange-outcome` first — if already passed, writes `needs_human` and stops immediately. Otherwise continues implementation. Uses `--permission-mode acceptEdits` instead of `--dangerously-skip-permissions`.
 
 ## 3. Self-Review Loop
 
@@ -67,15 +71,15 @@ Agent handles review internally:
 ┌──────────────────────────────────────────────────┐
 │                  Agent Session                   │
 │                                                  │
-│  implement → spawn review subagent → feedback    │
+│  implement → /code-review skill → feedback       │
 │                                         ↓        │
 │                                   pass? ─────→ stop
 │                                         ↓        │
-│                                   fail + <3      │
+│                                   fail + <2      │
 │                                         ↓        │
 │                                   fix → re-review│
 │                                         ↓        │
-│                                   fail + ≥3      │
+│                                   fail + ≥2      │
 │                                         ↓        │
 │                                   stop (stuck)   │
 └──────────────────────────────────────────────────┘
@@ -86,16 +90,18 @@ Agent handles review internally:
 Agent writes outcome before stopping:
 
 ```bash
-echo '{"id":"abc123","outcome":"passed"}' > .orange-task
+echo '{"id":"abc123","outcome":"passed"}' > .orange-outcome
 ```
+
+Supported outcomes: `passed`, `stuck`, `needs_human`
 
 Claude's stop hook notifies orange:
 
 ```bash
 # ~/.claude/hooks/stop.sh
-if [[ -f .orange-task ]]; then
-  TASK_ID=$(grep -o '"id":"[^"]*"' .orange-task | cut -d'"' -f4)
-  OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-task | cut -d'"' -f4)
+if [[ -f .orange-outcome ]]; then
+  TASK_ID=$(jq -r .id .orange-outcome)
+  OUTCOME=$(jq -r .outcome .orange-outcome)
 
   if [[ "$OUTCOME" == "passed" ]]; then
     orange task complete "$TASK_ID"
@@ -120,9 +126,6 @@ fi
    - PR workflow: merge on GitHub, then `m` to cleanup
 5. Workspace returned to pool, session killed
 
-## 6. Output Logging
+## 6. Logging
 
-All terminal output captured to `~/orange/tasks/<project>/<branch>/output.log`:
-- Uses `script` command for full terminal capture
-- Persists after session ends
-- View with `orange task log <id>` or `l` in dashboard
+Agent conversation logs read from Claude's session files (`~/.claude/projects/*/sessions/`). On merge/cancel, log is snapshotted to `~/orange/tasks/<project>/<branch>/log.txt` so it survives workspace reuse. View with `orange task log <id>` or `l` in dashboard.
