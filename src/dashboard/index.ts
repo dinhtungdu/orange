@@ -33,7 +33,7 @@ export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
 
 // Column widths (fixed)
-const COL_STATUS = 22;
+const COL_STATUS = 16;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
@@ -332,14 +332,17 @@ function buildDashboard(
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
         const prStatus = s.prStatuses.get(task.id);
-        if (prNum) statusCol += ` #${prNum}`;
-        if (prStatus?.state === "MERGED") {
-          statusCol += " merged";
-        } else if (prStatus?.state === "CLOSED") {
-          statusCol += " closed";
-        } else if (prStatus?.checks) {
-          const checksIcon = CHECKS_ICON[prStatus.checks];
-          if (checksIcon) statusCol += ` ${checksIcon}`;
+        if (prNum && prStatus) {
+          const checksIcon = prStatus.checks ? CHECKS_ICON[prStatus.checks] : "";
+          if (prStatus.state === "MERGED") {
+            statusCol = `#${prNum} merged`;
+          } else if (prStatus.state === "CLOSED") {
+            statusCol = `#${prNum} closed`;
+          } else {
+            statusCol = checksIcon ? `#${prNum} open ${checksIcon}` : `#${prNum} open`;
+          }
+        } else if (prNum) {
+          statusCol += ` #${prNum}`;
         }
       }
       if (pending) statusCol = "processing…";
