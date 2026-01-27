@@ -16,7 +16,6 @@ import {
   createCliRenderer,
   BoxRenderable,
   TextRenderable,
-  RGBA,
   type CliRenderer,
   type KeyEvent,
 } from "@opentui/core";
@@ -31,6 +30,118 @@ import {
 // Re-export for external use and tests
 export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
+
+// Column widths (fixed)
+const COL_STATUS = 12;
+const COL_COMMITS = 8;
+const COL_CHANGES = 14;
+const COL_ACTIVITY = 9;
+const FIXED_COLS = COL_STATUS + COL_COMMITS + COL_CHANGES + COL_ACTIVITY;
+
+/** Create a flex row (horizontal box) with table cells. */
+function createTableRow(
+  renderer: CliRenderer,
+  id: string,
+  opts: {
+    task: string;
+    taskColor: string;
+    status: string;
+    statusColor: string;
+    commits: string;
+    changes: string;
+    changesAdded: string;
+    changesRemoved: string;
+    activity: string;
+    selected?: boolean;
+  }
+): BoxRenderable {
+  const row = new BoxRenderable(renderer, {
+    id,
+    flexDirection: "row",
+    width: "100%",
+    paddingLeft: 1,
+    backgroundColor: opts.selected ? "#333366" : "transparent",
+  });
+
+  // Task column: flex-grows to fill remaining space
+  const taskCell = new TextRenderable(renderer, {
+    id: `${id}-task`,
+    content: opts.task,
+    fg: opts.taskColor,
+    flexGrow: 1,
+    flexShrink: 1,
+  });
+
+  // Status column: fixed width
+  const statusCell = new TextRenderable(renderer, {
+    id: `${id}-status`,
+    content: opts.status,
+    fg: opts.statusColor,
+    width: COL_STATUS,
+  });
+
+  // Commits column: fixed width
+  const commitsCell = new TextRenderable(renderer, {
+    id: `${id}-commits`,
+    content: opts.commits,
+    fg: "#CCCCCC",
+    width: COL_COMMITS,
+  });
+
+  // Changes column: fixed width, colored parts
+  // We show "+N -M" as a single string; coloring per-part would need two cells
+  // For now use added color if only adds, removed if only removes, white if both
+  let changesText = "";
+  let changesColor = "#CCCCCC";
+  if (opts.changesAdded && opts.changesRemoved) {
+    changesText = `${opts.changesAdded} ${opts.changesRemoved}`;
+  } else if (opts.changesAdded) {
+    changesText = opts.changesAdded;
+    changesColor = "#44FF44";
+  } else if (opts.changesRemoved) {
+    changesText = opts.changesRemoved;
+    changesColor = "#FF4444";
+  }
+  const changesCell = new TextRenderable(renderer, {
+    id: `${id}-changes`,
+    content: changesText,
+    fg: changesColor,
+    width: COL_CHANGES,
+  });
+
+  // Activity column: fixed width, right-aligned not easily done per-cell,
+  // but we can pad the content
+  const activityCell = new TextRenderable(renderer, {
+    id: `${id}-activity`,
+    content: opts.activity,
+    fg: "#888888",
+    width: COL_ACTIVITY,
+  });
+
+  row.add(taskCell);
+  row.add(statusCell);
+  row.add(commitsCell);
+  row.add(changesCell);
+  row.add(activityCell);
+
+  return row;
+}
+
+/** Create the column header row. */
+function createHeaderRow(renderer: CliRenderer): BoxRenderable {
+  return createTableRow(renderer, "col-headers", {
+    task: "Task",
+    taskColor: "#666666",
+    status: "Status",
+    statusColor: "#666666",
+    commits: "Commits",
+    changes: "Changes",
+    changesAdded: "",
+    changesRemoved: "",
+    activity: "Activity",
+    selected: false,
+  });
+}
 
 /**
  * Build the full dashboard UI.
@@ -57,12 +168,8 @@ function buildDashboard(
     fg: "#00DDFF",
   });
 
-  // --- Column headers ---
-  const colHeaders = new TextRenderable(renderer, {
-    id: "col-headers",
-    content: "",
-    fg: "#666666",
-  });
+  // --- Column headers (flex row) ---
+  const colHeaderRow = createHeaderRow(renderer);
 
   // --- Separator ---
   const separator = new TextRenderable(renderer, {
@@ -92,19 +199,6 @@ function buildDashboard(
     width: "100%",
   });
 
-  // --- Footer ---
-  const footerSep = new TextRenderable(renderer, {
-    id: "footer-sep",
-    content: "",
-    fg: "#444444",
-  });
-
-  const footerKeys = new TextRenderable(renderer, {
-    id: "footer-keys",
-    content: "",
-    fg: "#888888",
-  });
-
   // --- Create form container ---
   const createForm = new BoxRenderable(renderer, {
     id: "create-form",
@@ -131,9 +225,22 @@ function buildDashboard(
   createForm.add(createBranchLabel);
   createForm.add(createDescLabel);
 
+  // --- Footer ---
+  const footerSep = new TextRenderable(renderer, {
+    id: "footer-sep",
+    content: "",
+    fg: "#444444",
+  });
+
+  const footerKeys = new TextRenderable(renderer, {
+    id: "footer-keys",
+    content: "",
+    fg: "#888888",
+  });
+
   // Assemble tree
   root.add(header);
-  root.add(colHeaders);
+  root.add(colHeaderRow);
   root.add(separator);
   root.add(errorText);
   root.add(messageText);
@@ -143,7 +250,7 @@ function buildDashboard(
   root.add(footerKeys);
   renderer.root.add(root);
 
-  // Track task row renderables for reuse
+  // Track task row renderables for cleanup
   let taskRows: BoxRenderable[] = [];
 
   function update() {
@@ -157,11 +264,6 @@ function buildDashboard(
         ? `Orange Dashboard (all)${statusLabel}`
         : `${s.projectLabel}${statusLabel}`;
     header.content = ` ${headerLabel}`;
-
-    // Column headers
-    const colTask = Math.max(20, width - 44);
-    colHeaders.content =
-      ` ${"Task".padEnd(colTask)}${"Status".padEnd(12)}${"Commits".padEnd(8)}${"Changes".padEnd(14)}${"Activity".padStart(9)}`;
 
     // Separator
     separator.content = "─".repeat(width);
@@ -192,7 +294,6 @@ function buildDashboard(
     footerKeys.content = keys.length > width ? keys.slice(0, width - 1) + "…" : keys;
 
     // --- Task rows ---
-    // Remove old rows
     for (const row of taskRows) {
       row.destroy();
     }
@@ -231,35 +332,33 @@ function buildDashboard(
 
       const stats = s.diffStats.get(task.id);
       const commitsCol = stats && stats.commits > 0 ? String(stats.commits) : "";
-      let changesCol = "";
-      if (stats && (stats.added > 0 || stats.removed > 0)) {
-        const parts: string[] = [];
-        if (stats.added > 0) parts.push(`+${stats.added}`);
-        if (stats.removed > 0) parts.push(`-${stats.removed}`);
-        changesCol = parts.join(" ");
-      }
+      const changesAdded = stats && stats.added > 0 ? `+${stats.added}` : "";
+      const changesRemoved = stats && stats.removed > 0 ? `-${stats.removed}` : "";
 
-      // Build row text
-      const taskColW = Math.max(20, width - 44);
-      const taskText = `${icon} ${taskName}`;
-      const rowContent =
-        ` ${taskText.padEnd(taskColW)}${statusCol.padEnd(12)}${commitsCol.padEnd(8)}${changesCol.padEnd(14)}${activity.padStart(9)}`;
-
+      // Outer container for row + description
       const rowContainer = new BoxRenderable(renderer, {
         id: `task-row-${i}`,
         flexDirection: "column",
         width: "100%",
-        backgroundColor: selected ? "#333366" : "transparent",
       });
 
-      const rowText = new TextRenderable(renderer, {
-        id: `task-text-${i}`,
-        content: rowContent,
-        fg: color,
+      // Table row with flex columns
+      const tableRow = createTableRow(renderer, `task-cells-${i}`, {
+        task: `${icon} ${taskName}`,
+        taskColor: color,
+        status: statusCol,
+        statusColor: color,
+        commits: commitsCol,
+        changes: "",
+        changesAdded,
+        changesRemoved,
+        activity,
+        selected,
       });
-      rowContainer.add(rowText);
 
-      // Show description for selected task
+      rowContainer.add(tableRow);
+
+      // Description for selected task
       if (selected) {
         const descMaxLen = width - 4;
         const desc =
@@ -320,7 +419,6 @@ export async function runDashboard(
       } else if (name === "backspace") {
         state.handleInput("backspace");
       } else if (key.sequence && key.sequence.length === 1 && key.sequence >= " ") {
-        // Printable character
         state.handleInput(key.sequence);
       }
       return;
