@@ -1,8 +1,6 @@
 # Orange Architecture
 
-Agent orchestration system in TypeScript. Chat with orchestrator → agents work in parallel → auto-review → human review.
-
-**Stack:** TypeScript, pi-tui, tmux
+Agent orchestration system. Chat with orchestrator, agents work in parallel, auto-review, human review.
 
 ## Specs
 
@@ -39,165 +37,64 @@ tmux sessions (per-project orchestrators):
 ```
 
 **Session naming:**
-- `<project>-orchestrator` - Per-project orchestrator + scoped dashboard (e.g., `coffee-orchestrator`)
-- `<project>/<branch>` - Task sessions (e.g., `coffee/login-fix`)
+- `<project>-orchestrator` — per-project orchestrator + scoped dashboard
+- `<project>/<branch>` — task sessions
 
 ## Flow
 
 1. **Chat with orchestrator**: Describe tasks
 2. **Orchestrator plans**: Breaks down, asks questions
 3. **Approve plan**
-4. **Agents spawn**: One tmux session + worktree + claude per task
+4. **Agents spawn**: One tmux session + worktree + Claude per task
 5. **Agents work**: Visible in dashboard (includes self-review loop)
 6. **Agent stops**: Review passed → hook marks `needs_human`
 7. **Human reviews**: Attach to session, review, merge
 
 ## Components
 
-| Component | Binary/File | Description |
-|-----------|-------------|-------------|
-| CLI + Dashboard | `orange` | TypeScript - unified binary (pi-tui) |
-| Skills | `skills/<name>/SKILL.md` | Claude skills (installed to ~/.claude/skills/orange-<name>) |
+| Component | Description |
+|-----------|-------------|
+| CLI + Dashboard | Unified binary — CLI commands and TUI dashboard |
+| Skills | Claude skills (installed to `~/.claude/skills/orange-<name>`) |
 
-**Single TypeScript binary** - CLI commands and dashboard in one.
+## Modules
 
-## Project Structure
-
-```
-src/
-├── index.ts           # Entry point
-├── cli/
-│   ├── args.ts        # Argument parsing
-│   └── commands/
-│       ├── install.ts   # install skill
-│       ├── log.ts       # orange log (structured logger output)
-│       ├── project.ts   # project add/list/remove
-│       ├── start.ts     # start orchestrator session
-│       ├── task.ts      # task create/spawn/list/merge/cancel/delete/log/respawn
-│       └── workspace.ts # workspace init/list
-├── dashboard/
-│   └── index.ts       # Dashboard TUI (single file)
-├── core/
-│   ├── agent.ts       # Agent prompt generation
-│   ├── clock.ts       # Clock abstraction (real + mock)
-│   ├── cwd.ts         # CWD project detection
-│   ├── db.ts          # Task queries (list, getById)
-│   ├── deps.ts        # Dependency injection container
-│   ├── git.ts         # Git abstraction (real + mock)
-│   ├── logger.ts      # Structured JSON logger
-│   ├── spawn.ts       # Task spawning logic
-│   ├── state.ts       # Task/project state persistence
-│   ├── tmux.ts        # tmux abstraction
-│   ├── types.ts       # Shared types (Deps, Task, Project, interfaces)
-│   └── workspace.ts   # Workspace pool management
-
-skills/
-└── orchestrator/
-    └── SKILL.md       # Orchestrator skill (symlinked to ~/.claude/skills/orange-orchestrator)
-```
-
-## Build & Development
-
-**package.json:**
-```json
-{
-  "name": "orange",
-  "type": "module",
-  "bin": {
-    "orange": "./dist/orange"
-  },
-  "scripts": {
-    "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --compile --outfile dist/orange",
-    "test": "bun test",
-    "check": "tsc --noEmit && bun test",
-    "lint": "eslint src/"
-  }
-}
-```
-
-**Development:**
-```bash
-bun run dev project list          # run directly
-bun run dev task create ...       # no build needed
-```
-
-**Build:**
-```bash
-bun run build                     # creates dist/orange (single binary)
-```
-
-**Install globally:**
-```bash
-# Development (changes apply immediately):
-alias orange="bun run ~/workspace/orange/src/index.ts"
-# Add to ~/.zshrc or ~/.bashrc
-
-# Production (compiled binary):
-bun run build
-cp dist/orange /usr/local/bin/
-```
-
-**tsconfig.json:**
-```json
-{
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": ["bun-types"]
-  },
-  "include": ["src"]
-}
-```
+| Module | Responsibility |
+|--------|----------------|
+| args | CLI argument parsing |
+| commands | CLI command handlers (project, task, workspace, start, install, log) |
+| dashboard | TUI rendering, input handling, file watching |
+| agent | Prompt generation (spawn + respawn) |
+| clock | Time abstraction (real + mock) |
+| cwd | CWD-based project detection |
+| db | Task queries |
+| deps | Dependency injection container |
+| git | Git operations abstraction (real + mock) |
+| logger | Structured JSON logger |
+| spawn | Task spawning lifecycle |
+| state | Task/project persistence (TASK.md, projects.json) |
+| tmux | tmux session abstraction (real + mock) |
+| workspace | Workspace pool management |
 
 ## Startup
 
-```bash
-cd ~/workspace/coffee
-orange start
-# 1. Auto-registers project if not in projects.json (name from folder)
-# 2. Creates/attaches tmux session "coffee-orchestrator":
-#    - Pane 0: Claude Code (with orange skill, has project context)
-#    - Pane 1: Dashboard TUI (project-scoped, shows only coffee/* tasks)
-# 3. Working directory: ~/workspace/coffee (the actual project repo)
-```
+1. `orange start` from project directory
+2. Auto-registers project if not in `projects.json`
+3. Creates/attaches tmux session `<project>-orchestrator`:
+   - Pane 0: Claude Code with orange skill
+   - Pane 1: Dashboard TUI (project-scoped)
+4. Working directory: the project repo (full context: CLAUDE.md, codebase)
 
-**CWD-aware design:**
-- Orchestrator runs IN the project directory (has full context: CLAUDE.md, codebase)
-- Dashboard pane shows only that project's tasks
-- Each project has its own orchestrator session
-- Multiple orchestrators can run simultaneously
-
-**Error if not in git repo:**
-```bash
-cd ~/Downloads
-orange start
-# Error: Not a git repository. Run from a project directory.
-```
+Error if not in a git repo.
 
 ## Decisions
 
-1. **Single user** - No multi-user support
-2. **Task history** - Keep forever (task folders never deleted)
-3. **Storage** - File-based (TASK.md is source of truth)
-4. **Workspace pool** - Reuse worktrees, don't delete
-5. **Merge workflow** - Support both local merge and PR
-6. **Self-review** - Agent spawns review subagent internally
-7. **Per-project orchestrator** - Orchestrator must run in project directory for context
-8. **CWD-aware CLI** - Commands infer project from current directory
-9. **Lazy workspace init** - Worktrees created on-demand at first `task spawn`
-
-## Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `@mariozechner/pi-tui` | TUI framework |
-| `chokidar` | File watching (task folders) |
-| `chalk` | Terminal colors |
-| `gray-matter` | TASK.md frontmatter parsing |
-| `nanoid` | Task IDs |
-| `proper-lockfile` | File locking (workspace pool) |
+1. **Single user** — no multi-user support
+2. **Storage** — file-based (TASK.md is source of truth)
+3. **Workspace pool** — reuse worktrees, don't delete
+4. **Merge workflow** — support both local merge and PR
+5. **Self-review** — agent uses /code-review skill internally
+6. **Per-project orchestrator** — must run in project directory for context
+7. **CWD-aware CLI** — commands infer project from current directory
+8. **Lazy workspace init** — worktrees created on-demand at first spawn
+9. **Dependency injection** — all external deps (tmux, git, clock, logger) injected for testability

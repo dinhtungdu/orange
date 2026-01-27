@@ -5,14 +5,16 @@ All data in `~/orange/`.
 ```
 ~/orange/
 ├── projects.json           # Project registry
+├── orange.log              # Structured log (rotated at 10MB)
 ├── workspaces/             # Worktree pool (reused)
 │   ├── orange--1/
 │   ├── orange--2/
-│   └── coffee--1/
+│   ├── coffee--1/
+│   └── .pool.json          # Pool state
 └── tasks/                  # Task folders (source of truth)
     └── <project>/
         └── <branch>/
-            ├── TASK.md         # Description, metadata
+            ├── TASK.md         # Description, metadata (frontmatter)
             ├── log.txt         # Conversation log (snapshotted on merge/cancel)
             └── history.jsonl   # Event log
 ```
@@ -30,9 +32,10 @@ All data in `~/orange/`.
 ]
 ```
 
-## Task Folder (`tasks/<project>/<branch>/`)
+## TASK.md
 
-**TASK.md** - Human-readable task description with frontmatter:
+Human-readable task file with YAML frontmatter:
+
 ```markdown
 ---
 id: abc123
@@ -45,7 +48,7 @@ created_at: 2024-01-15T10:00:00Z
 updated_at: 2024-01-15T10:30:00Z
 ---
 
-Add dark mode support with system preference detection.
+Task description here.
 
 ---
 
@@ -53,16 +56,15 @@ Optional implementation context (separated by `---`).
 Piped via `--context -` on task create.
 ```
 
-**history.jsonl** - Append-only event log (source of truth):
+## history.jsonl
+
+Append-only event log:
+
 ```jsonl
-{"type":"task.created","at":"2024-01-15T10:00:00Z","by":"orchestrator"}
-{"type":"agent.spawned","at":"2024-01-15T10:00:05Z","workspace":"orange--1","session":"orange/dark-mode"}
-{"type":"message","at":"2024-01-15T10:01:00Z","role":"agent","content":"Reading CLAUDE.md..."}
-{"type":"review.started","at":"2024-01-15T10:25:00Z","attempt":1}
-{"type":"review.passed","at":"2024-01-15T10:28:00Z","attempt":1}
-{"type":"agent.stopped","at":"2024-01-15T10:30:00Z","outcome":"completed"}
-{"type":"status.changed","at":"2024-01-15T10:30:01Z","from":"working","to":"needs_human"}
-{"type":"task.merged","at":"2024-01-15T11:00:00Z","commit":"abc123"}
+{"type":"task.created","timestamp":"...","task_id":"abc123","project":"orange","branch":"dark-mode"}
+{"type":"agent.spawned","timestamp":"...","workspace":"orange--1","tmux_session":"orange/dark-mode"}
+{"type":"status.changed","timestamp":"...","from":"pending","to":"working"}
+{"type":"task.merged","timestamp":"...","commit":"abc123"}
 ```
 
 ## Task Status
@@ -72,6 +74,6 @@ Piped via `--context -` on task create.
 | `pending` | Created, not yet spawned |
 | `working` | Agent actively working (includes self-review) |
 | `needs_human` | Self-review passed, ready for human review |
-| `stuck` | Agent gave up after max review attempts, needs help |
+| `stuck` | Agent gave up after max review attempts |
 | `done` | Merged/completed |
 | `failed` | Agent crashed or errored |

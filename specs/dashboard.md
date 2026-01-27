@@ -1,27 +1,13 @@
 # Dashboard TUI
 
-TypeScript + pi-tui. Shows tasks from TASK.md files (including done/failed).
+Shows tasks from TASK.md files (including done/failed).
 
 ## Scoping
 
-Dashboard can run in two modes:
-
-1. **Project-scoped** (default when in a project directory):
-   ```bash
-   cd ~/workspace/coffee
-   orange      # Shows only coffee tasks
-   ```
-
-2. **Global** (when not in project, or with `--all`):
-   ```bash
-   cd ~
-   orange      # Shows all tasks
-   orange --all  # Explicit global view
-   ```
+1. **Project-scoped** (default when in a project directory)
+2. **Global** (when not in project, or with `--all`)
 
 ## Layout
-
-Table format with columns:
 
 ```
  Orange Dashboard (all) [active]
@@ -51,12 +37,12 @@ Table format with columns:
 
 | Icon | Status |
 |------|--------|
-| ● | working - agent active |
-| ◉ | needs_human - ready for review |
-| ⚠ | stuck - agent needs help |
-| ○ | pending - waiting to spawn |
-| ✓ | done - merged |
-| ✗ | failed/dead - cancelled/errored/session died |
+| ● | working — agent active |
+| ◉ | needs_human — ready for review |
+| ⚠ | stuck — agent needs help |
+| ○ | pending — waiting to spawn |
+| ✓ | done — merged |
+| ✗ | failed/dead — cancelled/errored/session died |
 
 ## Context-Aware Keybindings
 
@@ -76,7 +62,7 @@ Footer shows relevant actions based on selected task's state:
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
 | Enter | Switch to tmux session | Live sessions |
-| l | View output log | Dead/completed tasks |
+| l | View conversation log | Dead/completed tasks |
 | r | Respawn agent | Dead sessions only |
 | m | Merge task | Live sessions |
 | x | Cancel task | Active tasks |
@@ -86,23 +72,15 @@ Footer shows relevant actions based on selected task's state:
 | q | Quit dashboard | Always |
 
 **Attach behavior:**
-- Inside tmux: uses `switch-client` (switches current client to task session)
-- Outside tmux: uses `attach` (attaches to task session)
-
-To return from task session, use tmux session switcher (prefix + s) or similar.
+- Inside tmux: uses `switch-client`
+- Outside tmux: uses `attach`
 
 ## Dead Session Detection
 
-Dashboard checks for dead sessions immediately on startup, then periodically. If a session died (agent crashed, tmux killed externally), the task shows:
-- Icon: ✗ (failed)
-- Status: "dead"
-- Available actions: view log, respawn, or cancel
-
-## Output Logging
-
-All terminal output is captured to `~/orange/tasks/<project>/<branch>/output.log` using the `script` command. This persists after session ends.
+Checked immediately on startup, then periodically. If session died, task shows as "dead" with ✗ icon. Available actions: view log, respawn, or cancel.
 
 ## Polling
 
-- File watcher on `~/orange/tasks/` for TASK.md changes
+- File watcher on `~/orange/tasks/` for TASK.md changes (debounced)
 - Periodic session health check (detects dead sessions)
+- Diff stats refreshed on each task reload (async, non-blocking)
