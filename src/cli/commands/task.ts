@@ -492,15 +492,6 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Get project for PR creation
-  const projects = await loadProjects(deps);
-  const project = projects.find((p) => p.name === task.project);
-  if (!project) {
-    log.error("Project not found for approve", { project: task.project });
-    console.error(`Project '${task.project}' not found`);
-    process.exit(1);
-  }
-
   const now = deps.clock.now();
   task.status = "reviewed";
   task.updated_at = now;
@@ -515,56 +506,6 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   log.info("Task approved", { taskId });
   console.log(`Task ${taskId} approved (reviewed)`);
-
-  // Push branch and create PR if gh is available
-  const ghAvailable = await deps.github.isAvailable();
-  if (!ghAvailable) {
-    log.debug("gh CLI not available, skipping PR creation");
-    return;
-  }
-
-  // Push from workspace
-  if (task.workspace) {
-    const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
-    try {
-      log.debug("Pushing branch to remote", { branch: task.branch });
-      await deps.git.push(workspacePath, "origin", task.branch);
-    } catch (err) {
-      log.warn("Push failed, skipping PR creation", { error: String(err) });
-      console.error(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
-  }
-
-  // Create PR
-  try {
-    const title = task.description.split("\n")[0];
-    const body = await buildPRBody(project.path, task.description, task.context);
-
-    log.debug("Creating PR", { branch: task.branch, base: project.default_branch });
-    const prUrl = await deps.github.createPR(project.path, {
-      branch: task.branch,
-      base: project.default_branch,
-      title,
-      body,
-    });
-
-    task.pr_url = prUrl;
-    task.updated_at = deps.clock.now();
-    await saveTask(deps, task);
-    await appendHistory(deps, task.project, task.branch, {
-      type: "pr.created",
-      timestamp: deps.clock.now(),
-      url: prUrl,
-    });
-
-    log.info("PR created", { taskId, prUrl });
-    console.log(`PR created: ${prUrl}`);
-  } catch (err) {
-    log.warn("PR creation failed", { error: String(err) });
-    console.error(`PR creation failed: ${err instanceof Error ? err.message : String(err)}`);
-    // Task is still approved, just no PR
-  }
 }
 
 /**
