@@ -524,7 +524,7 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
     try {
       log.debug("Pushing branch to remote", { branch: task.branch });
-      await deps.git.push(workspacePath);
+      await deps.git.push(workspacePath, "origin", task.branch);
     } catch (err) {
       log.warn("Push failed, skipping PR creation", { error: String(err) });
       console.error(`Push failed: ${err instanceof Error ? err.message : String(err)}`);

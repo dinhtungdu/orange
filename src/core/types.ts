@@ -131,8 +131,8 @@ export interface GitExecutor {
   getCommitHash(cwd: string, short?: boolean): Promise<string>;
   /** Check if working directory has uncommitted changes */
   isDirty(cwd: string): Promise<boolean>;
-  /** Push current branch to remote */
-  push(cwd: string, remote?: string): Promise<void>;
+  /** Push a branch to remote. If branch omitted, pushes current branch. */
+  push(cwd: string, remote?: string, branch?: string): Promise<void>;
   /** Get diff stats (lines added/removed) vs a base ref */
   getDiffStats(cwd: string, base: string): Promise<{ added: number; removed: number }>;
   /** Get number of commits ahead of a base ref */

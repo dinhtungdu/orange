@@ -169,8 +169,11 @@ export class RealGit implements GitExecutor {
     return stdout.trim().length > 0;
   }
 
-  async push(cwd: string, remote: string = "origin"): Promise<void> {
-    await exec("git", ["push", remote], cwd);
+  async push(cwd: string, remote: string = "origin", branch?: string): Promise<void> {
+    const args = branch
+      ? ["push", "-u", remote, branch]
+      : ["push", remote];
+    await exec("git", args, cwd);
   }
 
   async getDiffStats(cwd: string, base: string): Promise<{ added: number; removed: number }> {
@@ -329,7 +332,7 @@ export class MockGit implements GitExecutor {
     return false;
   }
 
-  async push(_cwd: string, _remote: string = "origin"): Promise<void> {
+  async push(_cwd: string, _remote: string = "origin", _branch?: string): Promise<void> {
     // No-op in mock
   }
 
