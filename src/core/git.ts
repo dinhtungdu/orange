@@ -170,6 +170,10 @@ export class RealGit implements GitExecutor {
     const { stdout } = await exec("git", ["status", "--porcelain"], cwd);
     return stdout.trim().length > 0;
   }
+
+  async push(cwd: string, remote: string = "origin"): Promise<void> {
+    await exec("git", ["push", remote], cwd);
+  }
 }
 
 /**
@@ -297,6 +301,10 @@ export class MockGit implements GitExecutor {
   async isDirty(_cwd: string): Promise<boolean> {
     // Mock always returns clean
     return false;
+  }
+
+  async push(_cwd: string, _remote: string = "origin"): Promise<void> {
+    // No-op in mock
   }
 
   /**

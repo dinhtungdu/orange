@@ -466,7 +466,78 @@ interface SessionsIndex {
 }
 
 /**
- * View task's conversation history from Claude's project folder.
+ * Generate formatted log from Claude session history.
+ * Returns null if no sessions found.
+ */
+async function generateLogFromSessions(deps: Deps, task: Task): Promise<string | null> {
+  if (!task.workspace) return null;
+
+  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const claudeProjectName = workspaceToClaudeProjectPath(workspacePath);
+  const claudeDir = join(process.env.HOME || "", ".claude", "projects", claudeProjectName);
+
+  const indexPath = join(claudeDir, "sessions-index.json");
+  if (!existsSync(indexPath)) return null;
+
+  const indexContent = await readFile(indexPath, "utf-8");
+  const index: SessionsIndex = JSON.parse(indexContent);
+
+  const branchSessions = index.entries
+    .filter((e) => e.gitBranch === task.branch)
+    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+
+  if (branchSessions.length === 0) return null;
+
+  const formatted: string[] = [];
+
+  for (let i = branchSessions.length - 1; i >= 0; i--) {
+    const session = branchSessions[i];
+    const sessionPath = join(claudeDir, `${session.sessionId}.jsonl`);
+
+    if (!existsSync(sessionPath)) continue;
+
+    if (branchSessions.length > 1) {
+      formatted.push(`--- Session ${branchSessions.length - i}/${branchSessions.length} ---`);
+    }
+
+    const sessionContent = await readFile(sessionPath, "utf-8");
+    const lines = sessionContent.trim().split("\n");
+
+    for (const line of lines) {
+      try {
+        const entry: ConversationEntry = JSON.parse(line);
+        const output = formatEntry(entry);
+        if (output) formatted.push(output);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+  }
+
+  return formatted.length > 0 ? formatted.join("\n") : null;
+}
+
+/**
+ * Snapshot task log to task dir.
+ * Called on merge/cancel so log survives workspace reuse.
+ */
+async function snapshotLog(deps: Deps, task: Task): Promise<void> {
+  try {
+    const log = await generateLogFromSessions(deps, task);
+    if (log) {
+      const taskDir = getTaskDir(deps, task.project, task.branch);
+      await mkdir(taskDir, { recursive: true });
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(join(taskDir, "log.txt"), log);
+    }
+  } catch {
+    // Best-effort - don't fail merge/cancel if log snapshot fails
+  }
+}
+
+/**
+ * View task's conversation history.
+ * Reads from task dir (log.txt) first, falls back to live Claude sessions.
  */
 async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (parsed.args.length < 1) {
@@ -475,9 +546,8 @@ async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   const taskId = parsed.args[0];
-  const maxEntries = parseInt(parsed.options.lines as string) || 0; // 0 means all
+  const maxEntries = parseInt(parsed.options.lines as string) || 0;
 
-  // Find task
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
@@ -485,65 +555,30 @@ async function logTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Must have a workspace to get Claude history
-  if (!task.workspace) {
-    console.error(`Task '${taskId}' has no workspace assigned`);
+  // Check for snapshotted log first
+  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const logPath = join(taskDir, "log.txt");
+  let logContent: string | null = null;
+
+  if (existsSync(logPath)) {
+    logContent = await readFile(logPath, "utf-8");
+  } else {
+    // Fall back to live Claude sessions
+    logContent = await generateLogFromSessions(deps, task);
+  }
+
+  if (!logContent?.trim()) {
+    console.error(`No log available for task '${taskId}'`);
     process.exit(1);
   }
 
-  // Build Claude project path
-  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
-  const claudeProjectName = workspaceToClaudeProjectPath(workspacePath);
-  const claudeDir = join(process.env.HOME || "", ".claude", "projects", claudeProjectName);
-
-  // Read sessions index
-  const indexPath = join(claudeDir, "sessions-index.json");
-  if (!existsSync(indexPath)) {
-    console.error(`No Claude conversation history found for task '${taskId}'`);
-    console.error(`Expected: ${indexPath}`);
-    process.exit(1);
+  // Apply --lines limit (last N lines)
+  if (maxEntries > 0) {
+    const lines = logContent.split("\n");
+    console.log(lines.slice(-maxEntries).join("\n"));
+  } else {
+    console.log(logContent);
   }
-
-  const indexContent = await readFile(indexPath, "utf-8");
-  const index: SessionsIndex = JSON.parse(indexContent);
-
-  // Find sessions for this task's branch
-  const branchSessions = index.entries
-    .filter((e) => e.gitBranch === task.branch)
-    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
-
-  if (branchSessions.length === 0) {
-    console.error(`No sessions found for branch '${task.branch}'`);
-    process.exit(1);
-  }
-
-  // Get the most recent session
-  const session = branchSessions[0];
-  const sessionPath = join(claudeDir, `${session.sessionId}.jsonl`);
-
-  if (!existsSync(sessionPath)) {
-    console.error(`Session file not found: ${sessionPath}`);
-    process.exit(1);
-  }
-
-  // Parse JSONL and format entries
-  const sessionContent = await readFile(sessionPath, "utf-8");
-  const lines = sessionContent.trim().split("\n");
-  const formatted: string[] = [];
-
-  for (const line of lines) {
-    try {
-      const entry: ConversationEntry = JSON.parse(line);
-      const output = formatEntry(entry);
-      if (output) formatted.push(output);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  // Apply --lines limit (last N entries)
-  const output = maxEntries > 0 ? formatted.slice(-maxEntries) : formatted;
-  console.log(output.join("\n"));
 }
 
 /**
@@ -781,11 +816,18 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.git.checkout(project.path, project.default_branch);
     await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
   } else {
-    // No PR or PR not merged - do local merge
+    // No PR or PR not merged - do local merge and push
     log.debug("Performing local merge", { branch: task.branch, strategy });
     await deps.git.checkout(project.path, project.default_branch);
     await deps.git.merge(project.path, task.branch, strategy as "ff" | "merge");
     commitHash = await deps.git.getCommitHash(project.path);
+
+    try {
+      await deps.git.push(project.path);
+      log.info("Pushed to remote", { branch: project.default_branch });
+    } catch {
+      log.debug("Push failed (may be local-only repo)");
+    }
   }
 
   // Delete remote branch
@@ -796,6 +838,9 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     log.debug("Remote branch deletion failed (may not exist)", { branch: task.branch });
     // Ignore errors - remote branch may not exist
   }
+
+  // Snapshot log before releasing workspace
+  await snapshotLog(deps, task);
 
   // Release workspace
   if (task.workspace) {
@@ -809,10 +854,11 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
-  // Update task (keep workspace for log lookup)
+  // Update task
   const now = deps.clock.now();
   const previousStatus = task.status;
   task.status = "done";
+  task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;
 
@@ -859,6 +905,9 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  // Snapshot log before releasing workspace
+  await snapshotLog(deps, task);
+
   // Release workspace
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
@@ -871,10 +920,11 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     await deps.tmux.killSessionSafe(task.tmux_session);
   }
 
-  // Update task (keep workspace for log lookup)
+  // Update task
   const now = deps.clock.now();
   const previousStatus = task.status;
   task.status = "failed";
+  task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;
 

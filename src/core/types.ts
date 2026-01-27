@@ -126,6 +126,8 @@ export interface GitExecutor {
   getCommitHash(cwd: string, short?: boolean): Promise<string>;
   /** Check if working directory has uncommitted changes */
   isDirty(cwd: string): Promise<boolean>;
+  /** Push current branch to remote */
+  push(cwd: string, remote?: string): Promise<void>;
 }
 
 /**

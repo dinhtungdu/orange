@@ -595,53 +595,29 @@ export class DashboardComponent implements Component {
     this.tui.requestRender(true);
   }
 
-  private viewLog(): void {
+  private async viewLog(): Promise<void> {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
 
-    // Capture output first to check if log exists
+    // Write log to temp file, open in new tmux window with nvim
     const orangeCmd = this.getOrangeCommand(["task", "log", task.id]);
-    const logProc = Bun.spawn(orangeCmd, {
+    const logProc = Bun.spawnSync(orangeCmd, { stdout: "pipe", stderr: "pipe" });
+    const stdout = logProc.stdout.toString();
+    const stderr = logProc.stderr.toString();
+
+    if (logProc.exitCode !== 0 || !stdout.trim()) {
+      this.showPopup(stderr.trim() || "No log available for this task");
+      return;
+    }
+
+    const { writeFileSync } = await import("node:fs");
+    const tmpFile = `/tmp/orange-log-${task.id}.txt`;
+    writeFileSync(tmpFile, stdout);
+
+    // Open in new tmux window (auto-closes when nvim exits)
+    Bun.spawn(["tmux", "new-window", "-n", `log:${task.branch}`, `nvim -R ${tmpFile}`], {
       stdout: "pipe",
       stderr: "pipe",
-    });
-
-    logProc.exited.then(async (exitCode) => {
-      const stdout = await new Response(logProc.stdout).text();
-      const stderr = await new Response(logProc.stderr).text();
-      const output = stdout || stderr;
-
-      if (!output.trim()) {
-        this.showPopup("No log available for this task");
-        return;
-      }
-
-      if (exitCode !== 0) {
-        this.showPopup(stderr.trim() || "Failed to load log");
-        return;
-      }
-
-      // Success - exit TUI, show in less, then return
-      this.tui?.stop();
-      process.stdout.write("\x1b[?1049l");
-
-      // Write to temp file for less (stdin pipe doesn't work reliably)
-      const tmpFile = `/tmp/orange-log-${task.id}.txt`;
-      await Bun.write(tmpFile, output);
-
-      const lessProc = Bun.spawn(["less", "-R", tmpFile], {
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-
-      await lessProc.exited;
-      await Bun.file(tmpFile).exists() && (await import("node:fs/promises")).unlink(tmpFile).catch(() => {});
-      process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
-      if (this.tui) {
-        await this.init(this.tui, { project: this.state.projectFilter ?? undefined });
-        this.tui.start();
-      }
     });
   }
 

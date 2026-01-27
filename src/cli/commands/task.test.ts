@@ -675,7 +675,7 @@ describe("task merge command", () => {
 
     const task = await loadTask(deps, "testproj", "merge-feature");
     expect(task!.status).toBe("done");
-    expect(task!.workspace).toBe("testproj--1"); // Kept for log lookup
+    expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
 
     // Verify tmux session killed
@@ -772,7 +772,7 @@ describe("task cancel command", () => {
 
     const task = await loadTask(deps, "testproj", "cancel-feature");
     expect(task!.status).toBe("failed");
-    expect(task!.workspace).toBe("testproj--1"); // Kept for log lookup
+    expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
 
     expect(consoleLogs[0]).toContain("cancelled");
@@ -1268,7 +1268,7 @@ describe("task log command", () => {
       runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps)
     ).rejects.toThrow("process.exit(1)");
 
-    expect(consoleErrors[0]).toContain("no workspace");
+    expect(consoleErrors[0]).toContain("No log available");
   });
 
   test("errors when no Claude history found", async () => {
@@ -1283,6 +1283,6 @@ describe("task log command", () => {
       runTaskCommand(parseArgs(["bun", "script.ts", "task", "log", taskId]), deps)
     ).rejects.toThrow("process.exit(1)");
 
-    expect(consoleErrors[0]).toContain("No Claude conversation history found");
+    expect(consoleErrors[0]).toContain("No log available");
   });
 });
