@@ -509,6 +509,8 @@ export class DashboardState {
     const projects = await loadProjects(this.deps);
     const projectMap = new Map(projects.map((p) => [p.name, p]));
 
+    const mergedTasks: Task[] = [];
+
     await Promise.all(
       tasksWithPR.map(async (task) => {
         const project = projectMap.get(task.project);
@@ -516,11 +518,40 @@ export class DashboardState {
         try {
           const status = await this.deps.github.getPRStatus(project.path, task.branch);
           this.data.prStatuses.set(task.id, status);
+
+          // Auto-cleanup when PR is merged
+          if (status.state === "MERGED" && task.status === "reviewed") {
+            mergedTasks.push(task);
+          }
         } catch {
           // Ignore errors
         }
       })
     );
+
+    // Auto-merge tasks whose PRs were merged on GitHub
+    for (const task of mergedTasks) {
+      if (this.data.pendingOps.has(task.id)) continue;
+      this.data.pendingOps.add(task.id);
+      this.emit();
+
+      const proc = Bun.spawn(this.getOrangeCommand(["task", "merge", task.id]), {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      proc.exited.then(async (exitCode) => {
+        this.data.pendingOps.delete(task.id);
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          this.data.error = `Auto-merge failed for ${task.branch}: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+        } else {
+          this.data.message = `Auto-merged ${task.branch} (PR merged on GitHub)`;
+        }
+        await this.refreshTasks();
+        this.emit();
+      });
+    }
   }
 
   private applyStatusFilter(): void {
