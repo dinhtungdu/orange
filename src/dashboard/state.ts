@@ -572,6 +572,12 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
+    if (task.status !== "reviewed") {
+      this.data.error = "Only reviewed tasks can be merged.";
+      this.emit();
+      return;
+    }
+
     const taskBranch = task.branch;
     this.data.pendingOps.add(task.id);
     this.emit();
@@ -656,8 +662,8 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (!this.data.deadSessions.has(task.id)) {
-      this.data.error = "Task session is still active. Use 'x' to cancel first.";
+    if (!this.data.deadSessions.has(task.id) && task.status !== "stuck") {
+      this.data.error = "Only stuck or dead tasks can be respawned.";
       this.emit();
       return;
     }
@@ -735,20 +741,22 @@ export class DashboardState {
     if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
     const isDead = this.data.deadSessions.has(task.id);
-    const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
     const completedStatuses: TaskStatus[] = ["done", "failed", "cancelled"];
 
     let keys = " j/k:nav";
-    if (activeStatuses.includes(task.status)) {
-      if (isDead) {
-        keys += "  r:respawn  x:cancel";
-      } else {
-        keys += "  Enter:attach  m:merge  x:cancel";
-      }
+    if (task.status === "pending") {
+      keys += "  s:spawn  x:cancel";
     } else if (completedStatuses.includes(task.status)) {
       keys += "  d:del";
-    } else if (task.status === "pending") {
-      keys += "  s:spawn  x:cancel";
+    } else if (isDead) {
+      keys += "  r:respawn  x:cancel";
+    } else if (task.status === "reviewed") {
+      keys += "  Enter:attach  m:merge  x:cancel";
+    } else if (task.status === "stuck") {
+      keys += "  Enter:attach  r:respawn  x:cancel";
+    } else {
+      // working, reviewing
+      keys += "  Enter:attach  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;
     return keys;
