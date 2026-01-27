@@ -167,7 +167,7 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Create tmux session
     const tmuxSession = `${task.project}/${task.branch}`;
     const prompt = buildAgentPrompt(task);
-    const command = `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`;
+    const command = `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`;
 
     log.debug("Creating tmux session", { session: tmuxSession });
     await deps.tmux.newSession(tmuxSession, workspacePath, command);
