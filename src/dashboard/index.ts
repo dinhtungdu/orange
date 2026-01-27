@@ -21,6 +21,34 @@ import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 
 /**
+ * Clean up nested error messages for display.
+ * "Error: Merge failed: Error: git checkout 'x' failed: error: pathspec..."
+ * → "git checkout 'x' failed: pathspec..."
+ */
+function cleanErrorMessage(raw: string): string {
+  // Strip "Error: " prefixes and collapse nested errors
+  let msg = raw.trim();
+
+  // Remove leading "Error: " repeatedly
+  while (msg.toLowerCase().startsWith("error: ")) {
+    msg = msg.slice(7);
+  }
+
+  // Find the last "Error: " and take everything after it (the root cause)
+  const lastErrorIdx = msg.toLowerCase().lastIndexOf("error: ");
+  if (lastErrorIdx > 0) {
+    msg = msg.slice(lastErrorIdx + 7);
+  }
+
+  // Capitalize first letter
+  if (msg.length > 0) {
+    msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+  }
+
+  return msg;
+}
+
+/**
  * Status indicator icons.
  */
 const STATUS_ICON: Record<TaskStatus, string> = {
@@ -432,7 +460,7 @@ export class DashboardComponent implements Component {
       this.state.pendingOps.delete(task.id);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        this.state.error = `Merge failed: ${stderr.trim() || "Unknown error"}`;
+        this.state.error = `Merge failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
       } else {
         this.state.message = `Merged ${taskBranch}`;
       }
@@ -459,7 +487,7 @@ export class DashboardComponent implements Component {
       this.state.pendingOps.delete(task.id);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        this.state.error = `Cancel failed: ${stderr.trim() || "Unknown error"}`;
+        this.state.error = `Cancel failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
       } else {
         this.state.message = `Cancelled ${taskBranch}`;
       }
@@ -493,7 +521,7 @@ export class DashboardComponent implements Component {
       this.state.pendingOps.delete(task.id);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        this.state.error = `Delete failed: ${stderr.trim() || "Unknown error"}`;
+        this.state.error = `Delete failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
       } else {
         this.state.message = `Deleted ${taskBranch}`;
       }
@@ -552,7 +580,7 @@ export class DashboardComponent implements Component {
       this.state.deadSessions.delete(task.id);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        this.state.error = `Respawn failed: ${stderr.trim() || "Unknown error"}`;
+        this.state.error = `Respawn failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
       } else {
         this.state.message = `Respawned ${taskBranch}`;
       }
