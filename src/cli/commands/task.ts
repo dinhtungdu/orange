@@ -81,6 +81,10 @@ export async function runTaskCommand(
       await deleteTask(parsed, deps);
       break;
 
+    case "create-pr":
+      await createPRCommand(parsed, deps);
+      break;
+
     case "attach":
       await attachTask(parsed, deps);
       break;
@@ -94,7 +98,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|stuck|merge|cancel|delete>"
+        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|stuck|merge|cancel|delete|create-pr>"
       );
       process.exit(1);
   }
@@ -620,6 +624,86 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * When task has no pr_url:
  * - Local merge + push + cleanup (original behavior)
  */
+/**
+ * Create a PR for an approved task.
+ * Used when approve didn't create a PR (e.g. gh was unavailable) or for retry.
+ */
+async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task create-pr <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error("Task not found for create-pr", { taskId });
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  if (task.status !== "reviewed") {
+    console.error(`Task '${taskId}' is not reviewed (status: ${task.status})`);
+    process.exit(1);
+  }
+
+  if (task.pr_url) {
+    console.error(`Task '${taskId}' already has a PR: ${task.pr_url}`);
+    process.exit(1);
+  }
+
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === task.project);
+  if (!project) {
+    console.error(`Project '${task.project}' not found`);
+    process.exit(1);
+  }
+
+  const ghAvailable = await deps.github.isAvailable();
+  if (!ghAvailable) {
+    console.error("gh CLI is not available or not authenticated");
+    process.exit(1);
+  }
+
+  // Push branch from workspace
+  if (task.workspace) {
+    const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+    try {
+      await deps.git.push(workspacePath, "origin", task.branch);
+    } catch (err) {
+      console.error(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  }
+
+  // Create PR
+  const title = task.description.split("\n")[0];
+  const body = await buildPRBody(project.path, task.description, task.context);
+
+  const prUrl = await deps.github.createPR(project.path, {
+    branch: task.branch,
+    base: project.default_branch,
+    title,
+    body,
+  });
+
+  task.pr_url = prUrl;
+  task.updated_at = deps.clock.now();
+  await saveTask(deps, task);
+  await appendHistory(deps, task.project, task.branch, {
+    type: "pr.created",
+    timestamp: deps.clock.now(),
+    url: prUrl,
+  });
+
+  log.info("PR created", { taskId, prUrl });
+  console.log(`PR created: ${prUrl}`);
+}
+
 async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 

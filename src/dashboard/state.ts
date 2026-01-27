@@ -269,8 +269,8 @@ export class DashboardState {
       case "a":
         this.approveTask();
         break;
-      case "o":
-        this.openPR();
+      case "p":
+        this.createOrOpenPR();
         break;
       case "f":
         this.cycleStatusFilter();
@@ -754,12 +754,45 @@ export class DashboardState {
     });
   }
 
-  private openPR(): void {
+  private createOrOpenPR(): void {
     const task = this.data.tasks[this.data.cursor];
-    if (!task) return;
-    Bun.spawn(["gh", "pr", "view", "--web", "-H", task.branch], {
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    // If PR exists, open in browser
+    if (task.pr_url) {
+      Bun.spawn(["open", task.pr_url], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      return;
+    }
+
+    // Create PR — only for reviewed tasks without a PR
+    if (task.status !== "reviewed") {
+      this.data.error = "Only reviewed tasks can have PRs created.";
+      this.emit();
+      return;
+    }
+
+    const taskBranch = task.branch;
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "create-pr", task.id]), {
       stdout: "pipe",
       stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.data.pendingOps.delete(task.id);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.data.error = `PR creation failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+      } else {
+        this.data.message = `PR created for ${taskBranch}`;
+      }
+      await this.refreshTasks();
+      this.emit();
     });
   }
 
@@ -787,7 +820,9 @@ export class DashboardState {
     } else if (isDead) {
       keys += "  r:respawn  x:cancel";
     } else if (task.status === "reviewed") {
-      keys += "  Enter:attach  m:merge  x:cancel";
+      keys += "  Enter:attach  m:merge";
+      keys += task.pr_url ? "  p:open PR" : "  p:create PR";
+      keys += "  x:cancel";
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  r:respawn  x:cancel";
     } else if (task.status === "reviewing") {
