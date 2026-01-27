@@ -358,7 +358,13 @@ export class DashboardState {
       return;
     }
 
-    this.exitCreateMode();
+    // Exit create mode but don't emit yet — wait until task is saved
+    this.data.createMode = {
+      active: false,
+      branch: "",
+      description: "",
+      focusedField: "branch",
+    };
 
     try {
       // Find unique branch name
@@ -399,14 +405,24 @@ export class DashboardState {
         description,
       });
 
-      // Auto-spawn agent
-      await spawnTaskById(this.deps, id);
-
+      // Refresh immediately so the new task shows up before spawning
       this.data.message = `Created ${project.name}/${finalBranch}`;
       await this.refreshTasks();
       this.emit();
+
+      // Auto-spawn agent (may take time; task already visible)
+      try {
+        await spawnTaskById(this.deps, id);
+        await this.refreshTasks();
+        this.emit();
+      } catch (spawnErr) {
+        // Spawn failed but task was created successfully — show warning, keep task
+        this.data.error = `Task created but spawn failed: ${spawnErr instanceof Error ? spawnErr.message : "Unknown error"}`;
+        this.emit();
+      }
     } catch (err) {
       this.data.error = `Create failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      await this.refreshTasks();
       this.emit();
     }
   }
