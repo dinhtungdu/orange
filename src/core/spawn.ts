@@ -7,13 +7,34 @@
  */
 
 import { join } from "node:path";
-import { writeFile, symlink, appendFile, readFile, unlink, mkdir } from "node:fs/promises";
+import { writeFile, symlink, appendFile, readFile, unlink, mkdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
+
+/**
+ * Get the actual git directory path.
+ * In worktrees, .git is a file pointing to the real git dir.
+ */
+export async function getGitDir(workspacePath: string): Promise<string> {
+  const gitPath = join(workspacePath, ".git");
+  const stats = await stat(gitPath);
+
+  if (stats.isDirectory()) {
+    return gitPath;
+  }
+
+  // Worktree: .git is a file containing "gitdir: /path/to/actual/git/dir"
+  const content = await readFile(gitPath, "utf-8");
+  const match = content.match(/^gitdir:\s*(.+)$/m);
+  if (!match) {
+    throw new Error(`Invalid .git file at ${gitPath}`);
+  }
+  return match[1].trim();
+}
 
 /**
  * Symlink TASK.md to worktree and add orange files to git exclude.
@@ -26,7 +47,8 @@ async function linkTaskFile(
 ): Promise<void> {
   const taskMdPath = getTaskPath(deps, project, branch);
   const symlinkPath = join(workspacePath, "TASK.md");
-  const excludePath = join(workspacePath, ".git", "info", "exclude");
+  const gitDir = await getGitDir(workspacePath);
+  const excludePath = join(gitDir, "info", "exclude");
 
   // Remove existing symlink if present
   try {
@@ -39,7 +61,7 @@ async function linkTaskFile(
   await symlink(taskMdPath, symlinkPath);
 
   // Add orange files to .git/info/exclude
-  const excludeDir = join(workspacePath, ".git", "info");
+  const excludeDir = join(gitDir, "info");
   await mkdir(excludeDir, { recursive: true });
 
   let excludeContent = "";

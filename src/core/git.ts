@@ -5,7 +5,8 @@
  * All operations are async and work with a specified working directory.
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { GitExecutor } from "./types.js";
 
 /**
@@ -257,7 +258,14 @@ export class MockGit implements GitExecutor {
     // Create the directory to simulate real git worktree behavior
     await mkdir(path, { recursive: true });
     this.worktrees.set(path, branch);
-    
+
+    // Create .git file pointing to fake gitdir inside workspace (like real worktrees)
+    // Use .git-actual inside workspace to avoid needing to write to project path
+    const fakeGitDir = join(path, ".git-actual");
+    await writeFile(join(path, ".git"), `gitdir: ${fakeGitDir}\n`);
+    // Create the info directory for exclude file
+    await mkdir(join(fakeGitDir, "info"), { recursive: true });
+
     // Copy branches from source repo to worktree path, including origin refs
     const srcBranches = this.branches.get(cwd);
     if (srcBranches) {
