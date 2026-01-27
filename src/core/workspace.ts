@@ -280,15 +280,28 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
     const workspacePath = join(getWorkspacesDir(deps), workspace);
     log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
-    // Checkout detached HEAD at origin/main (or origin/master)
-    // Worktrees are created detached, so there's no local main branch
+    // Get project's default branch
+    const projects = await loadProjects(deps);
+    const project = projects.find((p) => p.name === projectName);
+    const defaultBranch = project?.default_branch ?? "main";
+
+    // Fetch latest refs (ignore error for local-only repos)
     try {
-      await deps.git.checkout(workspacePath, "origin/main");
+      await deps.git.fetch(workspacePath);
     } catch {
-      await deps.git.checkout(workspacePath, "origin/master");
+      // No remote - local-only repo
     }
 
+    // Discard any uncommitted changes first
     await deps.git.clean(workspacePath);
+
+    // Reset to default branch - try origin/<branch> first, fallback to local branch
+    // Using resetHard instead of checkout to handle uncommitted tracked files
+    try {
+      await deps.git.resetHard(workspacePath, `origin/${defaultBranch}`);
+    } catch {
+      await deps.git.resetHard(workspacePath, defaultBranch);
+    }
 
     // Mark as available
     poolState.workspaces[workspace] = { status: "available" };
