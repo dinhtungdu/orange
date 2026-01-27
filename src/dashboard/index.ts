@@ -12,7 +12,7 @@
  * - With --project flag: shows specific project's tasks
  */
 
-import { TUI, ProcessTerminal, type Component } from "@mariozechner/pi-tui";
+import { TUI, ProcessTerminal, type Component, type OverlayHandle } from "@mariozechner/pi-tui";
 import { watch } from "chokidar";
 import { join } from "node:path";
 import chalk from "chalk";
@@ -71,6 +71,57 @@ const STATUS_COLOR: Record<TaskStatus, (s: string) => string> = {
   done: chalk.green,
   failed: chalk.red,
 };
+
+/**
+ * Simple popup component for displaying messages.
+ */
+class PopupComponent implements Component {
+  private message: string;
+  private onDismiss: () => void;
+
+  constructor(message: string, onDismiss: () => void) {
+    this.message = message;
+    this.onDismiss = onDismiss;
+  }
+
+  handleInput(data: string): void {
+    // Any key dismisses
+    this.onDismiss();
+  }
+
+  render(width: number): string[] {
+    const lines: string[] = [];
+    const boxWidth = Math.min(width - 4, 60);
+    const horizontal = "─".repeat(boxWidth - 2);
+
+    lines.push(chalk.yellow(`┌${horizontal}┐`));
+
+    // Word wrap message
+    const words = this.message.split(" ");
+    let line = "";
+    for (const word of words) {
+      if (line.length + word.length + 1 > boxWidth - 4) {
+        lines.push(chalk.yellow("│") + ` ${line}`.padEnd(boxWidth - 2) + chalk.yellow("│"));
+        line = word;
+      } else {
+        line = line ? `${line} ${word}` : word;
+      }
+    }
+    if (line) {
+      lines.push(chalk.yellow("│") + ` ${line}`.padEnd(boxWidth - 2) + chalk.yellow("│"));
+    }
+
+    lines.push(chalk.yellow("│") + " ".repeat(boxWidth - 2) + chalk.yellow("│"));
+    const hint = "Press any key to dismiss";
+    const hintPadded = hint.padStart(Math.floor((boxWidth - 2 + hint.length) / 2)).padEnd(boxWidth - 2);
+    lines.push(chalk.yellow("│") + chalk.dim(hintPadded) + chalk.yellow("│"));
+    lines.push(chalk.yellow(`└${horizontal}┘`));
+
+    return lines;
+  }
+
+  invalidate(): void {}
+}
 
 /**
  * Status filter type for dashboard.
@@ -141,6 +192,7 @@ export class DashboardComponent implements Component {
   private deps: Deps;
   private tui: TUI | null = null;
   private watcher: ReturnType<typeof watch> | null = null;
+  private popupHandle: OverlayHandle | null = null;
   private captureInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(deps: Deps, options: DashboardOptions = {}) {
@@ -530,23 +582,57 @@ export class DashboardComponent implements Component {
     });
   }
 
+  private showPopup(message: string): void {
+    if (!this.tui) return;
+    const popup = new PopupComponent(message, () => {
+      this.popupHandle?.hide();
+      this.popupHandle = null;
+    });
+    this.popupHandle = this.tui.showOverlay(popup, {
+      anchor: "center",
+      width: 60,
+    });
+    this.tui.requestRender(true);
+  }
+
   private viewLog(): void {
     const task = this.state.tasks[this.state.cursor];
     if (!task) return;
 
-    // Allow viewing log for any task that has an output.log file
-    // This handles the case where a "working" task's session died but log exists
-
-    // Exit TUI and show log using less
-    this.tui?.stop();
-    const proc = Bun.spawn(this.getOrangeCommand(["task", "log", task.id]), {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
+    // Capture output first to check if log exists
+    const orangeCmd = this.getOrangeCommand(["task", "log", task.id]);
+    const logProc = Bun.spawn(orangeCmd, {
+      stdout: "pipe",
+      stderr: "pipe",
     });
 
-    proc.exited.then(async () => {
-      // Restart TUI after viewing
+    logProc.exited.then(async (exitCode) => {
+      const stdout = await new Response(logProc.stdout).text();
+      const stderr = await new Response(logProc.stderr).text();
+      const output = stdout || stderr;
+
+      if (!output.trim()) {
+        this.showPopup("No log available for this task");
+        return;
+      }
+
+      if (exitCode !== 0) {
+        this.showPopup(stderr.trim() || "Failed to load log");
+        return;
+      }
+
+      // Success - exit TUI, show in less, then return
+      this.tui?.stop();
+      process.stdout.write("\x1b[?1049l");
+
+      const lessProc = Bun.spawn(["less", "-R"], {
+        stdin: new Response(output).body,
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+
+      await lessProc.exited;
+      process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
       if (this.tui) {
         await this.init(this.tui, { project: this.state.projectFilter ?? undefined });
         this.tui.start();
