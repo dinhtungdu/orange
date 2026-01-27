@@ -164,6 +164,12 @@ export class RealGit implements GitExecutor {
     }
     return stdout.trim();
   }
+
+  async isDirty(cwd: string): Promise<boolean> {
+    // Check for staged or unstaged changes
+    const { stdout } = await exec("git", ["status", "--porcelain"], cwd);
+    return stdout.trim().length > 0;
+  }
 }
 
 /**
@@ -286,6 +292,11 @@ export class MockGit implements GitExecutor {
   async getCommitHash(_cwd: string, short: boolean = true): Promise<string> {
     // Return a mock commit hash
     return short ? "abc1234" : "abc1234567890abcdef1234567890abcdef12345";
+  }
+
+  async isDirty(_cwd: string): Promise<boolean> {
+    // Mock always returns clean
+    return false;
   }
 
   /**

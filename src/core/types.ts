@@ -124,6 +124,8 @@ export interface GitExecutor {
   removeWorktree(cwd: string, path: string): Promise<void>;
   /** Get current commit hash (short or full) */
   getCommitHash(cwd: string, short?: boolean): Promise<string>;
+  /** Check if working directory has uncommitted changes */
+  isDirty(cwd: string): Promise<boolean>;
 }
 
 /**

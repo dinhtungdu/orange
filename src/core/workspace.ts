@@ -280,6 +280,14 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
     const workspacePath = join(getWorkspacesDir(deps), workspace);
     log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
+    // Check for uncommitted changes - fail if dirty so user can review
+    const isDirty = await deps.git.isDirty(workspacePath);
+    if (isDirty) {
+      throw new Error(
+        `Workspace has uncommitted changes. Review the workspace before merging.`
+      );
+    }
+
     // Get project's default branch
     const projects = await loadProjects(deps);
     const project = projects.find((p) => p.name === projectName);
@@ -292,16 +300,15 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
       // No remote - local-only repo
     }
 
-    // Discard any uncommitted changes first
-    await deps.git.clean(workspacePath);
-
     // Reset to default branch - try origin/<branch> first, fallback to local branch
-    // Using resetHard instead of checkout to handle uncommitted tracked files
     try {
       await deps.git.resetHard(workspacePath, `origin/${defaultBranch}`);
     } catch {
       await deps.git.resetHard(workspacePath, defaultBranch);
     }
+
+    // Clean untracked files
+    await deps.git.clean(workspacePath);
 
     // Mark as available
     poolState.workspaces[workspace] = { status: "available" };
