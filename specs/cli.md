@@ -14,7 +14,7 @@ orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
 orange task respawn <task_id>
-orange task complete <task_id>      # Called by hook → needs_human
+orange task complete <task_id>      # Called by hook → reviewing
 orange task stuck <task_id>         # Called by hook → stuck
 orange task merge <task_id> [--strategy ff|merge]
 orange task cancel <task_id>
@@ -48,7 +48,7 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 Restart a task whose session died. Reuses existing workspace and branch.
 
 Requirements:
-- Active task (working/needs_human/stuck)
+- Active task (working/reviewing/reviewed/stuck)
 - Has assigned workspace
 - tmux session no longer exists
 

@@ -31,9 +31,10 @@ skills/         # orchestrator skill
 ## Status
 
 ```
-pending → working → needs_human → done
-                 ↘ stuck (gave up after 3 reviews)
+pending → working → reviewing → reviewed → done
+                              ↘ stuck
                  ↘ failed (crashed/errored)
+cancelled (from any active state)
 ```
 
 ## Rules

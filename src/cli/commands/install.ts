@@ -36,7 +36,7 @@ if [[ -f .orange-outcome ]]; then
   OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-outcome 2>/dev/null | head -1 | cut -d'"' -f4)
 
   if [[ -n "$TASK_ID" ]]; then
-    if [[ "$OUTCOME" == "passed" || "$OUTCOME" == "needs_human" ]]; then
+    if [[ "$OUTCOME" == "passed" || "$OUTCOME" == "reviewing" ]]; then
       orange task complete "$TASK_ID"
     elif [[ "$OUTCOME" == "stuck" ]]; then
       orange task stuck "$TASK_ID"

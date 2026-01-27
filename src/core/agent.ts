@@ -58,7 +58,7 @@ Read .orange-outcome file.
 
 If outcome is "passed":
 - Task already passed review
-- Write {"id":"${task.id}","outcome":"needs_human"} to .orange-outcome
+- Write {"id":"${task.id}","outcome":"reviewing"} to .orange-outcome
 - Stop immediately
 
 If outcome is "stuck" or file missing:
@@ -77,10 +77,10 @@ Write to .orange-outcome:
  */
 export function parseAgentOutcome(
   content: string
-): { id: string; outcome: "passed" | "stuck" | "needs_human"; reason?: string } | null {
+): { id: string; outcome: "passed" | "stuck" | "reviewing"; reason?: string } | null {
   try {
     const data = JSON.parse(content);
-    if (typeof data.id === "string" && (data.outcome === "passed" || data.outcome === "stuck" || data.outcome === "needs_human")) {
+    if (typeof data.id === "string" && (data.outcome === "passed" || data.outcome === "stuck" || data.outcome === "reviewing")) {
       return {
         id: data.id,
         outcome: data.outcome,

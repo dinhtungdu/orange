@@ -25,7 +25,7 @@ The prompt includes:
 
 For dead sessions reusing existing workspace:
 - Check `.orange-outcome` first
-- If already `passed` → write `needs_human` and stop
+- If already `passed` → write `reviewing` and stop
 - If `stuck` or missing → continue implementation
 - Uses reduced permissions (accept edits only, not full skip)
 
@@ -46,10 +46,10 @@ implement → /code-review → feedback
 Agent writes outcome to `.orange-outcome` before stopping:
 - `{"id":"...","outcome":"passed"}`
 - `{"id":"...","outcome":"stuck","reason":"..."}`
-- `{"id":"...","outcome":"needs_human"}`
+- `{"id":"...","outcome":"reviewing"}`
 
 Claude's stop hook reads the file and calls:
-- `orange task complete <id>` → status = `needs_human`
+- `orange task complete <id>` → status = `reviewing`
 - `orange task stuck <id>` → status = `stuck`
 
 ## 6. Human Review

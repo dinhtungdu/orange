@@ -10,17 +10,20 @@
 /**
  * Task status represents the lifecycle state of a task.
  *
- * Flow: pending → working → needs_human → done
- *                        ↘ stuck (gave up after 3 reviews)
- *                        ↘ failed (crashed/errored)
+ * Flow: pending → working → reviewing → reviewed → done
+ *                                     ↘ stuck
+ *                         ↘ failed (crashed/errored)
+ *       cancelled (from any active state)
  */
 export type TaskStatus =
   | "pending" // Created but not spawned
   | "working" // Agent actively processing (includes self-review)
-  | "needs_human" // Self-review passed, awaiting human review
+  | "reviewing" // Self-review passed, awaiting human review
+  | "reviewed" // Human approved, ready to merge
   | "stuck" // Agent gave up after max review attempts
   | "done" // Successfully merged/completed
-  | "failed"; // Agent crashed or errored
+  | "failed" // Agent crashed or errored
+  | "cancelled"; // User cancelled
 
 /**
  * Task represents a unit of work assigned to an agent.

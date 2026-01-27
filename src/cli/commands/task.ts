@@ -270,10 +270,12 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const statusIcon: Record<TaskStatus, string> = {
     pending: "○",
     working: "●",
-    needs_human: "◉",
+    reviewing: "◉",
+    reviewed: "◈",
     stuck: "⚠",
     done: "✓",
     failed: "✗",
+    cancelled: "⊘",
   };
 
   const header = projectFilter ? `Tasks (${projectFilter}):` : "Tasks (all projects):";
@@ -312,7 +314,7 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * Attach to task's tmux session.
- * Only works for active tasks (working, needs_human, stuck).
+ * Only works for active tasks (working, reviewing, stuck).
  */
 async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (parsed.args.length < 1) {
@@ -331,7 +333,7 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Check task has an active session
-  const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+  const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
   if (!activeStatuses.includes(task.status)) {
     console.error(`Task '${taskId}' is ${task.status}, not active`);
     console.error("Use 'orange task log <id>' to view completed task output");
@@ -386,8 +388,8 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Must be an active task (working/needs_human/stuck)
-  const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+  // Must be an active task (working/reviewing/stuck)
+  const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
   if (!activeStatuses.includes(task.status)) {
     console.error(`Task '${taskId}' is ${task.status}, cannot respawn`);
     process.exit(1);
@@ -469,10 +471,10 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const now = deps.clock.now();
   const previousStatus = task.status;
-  task.status = "needs_human";
+  task.status = "reviewing";
   task.updated_at = now;
 
-  log.info("Task completed", { taskId, from: previousStatus, to: "needs_human" });
+  log.info("Task completed", { taskId, from: previousStatus, to: "reviewing" });
 
   await saveTask(deps, task);
   await appendHistory(deps, task.project, task.branch, {
@@ -484,10 +486,10 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
-    to: "needs_human",
+    to: "reviewing",
   });
 
-  console.log(`Task ${taskId} marked as needs_human`);
+  console.log(`Task ${taskId} marked as reviewing`);
 }
 
 /**
@@ -700,7 +702,7 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Update task
   const now = deps.clock.now();
   const previousStatus = task.status;
-  task.status = "failed";
+  task.status = "cancelled";
   task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;
@@ -715,7 +717,7 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
-    to: "failed",
+    to: "cancelled",
   });
 
   log.info("Task cancelled", { taskId, from: previousStatus });
@@ -748,7 +750,7 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Only allow deleting done/failed tasks
-  if (task.status !== "done" && task.status !== "failed") {
+  if (task.status !== "done" && task.status !== "failed" && task.status !== "cancelled") {
     log.error("Cannot delete active task", { taskId, status: task.status });
     console.error(`Cannot delete task '${taskId}' with status '${task.status}'`);
     console.error("Only done or failed tasks can be deleted. Use 'orange task cancel' first.");

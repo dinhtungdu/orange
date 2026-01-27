@@ -47,7 +47,7 @@ tmux sessions (per-project orchestrators):
 3. **Approve plan**
 4. **Agents spawn**: One tmux session + worktree + Claude per task
 5. **Agents work**: Visible in dashboard (includes self-review loop)
-6. **Agent stops**: Review passed → hook marks `needs_human`
+6. **Agent stops**: Review passed → hook marks `reviewing`
 7. **Human reviews**: Attach to session, review, merge
 
 ## Components

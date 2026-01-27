@@ -37,13 +37,15 @@ describe("Task types", () => {
     const statuses: TaskStatus[] = [
       "pending",
       "working",
-      "needs_human",
+      "reviewing",
+      "reviewed",
       "stuck",
       "done",
       "failed",
+      "cancelled",
     ];
 
-    expect(statuses).toHaveLength(6);
+    expect(statuses).toHaveLength(8);
   });
 
   test("Task can transition through statuses", () => {
@@ -66,8 +68,8 @@ describe("Task types", () => {
     task.tmux_session = "orange/feature-x";
     expect(task.status).toBe("working");
 
-    task.status = "needs_human";
-    expect(task.status).toBe("needs_human");
+    task.status = "reviewing";
+    expect(task.status).toBe("reviewing");
 
     task.status = "done";
     task.workspace = null;

@@ -40,26 +40,30 @@ function cleanErrorMessage(raw: string): string {
 export const STATUS_ICON: Record<TaskStatus, string> = {
   pending: "○",
   working: "●",
-  needs_human: "◉",
+  reviewing: "◉",
+  reviewed: "◈",
   stuck: "⚠",
   done: "✓",
   failed: "✗",
+  cancelled: "⊘",
 };
 
 /** Status colors (hex). */
 export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
   working: "#5599FF",
-  needs_human: "#FFFF00",
+  reviewing: "#FFFF00",
+  reviewed: "#44FF44",
   stuck: "#FF4444",
   done: "#44FF44",
   failed: "#FF4444",
+  cancelled: "#888888",
 };
 
 export type StatusFilter = "all" | "active" | "done";
 
-const ACTIVE_STATUSES: TaskStatus[] = ["pending", "working", "needs_human", "stuck"];
-const DONE_STATUSES: TaskStatus[] = ["done", "failed"];
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "working", "reviewing", "reviewed", "stuck"];
+const DONE_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
 
 export interface DashboardOptions {
   all?: boolean;
@@ -502,7 +506,7 @@ export class DashboardState {
   }
 
   private async captureOutputs(): Promise<void> {
-    const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
+    const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
     for (const task of this.data.tasks) {
       if (task.tmux_session && activeStatuses.includes(task.status)) {
         const exists = await this.deps.tmux.sessionExists(task.tmux_session);
@@ -620,7 +624,7 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (task.status !== "done" && task.status !== "failed") {
+    if (task.status !== "done" && task.status !== "failed" && task.status !== "cancelled") {
       this.data.error = `Cannot delete task with status '${task.status}'. Use cancel first.`;
       this.emit();
       return;
@@ -731,8 +735,8 @@ export class DashboardState {
     if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
     const isDead = this.data.deadSessions.has(task.id);
-    const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
-    const completedStatuses: TaskStatus[] = ["done", "failed"];
+    const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+    const completedStatuses: TaskStatus[] = ["done", "failed", "cancelled"];
 
     let keys = " j/k:nav";
     if (activeStatuses.includes(task.status)) {

@@ -493,7 +493,7 @@ describe("task complete command", () => {
     process.exit = originalExit;
   });
 
-  test("marks task as needs_human", async () => {
+  test("marks task as reviewing", async () => {
     // Setup: create and spawn task
     await runTaskCommand(
       parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "complete-feature", "Work"]),
@@ -510,8 +510,8 @@ describe("task complete command", () => {
     );
 
     const task = await loadTask(deps, "testproj", "complete-feature");
-    expect(task!.status).toBe("needs_human");
-    expect(consoleLogs[0]).toContain("needs_human");
+    expect(task!.status).toBe("reviewing");
+    expect(consoleLogs[0]).toContain("reviewing");
   });
 
   test("creates history events on complete", async () => {
@@ -525,7 +525,7 @@ describe("task complete command", () => {
 
     const history = await loadHistory(deps, "testproj", "complete-history");
     expect(history.some(e => e.type === "agent.stopped" && (e as AgentStoppedEvent).outcome === "passed")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "needs_human")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "reviewing")).toBe(true);
   });
 });
 
@@ -771,7 +771,7 @@ describe("task cancel command", () => {
     );
 
     const task = await loadTask(deps, "testproj", "cancel-feature");
-    expect(task!.status).toBe("failed");
+    expect(task!.status).toBe("cancelled");
     expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
 
@@ -789,7 +789,7 @@ describe("task cancel command", () => {
 
     const history = await loadHistory(deps, "testproj", "cancel-history");
     expect(history.some(e => e.type === "task.cancelled")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "failed")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "cancelled")).toBe(true);
   });
 });
 
@@ -886,8 +886,8 @@ describe("task delete command", () => {
     expect(consoleLogs[0]).toContain("deleted");
   });
 
-  test("deletes failed task", async () => {
-    // Create and cancel a task (makes it failed)
+  test("deletes cancelled task", async () => {
+    // Create and cancel a task (makes it cancelled)
     await runTaskCommand(
       parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "delete-failed", "Work"]),
       deps

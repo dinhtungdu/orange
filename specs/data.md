@@ -72,7 +72,9 @@ Append-only event log:
 |--------|-------------|
 | `pending` | Created, not yet spawned |
 | `working` | Agent actively working (includes self-review) |
-| `needs_human` | Self-review passed, ready for human review |
+| `reviewing` | Self-review passed, awaiting human review |
+| `reviewed` | Human approved, ready to merge |
 | `stuck` | Agent gave up after max review attempts |
 | `done` | Merged/completed |
 | `failed` | Agent crashed or errored |
+| `cancelled` | User cancelled |

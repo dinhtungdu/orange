@@ -241,7 +241,7 @@ describe("Dashboard Visual", () => {
   test("renders task list with proper column alignment", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", description: "Fix OAuth redirect loop" }));
     await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", description: "Add dark theme" }));
-    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "needs_human", description: "Password reset flow" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", description: "Password reset flow" }));
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,
@@ -264,12 +264,12 @@ describe("Dashboard Visual", () => {
     // Check status icons
     expect(frame).toContain("●"); // working
     expect(frame).toContain("✓"); // done
-    expect(frame).toContain("◉"); // needs_human
+    expect(frame).toContain("◉"); // reviewing
 
     // Check statuses
     expect(frame).toContain("working");
     expect(frame).toContain("done");
-    expect(frame).toContain("needs_human");
+    expect(frame).toContain("reviewing");
 
     // Selected task shows description
     expect(frame).toContain("Fix OAuth redirect loop");

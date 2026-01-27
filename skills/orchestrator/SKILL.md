@@ -42,7 +42,7 @@ orange workspace gc              # Release orphaned workspaces (bound to deleted
 3. **Create tasks**: Use `orange task create` for each independent task
 4. **Spawn agents**: Use `orange task spawn` to start agents working on tasks
 5. **Monitor progress**: Check status with `orange task list`
-6. **Notify user**: When tasks reach `needs_human` status, inform the user for review
+6. **Notify user**: When tasks reach `reviewing` status, inform the user for review
 
 ## Task Design Guidelines
 
@@ -103,7 +103,7 @@ EOF
 
 - `pending` - Task created but not spawned
 - `working` - Agent is actively working (includes self-review)
-- `needs_human` - Agent completed and passed self-review, ready for human review
+- `reviewing` - Agent completed and passed self-review, ready for human review
 - `stuck` - Agent gave up after 2 review attempts
 - `done` - Task merged
 - `failed` - Task cancelled or errored
@@ -143,7 +143,7 @@ orange workspace gc    # Auto-release orphaned workspaces
 ### Dependent tasks
 For tasks that MUST run sequentially (B depends on A):
 1. Create and spawn task A
-2. Wait for A to reach `needs_human` or `done`
+2. Wait for A to reach `reviewing` or `done`
 3. Then create and spawn task B
 
 ## Best Practices
@@ -158,6 +158,6 @@ For tasks that MUST run sequentially (B depends on A):
 - You are running in the project directory - you have access to CLAUDE.md, the codebase, etc.
 - Agents handle their own self-review internally (max 3 attempts)
 - You don't need to orchestrate reviews - just monitor status
-- When tasks show `needs_human`, the user should review in the dashboard
+- When tasks show `reviewing`, the user should review in the dashboard
 - The dashboard pane next to you shows tasks for this project
 - Use `orange task log <id>` to view agent conversation history

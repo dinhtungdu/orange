@@ -84,7 +84,7 @@ describe("Dashboard State", () => {
   test("loads tasks with different statuses", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "pending" }));
     await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "working" }));
-    await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "needs_human" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "reviewing" }));
     await saveTask(deps, createTask({ id: "t4", branch: "b4", status: "done" }));
 
     const { DashboardState } = await import("./state.js");

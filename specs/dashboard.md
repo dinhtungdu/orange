@@ -16,7 +16,7 @@ Shows tasks from TASK.md files (including done/failed).
  ● coffee/login-fix            working      3        +144 -12        2m ago
  └ Fix OAuth redirect loop on mobile
  ✗ coffee/crashed-task         dead                                 10m ago
- ◉ coffee/password-reset       needs_human  7        +89 -34        15m ago
+ ◉ coffee/password-reset       reviewing  7        +89 -34        15m ago
  ✓ orange/dark-mode            done                                  1h ago
 ──────────────────────────────────────────────────────────────────────────────
  j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit
@@ -24,7 +24,7 @@ Shows tasks from TASK.md files (including done/failed).
 
 **Columns:**
 - Task: status icon + project/branch (or just branch if project-scoped)
-- Status: working/needs_human/stuck/done/failed/pending/dead
+- Status: working/reviewing/reviewed/stuck/done/failed/cancelled/pending/dead
 - Commits: number of commits ahead of default branch (blank if none)
 - Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
 - Activity: relative time since last update (2m ago, 3h ago)
@@ -38,7 +38,8 @@ Shows tasks from TASK.md files (including done/failed).
 | Icon | Status |
 |------|--------|
 | ● | working — agent active |
-| ◉ | needs_human — ready for review |
+| ◉ | reviewing — awaiting human review |
+| ◈ | reviewed — human approved |
 | ⚠ | stuck — agent needs help |
 | ○ | pending — waiting to spawn |
 | ✓ | done — merged |
@@ -51,7 +52,7 @@ Footer shows relevant actions based on selected task's state:
 | Task State | Available Keys |
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
-| Live session (working/needs_human/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  c:create  f:filter  q:quit |
+| Live session (working/reviewing/reviewed/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  c:create  f:filter  q:quit |
 | Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |
 | Completed (done/failed) | j/k:nav  d:del  c:create  f:filter  q:quit |
 | Pending | j/k:nav  c:create  f:filter  q:quit |
