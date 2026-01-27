@@ -239,6 +239,162 @@ describe("Dashboard State", () => {
     expect(changeCount).toBe(2);
   });
 
+  // --- Create mode tests ---
+
+  test("c key enters create mode when project-scoped", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    expect(state.isCreateMode()).toBe(false);
+    state.handleInput("c");
+    expect(state.isCreateMode()).toBe(true);
+    expect(state.data.createMode.focusedField).toBe("branch");
+  });
+
+  test("c key shows error in global view", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
+
+    state.handleInput("c");
+    expect(state.isCreateMode()).toBe(false);
+    expect(state.data.error).toContain("project scope");
+  });
+
+  test("escape exits create mode", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    expect(state.isCreateMode()).toBe(true);
+
+    state.handleInput("escape");
+    expect(state.isCreateMode()).toBe(false);
+    expect(state.data.createMode.branch).toBe("");
+    expect(state.data.createMode.description).toBe("");
+  });
+
+  test("tab switches focus between fields", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    expect(state.data.createMode.focusedField).toBe("branch");
+
+    state.handleInput("tab");
+    expect(state.data.createMode.focusedField).toBe("description");
+
+    state.handleInput("tab");
+    expect(state.data.createMode.focusedField).toBe("branch");
+  });
+
+  test("typing appends to focused field", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    // Type into branch field
+    state.handleInput("f");
+    state.handleInput("i");
+    state.handleInput("x");
+    expect(state.data.createMode.branch).toBe("fix");
+
+    // Switch to description and type
+    state.handleInput("tab");
+    state.handleInput("B");
+    state.handleInput("u");
+    state.handleInput("g");
+    expect(state.data.createMode.description).toBe("Bug");
+  });
+
+  test("backspace removes last character from focused field", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    state.handleInput("a");
+    state.handleInput("b");
+    state.handleInput("c");
+    expect(state.data.createMode.branch).toBe("abc");
+
+    state.handleInput("backspace");
+    expect(state.data.createMode.branch).toBe("ab");
+  });
+
+  test("branch field rejects invalid characters", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    state.handleInput("a");
+    state.handleInput(" "); // spaces not allowed in branch
+    state.handleInput("b");
+    expect(state.data.createMode.branch).toBe("ab");
+  });
+
+  test("branch field allows hyphens, underscores, slashes, dots", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    for (const ch of "fix/bug-1_test.ts") {
+      state.handleInput(ch);
+    }
+    expect(state.data.createMode.branch).toBe("fix/bug-1_test.ts");
+  });
+
+  test("enter with empty fields shows error", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    state.handleInput("enter");
+    expect(state.data.error).toContain("required");
+    // Still in create mode
+    expect(state.isCreateMode()).toBe(true);
+  });
+
+  test("create mode disables normal navigation keys", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("c");
+    // j in create mode types 'j' into branch, doesn't move cursor
+    state.handleInput("j");
+    expect(state.getCursor()).toBe(0);
+    expect(state.data.createMode.branch).toBe("j");
+  });
+
+  test("context keys show create mode hints", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    state.handleInput("c");
+    const keys = state.getContextKeys();
+    expect(keys).toContain("Enter:submit");
+    expect(keys).toContain("Escape:cancel");
+    expect(keys).toContain("Tab:switch field");
+  });
+
+  test("context keys show c:create when project-scoped", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+
+    const keys = state.getContextKeys();
+    expect(keys).toContain("c:create");
+  });
+
+  test("context keys hide c:create in global view", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { all: true });
+
+    const keys = state.getContextKeys();
+    expect(keys).not.toContain("c:create");
+  });
+
   test("onChange unsubscribe works", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
     await saveTask(deps, createTask({ id: "t2", branch: "b2" }));

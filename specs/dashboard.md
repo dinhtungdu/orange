@@ -50,17 +50,18 @@ Footer shows relevant actions based on selected task's state:
 
 | Task State | Available Keys |
 |------------|----------------|
-| No task selected | j/k:nav  f:filter  q:quit |
-| Live session (working/needs_human/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit |
-| Dead session | j/k:nav  l:log  r:respawn  x:cancel  f:filter  q:quit |
-| Completed (done/failed) | j/k:nav  l:log  d:del  f:filter  q:quit |
-| Pending | j/k:nav  (spawn via CLI)  f:filter  q:quit |
+| No task selected | j/k:nav  c:create  f:filter  q:quit |
+| Live session (working/needs_human/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  c:create  f:filter  q:quit |
+| Dead session | j/k:nav  l:log  r:respawn  x:cancel  c:create  f:filter  q:quit |
+| Completed (done/failed) | j/k:nav  l:log  d:del  c:create  f:filter  q:quit |
+| Pending | j/k:nav  c:create  f:filter  q:quit |
 
 ### Key Actions
 
 | Key | Action | When |
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
+| c | Create new task | Always (project-scoped only) |
 | Enter | Switch to tmux session | Live sessions |
 | l | View conversation log | Dead/completed tasks |
 | r | Respawn agent | Dead sessions only |
@@ -74,6 +75,34 @@ Footer shows relevant actions based on selected task's state:
 **Attach behavior:**
 - Inside tmux: uses `switch-client`
 - Outside tmux: uses `attach`
+
+## Create Task
+
+Press `c` to create a new task inline. Only available when the dashboard is project-scoped (single project view). In global/all-projects view, `c` shows an error message.
+
+### Flow
+
+1. Press `c` — dashboard enters **create mode**
+2. Inline form appears below the task list:
+   ```
+   ──────────────────────────────────────────────────────────────────────────────
+    Create Task
+    Branch:      [feature-login____________]
+    Description: [Fix the OAuth redirect___]
+    Enter:submit  Escape:cancel
+   ```
+3. `Tab` moves between branch and description fields
+4. `Enter` submits the form → creates task + auto-spawns agent
+5. `Escape` cancels and returns to task list
+
+### Behavior
+
+- Branch and description are required (submit is no-op if either is empty)
+- Branch deduplication: if branch exists, appends `-2`, `-3`, etc. (same as CLI)
+- Auto-spawns agent after creation (same as `orange task create` without `--no-spawn`)
+- On success: shows "Created project/branch" message, task appears in list
+- On error: shows error message, stays in task list mode
+- While in create mode, task list navigation keys (j/k/etc.) are disabled
 
 ## Dead Session Detection
 

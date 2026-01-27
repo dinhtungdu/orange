@@ -7,11 +7,16 @@
 
 import { watch } from "chokidar";
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { customAlphabet } from "nanoid";
 import type { Deps, Task, TaskStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
-import { loadProjects } from "../core/state.js";
+import { loadProjects, saveTask, appendHistory, getTaskDir } from "../core/state.js";
 import { getWorkspacePath } from "../core/workspace.js";
+import { spawnTaskById } from "../core/spawn.js";
+
+const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 8);
 
 /**
  * Clean up nested error messages for display.
@@ -67,6 +72,16 @@ export interface DiffStats {
   commits: number;
 }
 
+/** Which field is focused in create mode. */
+export type CreateField = "branch" | "description";
+
+export interface CreateModeData {
+  active: boolean;
+  branch: string;
+  description: string;
+  focusedField: CreateField;
+}
+
 export interface DashboardStateData {
   tasks: Task[];
   allTasks: Task[];
@@ -80,6 +95,7 @@ export interface DashboardStateData {
   projectFilter: string | null;
   projectLabel: string;
   diffStats: Map<string, DiffStats>;
+  createMode: CreateModeData;
 }
 
 type ChangeListener = () => void;
@@ -102,6 +118,12 @@ export class DashboardState {
     projectFilter: null,
     projectLabel: "all",
     diffStats: new Map(),
+    createMode: {
+      active: false,
+      branch: "",
+      description: "",
+      focusedField: "branch",
+    },
   };
 
   private deps: Deps;
@@ -192,9 +214,18 @@ export class DashboardState {
     return this.data.tasks[this.data.cursor];
   }
 
+  isCreateMode(): boolean {
+    return this.data.createMode.active;
+  }
+
   // --- Input handling ---
 
   handleInput(key: string): void {
+    if (this.data.createMode.active) {
+      this.handleCreateInput(key);
+      return;
+    }
+
     switch (key) {
       case "j":
       case "down":
@@ -212,6 +243,9 @@ export class DashboardState {
         break;
       case "enter":
         this.attachToTask();
+        break;
+      case "c":
+        this.enterCreateMode();
         break;
       case "m":
         this.mergeTask();
@@ -234,6 +268,146 @@ export class DashboardState {
       case "f":
         this.cycleStatusFilter();
         break;
+    }
+  }
+
+  // --- Create mode ---
+
+  private enterCreateMode(): void {
+    if (!this.data.projectFilter) {
+      this.data.error = "Task creation requires a project scope. Use --project or run from a project directory.";
+      this.emit();
+      return;
+    }
+    this.data.createMode = {
+      active: true,
+      branch: "",
+      description: "",
+      focusedField: "branch",
+    };
+    this.emit();
+  }
+
+  private exitCreateMode(): void {
+    this.data.createMode = {
+      active: false,
+      branch: "",
+      description: "",
+      focusedField: "branch",
+    };
+    this.emit();
+  }
+
+  private handleCreateInput(key: string): void {
+    const cm = this.data.createMode;
+
+    switch (key) {
+      case "escape":
+        this.exitCreateMode();
+        return;
+      case "tab":
+        cm.focusedField = cm.focusedField === "branch" ? "description" : "branch";
+        this.emit();
+        return;
+      case "enter":
+        this.submitCreateTask();
+        return;
+      case "backspace": {
+        if (cm.focusedField === "branch") {
+          cm.branch = cm.branch.slice(0, -1);
+        } else {
+          cm.description = cm.description.slice(0, -1);
+        }
+        this.emit();
+        return;
+      }
+      default:
+        // Append printable characters
+        if (key.length === 1 && key >= " ") {
+          if (cm.focusedField === "branch") {
+            // Branch: allow alphanumeric, hyphens, underscores, slashes, dots
+            if (/[a-zA-Z0-9\-_/.]/.test(key)) {
+              cm.branch += key;
+            }
+          } else {
+            cm.description += key;
+          }
+          this.emit();
+        }
+        return;
+    }
+  }
+
+  private async submitCreateTask(): Promise<void> {
+    const cm = this.data.createMode;
+    const branch = cm.branch.trim();
+    const description = cm.description.trim();
+
+    if (!branch || !description) {
+      this.data.error = "Both branch and description are required.";
+      this.emit();
+      return;
+    }
+
+    const projectName = this.data.projectFilter!;
+    const projects = await loadProjects(this.deps);
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) {
+      this.data.error = `Project '${projectName}' not found.`;
+      this.exitCreateMode();
+      return;
+    }
+
+    this.exitCreateMode();
+
+    try {
+      // Find unique branch name
+      await this.deps.git.fetch(project.path);
+      let finalBranch = branch;
+      let suffix = 1;
+      while (await this.deps.git.branchExists(project.path, finalBranch)) {
+        suffix++;
+        finalBranch = `${branch}-${suffix}`;
+      }
+
+      const now = this.deps.clock.now();
+      const id = nanoid();
+
+      const task: Task = {
+        id,
+        project: project.name,
+        branch: finalBranch,
+        status: "pending",
+        workspace: null,
+        tmux_session: null,
+        description,
+        context: null,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const taskDir = getTaskDir(this.deps, project.name, finalBranch);
+      await mkdir(taskDir, { recursive: true });
+
+      await saveTask(this.deps, task);
+      await appendHistory(this.deps, project.name, finalBranch, {
+        type: "task.created",
+        timestamp: now,
+        task_id: id,
+        project: project.name,
+        branch: finalBranch,
+        description,
+      });
+
+      // Auto-spawn agent
+      await spawnTaskById(this.deps, id);
+
+      this.data.message = `Created ${project.name}/${finalBranch}`;
+      await this.refreshTasks();
+      this.emit();
+    } catch (err) {
+      this.data.error = `Create failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      this.emit();
     }
   }
 
@@ -529,8 +703,14 @@ export class DashboardState {
    * Get context-aware keybindings label based on selected task.
    */
   getContextKeys(): string {
+    if (this.data.createMode.active) {
+      return " Tab:switch field  Enter:submit  Escape:cancel";
+    }
+
     const task = this.data.tasks[this.data.cursor];
-    if (!task) return " j/k:nav  f:filter  q:quit";
+    const createKey = this.data.projectFilter ? "  c:create" : "";
+
+    if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
     const isDead = this.data.deadSessions.has(task.id);
     const activeStatuses: TaskStatus[] = ["working", "needs_human", "stuck"];
@@ -548,7 +728,7 @@ export class DashboardState {
     } else if (task.status === "pending") {
       keys += "  (spawn via CLI)";
     }
-    keys += "  f:filter  q:quit";
+    keys += `${createKey}  f:filter  q:quit`;
     return keys;
   }
 

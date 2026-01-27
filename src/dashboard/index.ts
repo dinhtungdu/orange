@@ -105,6 +105,32 @@ function buildDashboard(
     fg: "#888888",
   });
 
+  // --- Create form container ---
+  const createForm = new BoxRenderable(renderer, {
+    id: "create-form",
+    flexDirection: "column",
+    width: "100%",
+    paddingLeft: 1,
+  });
+  const createTitle = new TextRenderable(renderer, {
+    id: "create-title",
+    content: " Create Task",
+    fg: "#00DDFF",
+  });
+  const createBranchLabel = new TextRenderable(renderer, {
+    id: "create-branch",
+    content: "",
+    fg: "#FFFFFF",
+  });
+  const createDescLabel = new TextRenderable(renderer, {
+    id: "create-desc",
+    content: "",
+    fg: "#FFFFFF",
+  });
+  createForm.add(createTitle);
+  createForm.add(createBranchLabel);
+  createForm.add(createDescLabel);
+
   // Assemble tree
   root.add(header);
   root.add(colHeaders);
@@ -112,6 +138,7 @@ function buildDashboard(
   root.add(errorText);
   root.add(messageText);
   root.add(taskList);
+  root.add(createForm);
   root.add(footerSep);
   root.add(footerKeys);
   renderer.root.add(root);
@@ -144,6 +171,20 @@ function buildDashboard(
     errorText.visible = !!s.error;
     messageText.content = s.message ? ` ✓ ${s.message}` : "";
     messageText.visible = !!s.message;
+
+    // Create form
+    const cm = s.createMode;
+    createForm.visible = cm.active;
+    if (cm.active) {
+      const branchCursor = cm.focusedField === "branch" ? "█" : "";
+      const descCursor = cm.focusedField === "description" ? "█" : "";
+      const branchHighlight = cm.focusedField === "branch" ? "#00DDFF" : "#888888";
+      const descHighlight = cm.focusedField === "description" ? "#00DDFF" : "#888888";
+      createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]`;
+      createBranchLabel.fg = branchHighlight;
+      createDescLabel.content = `Description: [${cm.description}${descCursor}]`;
+      createDescLabel.fg = descHighlight;
+    }
 
     // Footer
     footerSep.content = "─".repeat(width);
@@ -267,6 +308,24 @@ export async function runDashboard(
       return;
     }
 
+    // In create mode, only Ctrl+C exits; all other keys go to state
+    if (state.isCreateMode()) {
+      const name = key.name;
+      if (name === "escape") {
+        state.handleInput("escape");
+      } else if (name === "return") {
+        state.handleInput("enter");
+      } else if (name === "tab") {
+        state.handleInput("tab");
+      } else if (name === "backspace") {
+        state.handleInput("backspace");
+      } else if (key.sequence && key.sequence.length === 1 && key.sequence >= " ") {
+        // Printable character
+        state.handleInput(key.sequence);
+      }
+      return;
+    }
+
     if (key.name === "q" && !key.ctrl && !key.meta) {
       state.dispose().then(() => {
         renderer.destroy();
@@ -279,7 +338,7 @@ export async function runDashboard(
     const name = key.name;
     if (name === "j" || name === "k" || name === "m" || name === "x" ||
         name === "d" || name === "l" || name === "r" || name === "o" ||
-        name === "f") {
+        name === "f" || name === "c") {
       state.handleInput(name);
     } else if (name === "up" || name === "down") {
       state.handleInput(name);
