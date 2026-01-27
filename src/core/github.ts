@@ -36,7 +36,13 @@ async function exec(
 export class RealGitHub implements GitHubExecutor {
   async isAvailable(): Promise<boolean> {
     try {
-      const { exitCode } = await exec("gh", ["auth", "status"], ".");
+      // Check github.com specifically — gh auth status checks ALL hosts
+      // and times out on unreachable ones (e.g. enterprise GitHub).
+      const { exitCode } = await exec(
+        "gh",
+        ["auth", "status", "--hostname", "github.com"],
+        "."
+      );
       return exitCode === 0;
     } catch {
       return false;
