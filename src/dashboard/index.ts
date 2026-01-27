@@ -159,7 +159,7 @@ function buildDashboard(
     header.content = ` ${headerLabel}`;
 
     // Column headers
-    const colTask = Math.max(20, width - 43);
+    const colTask = Math.max(20, width - 44);
     colHeaders.content =
       ` ${"Task".padEnd(colTask)}${"Status".padEnd(12)}${"Commits".padEnd(8)}${"Changes".padEnd(14)}${"Activity".padStart(9)}`;
 
@@ -240,7 +240,7 @@ function buildDashboard(
       }
 
       // Build row text
-      const taskColW = Math.max(20, width - 43);
+      const taskColW = Math.max(20, width - 44);
       const taskText = `${icon} ${taskName}`;
       const rowContent =
         ` ${taskText.padEnd(taskColW)}${statusCol.padEnd(12)}${commitsCol.padEnd(8)}${changesCol.padEnd(14)}${activity.padStart(9)}`;
