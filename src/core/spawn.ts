@@ -11,7 +11,7 @@ import { writeFile, symlink, readFile, unlink, stat } from "node:fs/promises";
 import type { Deps, Task, Project, Logger } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
-import { acquireWorkspace, releaseWorkspace } from "./workspace.js";
+import { acquireWorkspace, releaseWorkspace, addGitExcludes } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
 
 /**
@@ -140,6 +140,9 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Create local branch from default branch (no remote tracking)
     await deps.git.createBranch(workspacePath, task.branch);
     log.debug("Created branch", { branch: task.branch });
+
+    // Ensure git excludes are set (idempotent, covers pre-existing workspaces)
+    await addGitExcludes(project.path);
 
     // Symlink TASK.md to worktree
     await linkTaskFile(deps, workspacePath, task.project, task.branch);

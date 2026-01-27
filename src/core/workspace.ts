@@ -142,7 +142,7 @@ async function createWorktree(
  *
  * @param projectPath - Path to the main project repo (not the worktree)
  */
-async function addGitExcludes(projectPath: string): Promise<void> {
+export async function addGitExcludes(projectPath: string): Promise<void> {
   try {
   const gitDir = join(projectPath, ".git");
   const excludeDir = join(gitDir, "info");
