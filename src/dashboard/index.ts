@@ -435,7 +435,7 @@ export async function runDashboard(
     // Map key events to state machine
     const name = key.name;
     if (name === "j" || name === "k" || name === "m" || name === "x" ||
-        name === "d" || name === "l" || name === "r" || name === "o" ||
+        name === "d" || name === "r" || name === "o" ||
         name === "f" || name === "c" || name === "s") {
       state.handleInput(name);
     } else if (name === "up" || name === "down") {

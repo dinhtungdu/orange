@@ -256,9 +256,6 @@ export class DashboardState {
       case "d":
         this.deleteTask();
         break;
-      case "l":
-        this.viewLog();
-        break;
       case "r":
         this.respawnTask();
         break;
@@ -546,7 +543,7 @@ export class DashboardState {
 
     const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
     if (!sessionExists) {
-      this.data.error = "Session no longer exists. Press 'l' to view output log.";
+      this.data.error = "Session no longer exists.";
       this.emit();
       return;
     }
@@ -651,31 +648,6 @@ export class DashboardState {
     });
   }
 
-  private async viewLog(): Promise<void> {
-    const task = this.data.tasks[this.data.cursor];
-    if (!task) return;
-
-    const orangeCmd = this.getOrangeCommand(["task", "log", task.id]);
-    const logProc = Bun.spawnSync(orangeCmd, { stdout: "pipe", stderr: "pipe" });
-    const stdout = logProc.stdout.toString();
-    const stderr = logProc.stderr.toString();
-
-    if (logProc.exitCode !== 0 || !stdout.trim()) {
-      this.data.error = stderr.trim() || "No log available for this task";
-      this.emit();
-      return;
-    }
-
-    const { writeFileSync } = await import("node:fs");
-    const tmpFile = `/tmp/orange-log-${task.id}.txt`;
-    writeFileSync(tmpFile, stdout);
-
-    Bun.spawn(["tmux", "new-window", "-n", `log:${task.branch}`, `nvim -R ${tmpFile}`], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  }
-
   private respawnTask(): void {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
@@ -765,12 +737,12 @@ export class DashboardState {
     let keys = " j/k:nav";
     if (activeStatuses.includes(task.status)) {
       if (isDead) {
-        keys += "  l:log  r:respawn  x:cancel";
+        keys += "  r:respawn  x:cancel";
       } else {
         keys += "  Enter:attach  m:merge  x:cancel";
       }
     } else if (completedStatuses.includes(task.status)) {
-      keys += "  l:log  d:del";
+      keys += "  d:del";
     } else if (task.status === "pending") {
       keys += "  s:spawn  x:cancel";
     }
