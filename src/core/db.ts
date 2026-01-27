@@ -3,6 +3,10 @@
  *
  * No caching - scans task folders on every query.
  * Source of truth is the file-based TASK.md files.
+ *
+ * Branch names with slashes (e.g., "feature/auth") are sanitized to
+ * flat directory names (e.g., "feature--auth") by getTaskDir().
+ * The real branch name is stored in TASK.md frontmatter.
  */
 
 import { join } from "node:path";
@@ -13,6 +17,9 @@ import { loadTask } from "./state.js";
 /**
  * List tasks with optional filters.
  * Scans task folders and reads TASK.md files directly.
+ *
+ * Directory names are sanitized branch names (slashes → --).
+ * The real branch name is read from TASK.md frontmatter, not the dir name.
  */
 export async function listTasks(
   deps: Deps,

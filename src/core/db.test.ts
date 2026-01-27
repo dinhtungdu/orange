@@ -120,6 +120,52 @@ describe("Task Queries", () => {
     expect(task).toBeNull();
   });
 
+  test("listTasks finds tasks with slashes in branch names", async () => {
+    await saveTask(deps, createTask({ id: "task1", branch: "feature/auth" }));
+    await saveTask(deps, createTask({ id: "task2", branch: "fix/login/oauth" }));
+    await saveTask(deps, createTask({ id: "task3", branch: "simple-branch" }));
+
+    const tasks = await listTasks(deps, {});
+    expect(tasks).toHaveLength(3);
+
+    const ids = tasks.map(t => t.id).sort();
+    expect(ids).toEqual(["task1", "task2", "task3"]);
+
+    // Branch names preserved from frontmatter (not sanitized dir name)
+    const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
+    expect(byId.task1.branch).toBe("feature/auth");
+    expect(byId.task2.branch).toBe("fix/login/oauth");
+    expect(byId.task3.branch).toBe("simple-branch");
+  });
+
+  test("slashed branches stored in flat directories", async () => {
+    await saveTask(deps, createTask({ id: "task1", branch: "feature/auth" }));
+
+    // Directory should be sanitized: feature/auth → feature--auth
+    const { existsSync } = await import("node:fs");
+    const flatDir = join(tempDir, "tasks", "orange", "feature--auth", "TASK.md");
+    const nestedDir = join(tempDir, "tasks", "orange", "feature", "auth", "TASK.md");
+    expect(existsSync(flatDir)).toBe(true);
+    expect(existsSync(nestedDir)).toBe(false);
+  });
+
+  test("listTasks filters by project with slashed branches", async () => {
+    await saveTask(deps, createTask({ id: "task1", project: "orange", branch: "feature/auth" }));
+    await saveTask(deps, createTask({ id: "task2", project: "coffee", branch: "feature/login" }));
+
+    const tasks = await listTasks(deps, { project: "orange" });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].branch).toBe("feature/auth");
+  });
+
+  test("getTaskById finds task with slashed branch", async () => {
+    await saveTask(deps, createTask({ id: "slash1", branch: "feature/auth" }));
+
+    const task = await getTaskById(deps, "slash1");
+    expect(task).not.toBeNull();
+    expect(task?.branch).toBe("feature/auth");
+  });
+
   test("listTasks reflects changes to TASK.md files", async () => {
     const task = createTask({ id: "task1" });
     await saveTask(deps, task);

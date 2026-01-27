@@ -20,10 +20,19 @@ function getProjectsPath(deps: Deps): string {
 }
 
 /**
+ * Sanitize a branch name for use as a directory name.
+ * Replaces slashes with double-dash to keep storage flat.
+ * e.g., "feature/auth" → "feature--auth"
+ */
+export function sanitizeBranch(branch: string): string {
+  return branch.replace(/\//g, "--");
+}
+
+/**
  * Get the task directory for a project/branch.
  */
 export function getTaskDir(deps: Deps, project: string, branch: string): string {
-  return join(deps.dataDir, "tasks", project, branch);
+  return join(deps.dataDir, "tasks", project, sanitizeBranch(branch));
 }
 
 /**
