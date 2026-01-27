@@ -41,6 +41,8 @@ export interface Task {
   tmux_session: string | null;
   /** Human-readable task description */
   description: string;
+  /** Optional implementation context/notes from orchestrator */
+  context: string | null;
   /** ISO 8601 timestamp of task creation */
   created_at: string;
   /** ISO 8601 timestamp of last update */

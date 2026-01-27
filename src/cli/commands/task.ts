@@ -17,7 +17,7 @@
  * - orange task delete <task_id>
  */
 
-import { mkdir, rm, readFile } from "node:fs/promises";
+import { mkdir, rm, readFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { customAlphabet } from "nanoid";
@@ -154,6 +154,19 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const [branch, ...descParts] = parsed.args;
   const description = descParts.join(" ");
 
+  // Read context from stdin if --context - is passed
+  let context: string | null = null;
+  if (parsed.options.context === "-") {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const stdinContent = Buffer.concat(chunks).toString("utf-8").trim();
+    if (stdinContent) {
+      context = stdinContent;
+    }
+  }
+
   // Get project from --project flag or infer from cwd
   let projectName: string;
   if (parsed.options.project) {
@@ -184,6 +197,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     workspace: null,
     tmux_session: null,
     description,
+    context,
     created_at: now,
     updated_at: now,
   };

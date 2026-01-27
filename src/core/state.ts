@@ -29,7 +29,7 @@ export function getTaskDir(deps: Deps, project: string, branch: string): string 
 /**
  * Get the TASK.md path for a project/branch.
  */
-function getTaskPath(deps: Deps, project: string, branch: string): string {
+export function getTaskPath(deps: Deps, project: string, branch: string): string {
   return join(getTaskDir(deps, project, branch), "TASK.md");
 }
 
@@ -72,6 +72,14 @@ export async function loadTask(
     const content = await readFile(getTaskPath(deps, project, branch), "utf-8");
     const { data, content: description } = matter(content);
 
+    // Parse description and context from body
+    // Format: description\n\n---\n\ncontext (if context exists)
+    const body = description.trim();
+    const separator = "\n\n---\n\n";
+    const sepIndex = body.indexOf(separator);
+    const desc = sepIndex >= 0 ? body.slice(0, sepIndex) : body;
+    const ctx = sepIndex >= 0 ? body.slice(sepIndex + separator.length) : null;
+
     return {
       id: data.id as string,
       project: data.project as string,
@@ -79,7 +87,8 @@ export async function loadTask(
       status: data.status as Task["status"],
       workspace: (data.workspace as string) ?? null,
       tmux_session: (data.tmux_session as string) ?? null,
-      description: description.trim(),
+      description: desc,
+      context: ctx,
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
     };
@@ -106,7 +115,11 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     updated_at: task.updated_at,
   };
 
-  const content = matter.stringify(task.description, frontmatter);
+  // Combine description and context in body
+  const body = task.context
+    ? `${task.description}\n\n---\n\n${task.context}`
+    : task.description;
+  const content = matter.stringify(body, frontmatter);
   await writeFile(getTaskPath(deps, task.project, task.branch), content);
 }
 

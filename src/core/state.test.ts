@@ -108,6 +108,7 @@ describe("Task state (TASK.md)", () => {
       workspace: null,
       tmux_session: null,
       description: "Implement feature X",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
     };
@@ -131,6 +132,7 @@ describe("Task state (TASK.md)", () => {
       workspace: "orange--1",
       tmux_session: "orange/feature-x",
       description: "Implement feature X",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T01:00:00.000Z",
     };
@@ -155,6 +157,7 @@ describe("Task state (TASK.md)", () => {
       workspace: null,
       tmux_session: null,
       description: "Initial description",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
     };
@@ -203,6 +206,7 @@ describe("History (history.jsonl)", () => {
       workspace: null,
       tmux_session: null,
       description: "Test",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
     };
@@ -231,6 +235,7 @@ describe("History (history.jsonl)", () => {
       workspace: null,
       tmux_session: null,
       description: "Test",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
     };

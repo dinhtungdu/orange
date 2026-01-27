@@ -43,6 +43,7 @@ describe("Task Queries", () => {
     workspace: null,
     tmux_session: null,
     description: "Test task",
+    context: null,
     created_at: "2024-01-01T00:00:00.000Z",
     updated_at: "2024-01-01T00:00:00.000Z",
     ...overrides,

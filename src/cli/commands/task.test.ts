@@ -1129,7 +1129,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-test");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-test", [
       { type: "user", message: { role: "user", content: "Hello, please help me with this task" } },
@@ -1148,7 +1147,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-assistant");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-assistant", [
       { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "I will help you with that" }] } },
@@ -1167,7 +1165,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-tool");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-tool", [
       { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Read", input: { file_path: "/src/index.ts" } }] } },
@@ -1187,7 +1184,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-skip");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-skip", [
       { type: "queue-operation", operation: "dequeue" },
@@ -1207,7 +1203,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-thinking");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-thinking", [
       { type: "assistant", message: { role: "assistant", content: [{ type: "thinking", thinking: "Let me think..." }] } },
@@ -1227,7 +1222,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-truncate");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     const longMessage = "A".repeat(200);
     await setupClaudeHistory("log-truncate", [
@@ -1247,7 +1241,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-lines");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
 
     await setupClaudeHistory("log-lines", [
       { type: "user", message: { role: "user", content: "First message" } },
@@ -1265,7 +1258,7 @@ describe("task log command", () => {
 
   test("errors when task has no workspace", async () => {
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-noworkspace", "Work"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "log-noworkspace", "Work", "--no-spawn"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-noworkspace");
@@ -1284,7 +1277,6 @@ describe("task log command", () => {
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "log-nohistory");
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
     consoleErrors = [];
 
     await expect(

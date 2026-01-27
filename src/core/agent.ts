@@ -18,16 +18,15 @@ import type { Task } from "./types.js";
  * 5. Fix issues and re-review (max 3 attempts)
  * 6. Write outcome to .orange-task before stopping
  */
-export function buildAgentPrompt(task: Task, workspacePath: string, taskDir: string): string {
+export function buildAgentPrompt(task: Task, workspacePath: string, _taskDir: string): string {
   return `You are working on task: ${task.description}
 
 Project: ${task.project}
 Branch: ${task.branch}
 Worktree: ${workspacePath}
-Task folder: ${taskDir}
 
 Instructions:
-1. Read CONTEXT.md in task folder for implementation details from the orchestrator
+1. Read .orange-task.md in the worktree root for full task details and context
 2. Read CLAUDE.md for project context and coding standards
 3. Implement the task as described
 4. Run tests and lint to verify your changes
@@ -59,13 +58,12 @@ Important:
  * 2. If already passed review, escalate to human
  * 3. Otherwise continue from where it left off
  */
-export function buildRespawnPrompt(task: Task, workspacePath: string, taskDir: string): string {
+export function buildRespawnPrompt(task: Task, workspacePath: string, _taskDir: string): string {
   return `You are resuming work on task: ${task.description}
 
 Project: ${task.project}
 Branch: ${task.branch}
 Worktree: ${workspacePath}
-Task folder: ${taskDir}
 
 FIRST: Check current state by reading .orange-task file.
 
@@ -77,7 +75,7 @@ If .orange-task shows outcome "passed":
 If .orange-task shows outcome "stuck" or doesn't exist:
 - Continue with the task implementation
 - Follow the standard workflow:
-  1. Read CONTEXT.md in task folder for implementation details
+  1. Read .orange-task.md in the worktree root for full task details and context
   2. Read CLAUDE.md for project context
   3. Implement/fix the task
   4. Run tests and lint

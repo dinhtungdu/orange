@@ -254,6 +254,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Add new feature",
+      context: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -281,6 +282,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Task 1",
+      context: null,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
     };
@@ -292,6 +294,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: "test-repo--1",
       tmux_session: "test-repo/feature-2",
       description: "Task 2",
+      context: null,
       created_at: "2024-01-02T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
     };
@@ -314,6 +317,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Another feature",
+      context: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -417,12 +421,12 @@ describe("Integration: Multiple Projects", () => {
     // Create tasks for different projects
     const task1 = {
       id: "t1", project: "repo1", branch: "feat1", status: "pending" as const,
-      workspace: null, tmux_session: null, description: "Repo 1 task",
+      workspace: null, tmux_session: null, description: "Repo 1 task", context: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", status: "working" as const,
-      workspace: null, tmux_session: null, description: "Repo 2 task",
+      workspace: null, tmux_session: null, description: "Repo 2 task", context: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
 

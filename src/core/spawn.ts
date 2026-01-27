@@ -7,12 +7,54 @@
  */
 
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
+import { writeFile, symlink, appendFile, readFile, unlink, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import type { Deps, Task, Project, Logger } from "./types.js";
-import { loadProjects, saveTask, appendHistory, getTaskDir } from "./state.js";
+import { loadProjects, saveTask, appendHistory, getTaskDir, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
+
+/**
+ * Symlink TASK.md to worktree and add to git exclude.
+ */
+async function linkTaskFile(
+  deps: Deps,
+  workspacePath: string,
+  project: string,
+  branch: string
+): Promise<void> {
+  const taskMdPath = getTaskPath(deps, project, branch);
+  const symlinkPath = join(workspacePath, ".orange-task.md");
+  const excludePath = join(workspacePath, ".git", "info", "exclude");
+
+  // Remove existing symlink if present
+  try {
+    await unlink(symlinkPath);
+  } catch {
+    // Doesn't exist, fine
+  }
+
+  // Create symlink
+  await symlink(taskMdPath, symlinkPath);
+
+  // Add to .git/info/exclude if not already there
+  const excludeEntry = ".orange-task.md";
+  const excludeDir = join(workspacePath, ".git", "info");
+  await mkdir(excludeDir, { recursive: true });
+
+  let excludeContent = "";
+  try {
+    excludeContent = await readFile(excludePath, "utf-8");
+  } catch {
+    // File doesn't exist, will create
+  }
+
+  if (!excludeContent.includes(excludeEntry)) {
+    const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
+    await appendFile(excludePath, `${newLine}${excludeEntry}\n`);
+  }
+}
 
 /**
  * Escape a string for use in a shell double-quoted context.
@@ -88,6 +130,10 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   // Create feature branch directly from origin/<default_branch>
   // Workspace is in detached HEAD state, so no need to checkout first
   await deps.git.createBranch(workspacePath, task.branch, `origin/${project.default_branch}`);
+
+  // Symlink TASK.md to worktree as .orange-task.md
+  await linkTaskFile(deps, workspacePath, task.project, task.branch);
+  log.debug("Linked task file to worktree", { workspacePath });
 
   // Write .orange-task file for hook integration
   const orangeTaskFile = join(workspacePath, ".orange-task");
