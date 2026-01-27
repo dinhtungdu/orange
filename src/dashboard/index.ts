@@ -92,7 +92,7 @@ function createTableRow(
   // Changes column: fixed width, colored parts
   // We show "+N -M" as a single string; coloring per-part would need two cells
   // For now use added color if only adds, removed if only removes, white if both
-  let changesText = "";
+  let changesText = opts.changes || "";
   let changesColor = "#CCCCCC";
   if (opts.changesAdded && opts.changesRemoved) {
     changesText = `${opts.changesAdded} ${opts.changesRemoved}`;
