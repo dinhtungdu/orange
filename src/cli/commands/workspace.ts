@@ -6,12 +6,14 @@
  * Commands:
  * - orange workspace init
  * - orange workspace list [--all]
+ * - orange workspace gc
  */
 
 import type { ParsedArgs } from "../args.js";
 import type { Deps } from "../../core/types.js";
-import { initWorkspacePool, loadPoolState } from "../../core/workspace.js";
+import { initWorkspacePool, loadPoolState, releaseWorkspace } from "../../core/workspace.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
+import { listTasks } from "../../core/db.js";
 
 /**
  * Run a workspace subcommand.
@@ -29,11 +31,15 @@ export async function runWorkspaceCommand(
       await listWorkspaces(parsed, deps);
       break;
 
+    case "gc":
+      await gcWorkspaces(deps);
+      break;
+
     default:
       console.error(
         `Unknown workspace subcommand: ${parsed.subcommand ?? "(none)"}`
       );
-      console.error("Usage: orange workspace <init|list>");
+      console.error("Usage: orange workspace <init|list|gc>");
       process.exit(1);
   }
 }
@@ -103,4 +109,46 @@ async function listWorkspaces(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
     console.log();
   }
+}
+
+/**
+ * Garbage collect orphaned workspaces.
+ * Releases workspaces bound to non-existent tasks.
+ */
+async function gcWorkspaces(deps: Deps): Promise<void> {
+  const log = deps.logger.child("workspace");
+  const poolState = await loadPoolState(deps);
+  const tasks = await listTasks(deps, {});
+
+  // Build set of active task identifiers (project/branch)
+  const activeTasks = new Set(tasks.map((t) => `${t.project}/${t.branch}`));
+
+  // Find orphaned workspaces (bound to non-existent tasks)
+  const orphaned: string[] = [];
+  for (const [name, entry] of Object.entries(poolState.workspaces)) {
+    if (entry.status === "bound" && entry.task && !activeTasks.has(entry.task)) {
+      orphaned.push(name);
+    }
+  }
+
+  if (orphaned.length === 0) {
+    console.log("No orphaned workspaces found.");
+    return;
+  }
+
+  console.log(`Found ${orphaned.length} orphaned workspace(s):\n`);
+  for (const name of orphaned) {
+    const entry = poolState.workspaces[name];
+    console.log(`  ${name}: bound → ${entry.task} (task not found)`);
+  }
+  console.log();
+
+  // Release each orphaned workspace
+  for (const name of orphaned) {
+    log.info("Releasing orphaned workspace", { workspace: name });
+    await releaseWorkspace(deps, name);
+    console.log(`Released ${name}`);
+  }
+
+  console.log(`\nReleased ${orphaned.length} workspace(s).`);
 }

@@ -32,6 +32,7 @@ orange task cancel <task_id>
 # Workspace management
 orange workspace init    # Pre-create worktrees (optional, lazy init on spawn)
 orange workspace list [--all]    # Show pool status
+orange workspace gc              # Release orphaned workspaces (bound to deleted tasks)
 ```
 
 ## Workflow
@@ -132,6 +133,12 @@ If `orange task spawn` fails with "pool exhausted", check status:
 orange workspace list
 ```
 Wait for a working task to complete, or ask user to increase pool_size.
+
+### Orphaned workspaces
+If workspaces are bound to tasks that no longer exist (e.g., crashed spawn, manual deletion):
+```bash
+orange workspace gc    # Auto-release orphaned workspaces
+```
 
 ### Dependent tasks
 For tasks that MUST run sequentially (B depends on A):
