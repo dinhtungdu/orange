@@ -110,6 +110,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "merge",
       "cancel",
       "delete",
+      "create-pr",
     ],
     workspace: ["init", "list", "gc"],
   };
