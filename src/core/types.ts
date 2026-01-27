@@ -106,6 +106,8 @@ export interface GitExecutor {
   resetHard(cwd: string, ref: string): Promise<void>;
   /** Create a new branch, optionally from a start point (defaults to HEAD) */
   createBranch(cwd: string, branch: string, startPoint?: string): Promise<void>;
+  /** Check if a branch exists (local or remote) */
+  branchExists(cwd: string, branch: string): Promise<boolean>;
   /** Delete a branch (local) */
   deleteBranch(cwd: string, branch: string): Promise<void>;
   /** Delete a remote branch */

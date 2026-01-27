@@ -68,6 +68,15 @@ export class RealGit implements GitExecutor {
     }
   }
 
+  async branchExists(cwd: string, branch: string): Promise<boolean> {
+    // Check local branch
+    const local = await exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], cwd);
+    if (local.exitCode === 0) return true;
+    // Check remote branch
+    const remote = await exec("git", ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], cwd);
+    return remote.exitCode === 0;
+  }
+
   async deleteBranch(cwd: string, branch: string): Promise<void> {
     const { exitCode, stderr } = await exec(
       "git",
@@ -204,6 +213,12 @@ export class MockGit implements GitExecutor {
     }
     repoBranches.add(branch);
     this.currentBranches.set(cwd, branch);
+  }
+
+  async branchExists(cwd: string, branch: string): Promise<boolean> {
+    const repoBranches = this.branches.get(cwd);
+    if (!repoBranches) return false;
+    return repoBranches.has(branch) || repoBranches.has(`origin/${branch}`);
   }
 
   async deleteBranch(cwd: string, branch: string): Promise<void> {
