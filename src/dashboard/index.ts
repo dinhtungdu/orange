@@ -490,18 +490,15 @@ export async function runDashboard(
     }
 
     // Map key events to state machine
+    // Pass all keys through — state machine ignores unknown keys
     const name = key.name;
-    if (name === "j" || name === "k" || name === "m" || name === "x" ||
-        name === "d" || name === "r" || name === "p" || name === "u" ||
-        name === "f" || name === "c" || name === "s" || name === "a") {
-      state.handleInput(name);
-    } else if (key.sequence === "R") {
-      // Shift+R for PR refresh (key.name is 'r' for both r and R)
-      state.handleInput("R");
-    } else if (name === "up" || name === "down") {
+    if (name === "up" || name === "down") {
       state.handleInput(name);
     } else if (name === "return") {
       state.handleInput("enter");
+    } else if (key.sequence && key.sequence.length === 1) {
+      // Single character keys (including shifted like 'R')
+      state.handleInput(key.sequence);
     }
   });
 
