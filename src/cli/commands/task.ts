@@ -26,6 +26,7 @@ import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
 import {
   loadProjects,
+  loadTask,
   saveTask,
   appendHistory,
   getTaskDir,
@@ -147,27 +148,27 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     project = await requireProject(deps);
   }
 
-  // Find unique branch name (append -2, -3, etc. if exists)
+  // Check if an orange task already exists for this branch
+  const existingTask = await loadTask(deps, project.name, branch);
+  if (existingTask) {
+    log.error("Task already exists for branch", { project: project.name, branch });
+    console.error(`Task already exists for branch '${branch}' in project '${project.name}'`);
+    console.error(`Use 'orange task list' to see existing tasks.`);
+    process.exit(1);
+  }
+
+  // Fetch latest remote state
   await deps.git.fetch(project.path);
-  let finalBranch = branch;
-  let suffix = 1;
-  while (await deps.git.branchExists(project.path, finalBranch)) {
-    suffix++;
-    finalBranch = `${branch}-${suffix}`;
-  }
-  if (finalBranch !== branch) {
-    log.info("Branch exists, using new name", { original: branch, branch: finalBranch });
-  }
 
   const now = deps.clock.now();
   const id = nanoid();
 
-  log.info("Creating task", { taskId: id, project: project.name, branch: finalBranch, description });
+  log.info("Creating task", { taskId: id, project: project.name, branch, description });
 
   const task: Task = {
     id,
     project: project.name,
-    branch: finalBranch,
+    branch,
     status: "pending",
     workspace: null,
     tmux_session: null,
@@ -179,27 +180,27 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   };
 
   // Create task directory
-  const taskDir = getTaskDir(deps, project.name, finalBranch);
+  const taskDir = getTaskDir(deps, project.name, branch);
   await mkdir(taskDir, { recursive: true });
 
   // Save task and initial history event
   await saveTask(deps, task);
-  await appendHistory(deps, project.name, finalBranch, {
+  await appendHistory(deps, project.name, branch, {
     type: "task.created",
     timestamp: now,
     task_id: id,
     project: project.name,
-    branch: finalBranch,
+    branch: branch,
     description,
   });
 
-  log.info("Task created", { taskId: id, project: project.name, branch: finalBranch });
-  console.log(`Created task ${id} (${project.name}/${finalBranch})`);
+  log.info("Task created", { taskId: id, project: project.name, branch: branch });
+  console.log(`Created task ${id} (${project.name}/${branch})`);
 
   // Auto-spawn agent unless --no-spawn flag
   if (!parsed.options["no-spawn"]) {
     await spawnTaskById(deps, id);
-    console.log(`Spawned agent in ${project.name}/${finalBranch}`);
+    console.log(`Spawned agent in ${project.name}/${branch}`);
   }
 }
 

@@ -137,9 +137,21 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
       // No remote — use local default branch as-is
     }
 
-    // Create local branch from default branch (no remote tracking)
-    await deps.git.createBranch(workspacePath, task.branch);
-    log.debug("Created branch", { branch: task.branch });
+    // Create or checkout branch
+    const branchExists = await deps.git.branchExists(workspacePath, task.branch);
+    if (branchExists) {
+      // Branch exists locally or remotely — check it out
+      try {
+        await deps.git.checkout(workspacePath, task.branch);
+      } catch {
+        // Local branch doesn't exist but remote does — create tracking branch
+        await deps.git.createBranch(workspacePath, task.branch, `origin/${task.branch}`);
+      }
+      log.debug("Checked out existing branch", { branch: task.branch });
+    } else {
+      await deps.git.createBranch(workspacePath, task.branch);
+      log.debug("Created new branch", { branch: task.branch });
+    }
 
     // Ensure git excludes are set (idempotent, covers pre-existing workspaces)
     await addGitExcludes(project.path);

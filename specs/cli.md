@@ -42,7 +42,8 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 - Auto-spawns agent unless `--no-spawn`
 - `--context -` reads implementation context from stdin
 - `--project` specifies project explicitly (otherwise inferred from cwd)
-- Branch deduplication: if branch exists, appends `-2`, `-3`, etc.
+- Errors if an orange task already exists for the branch
+- If the git branch exists (local or remote), the agent reuses it on spawn
 
 ## Task Respawn
 

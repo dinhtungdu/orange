@@ -51,6 +51,26 @@ orange workspace gc              # Release orphaned workspaces (bound to deleted
 - Branch names should be **descriptive** - e.g., `add-user-auth`, `fix-login-bug`
 - Descriptions should be **clear** - enough context for the agent to work autonomously
 
+## Reusing Existing Branches
+
+Before creating a task, check if a relevant branch already exists:
+
+```bash
+git branch -a | grep <keyword>
+```
+
+If you find a branch that seems related to the task the user is asking for:
+
+1. **Ask the user**: "I found an existing branch `<branch>` that looks related to this task. Would you like to reuse it or create a new branch?"
+2. **If reuse**: Inspect what the branch has done so far:
+   ```bash
+   git log main..<branch> --oneline
+   git diff main..<branch> --stat
+   ```
+   Share the summary with the user and ask if they want the agent to continue from where it left off, or if they have specific instructions.
+   Then create the task with that branch name — the agent will pick up the existing work.
+3. **If new**: Use a different branch name and create a fresh task.
+
 ## Passing Context to Agents
 
 Use `--context -` with heredoc to pass implementation details:
