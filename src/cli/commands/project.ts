@@ -11,7 +11,7 @@ import { basename, resolve } from "node:path";
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Project } from "../../core/types.js";
 import { loadProjects, saveProjects } from "../../core/state.js";
-import { getGitRoot, getDefaultBranch } from "../../core/cwd.js";
+import { getGitRoot, getDefaultBranch, detectProject } from "../../core/cwd.js";
 
 /**
  * Run a project subcommand.
@@ -124,12 +124,19 @@ async function listProjects(deps: Deps): Promise<void> {
  * Update a project's settings.
  */
 async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange project update <name> [--pool-size <n>]");
-    process.exit(1);
+  let name = parsed.args[0] ?? null;
+
+  // Infer project from CWD if name not provided
+  if (!name) {
+    const detection = await detectProject(deps);
+    if (!detection.project) {
+      console.error("Usage: orange project update <name> [--pool-size <n>]");
+      console.error("Or run from a project directory to infer the project.");
+      process.exit(1);
+    }
+    name = detection.project.name;
   }
 
-  const name = parsed.args[0];
   const projects = await loadProjects(deps);
   const project = projects.find((p) => p.name === name);
 
