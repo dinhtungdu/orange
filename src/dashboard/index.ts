@@ -437,8 +437,13 @@ export async function runDashboard(
         state.handleInput("tab");
       } else if (name === "backspace") {
         state.handleInput("backspace");
-      } else if (key.sequence && key.sequence.length === 1 && key.sequence >= " ") {
-        state.handleInput(key.sequence);
+      } else if (key.sequence && key.sequence.length >= 1 && !key.ctrl && !key.meta) {
+        // Handle single chars and pasted text (multiple chars in one sequence)
+        for (const ch of key.sequence) {
+          if (ch >= " ") {
+            state.handleInput(ch);
+          }
+        }
       }
       return;
     }
