@@ -52,10 +52,13 @@ Footer shows relevant actions based on selected task's state:
 | Task State | Available Keys |
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
-| Live session (working/reviewing/reviewed/stuck) | j/k:nav  Enter:attach  m:merge  x:cancel  c:create  f:filter  q:quit |
+| Pending | j/k:nav  s:spawn  x:cancel  c:create  f:filter  q:quit |
+| Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Reviewing | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
+| Reviewed | j/k:nav  Enter:attach  m:merge  p:create PR/open PR  x:cancel  c:create  f:filter  q:quit |
+| Stuck | j/k:nav  Enter:attach  r:respawn  x:cancel  c:create  f:filter  q:quit |
 | Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |
-| Completed (done/failed) | j/k:nav  d:del  c:create  f:filter  q:quit |
-| Pending | j/k:nav  c:create  f:filter  q:quit |
+| Completed (done/failed/cancelled) | j/k:nav  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
 
@@ -64,12 +67,13 @@ Footer shows relevant actions based on selected task's state:
 | j/k | Navigate tasks | Always |
 | c | Create new task | Always (project-scoped only) |
 | Enter | Switch to tmux session | Live sessions |
-| l | View conversation log | Dead/completed tasks |
-| r | Respawn agent | Dead sessions only |
-| m | Merge task | Live sessions |
+| s | Spawn agent | Pending tasks |
+| a | Approve task | Reviewing tasks |
+| r | Respawn agent | Dead sessions or stuck tasks |
+| m | Merge task | Reviewed tasks |
+| p | Create PR / Open PR in browser | Reviewed (no PR) / Any task with PR |
 | x | Cancel task (shows confirmation) | Active tasks |
 | d | Delete task folder (shows confirmation) | Completed tasks only |
-| o | Open PR in browser | Any task |
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
 

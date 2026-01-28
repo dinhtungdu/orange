@@ -9,11 +9,15 @@ Automate PR creation and merge detection via GitHub CLI (`gh`).
 
 ## PR Lifecycle
 
-### Create PR on Approve
+### Approve
 
-When a task is approved (`orange task approve <id>`):
+`orange task approve <id>` moves task from `reviewing` → `reviewed`. Status change only — no push or PR creation.
 
-1. Push branch to remote
+### Create PR
+
+`orange task create-pr <id>` (or `p` key in dashboard) for reviewed tasks:
+
+1. Push branch to remote from workspace
 2. Create PR with:
    - Title: first line of task description
    - Body: task description + context, followed by repo's PR template if it exists
@@ -27,7 +31,7 @@ PR template lookup order:
 3. `pull_request_template.md` (repo root)
 4. `PULL_REQUEST_TEMPLATE.md` (repo root)
 
-If push or PR creation fails → log warning, task still moves to `reviewed`.
+Errors if `gh` is not available or task already has a PR.
 
 ### Merge with PR Awareness
 
@@ -42,11 +46,15 @@ If push or PR creation fails → log warning, task still moves to `reviewed`.
 | Closed | Error: "PR was closed without merging." |
 
 **Task has no PR:**
-- Local merge + push + cleanup (unchanged from before)
+- Local merge + push + cleanup
 
 **Flag:** `--local` — force local merge, bypass PR status check.
 
 Cleanup is always: release workspace, kill tmux session, delete remote branch, status → `done`.
+
+### Dashboard PR Polling
+
+Dashboard polls PR statuses every 30s. When a PR is detected as merged for a `reviewed` task, it auto-triggers merge cleanup.
 
 ### Task Metadata
 
@@ -72,22 +80,22 @@ Null when no PR was created.
 {"type":"pr.merged","timestamp":"...","url":"https://github.com/user/repo/pull/42","merge_commit":"abc123"}
 ```
 
-## CLI Changes
+## CLI Commands
 
 ```bash
-orange task approve <task_id>                    # Now also pushes + creates PR
+orange task approve <task_id>                    # reviewing → reviewed
+orange task create-pr <task_id>                  # Push + create PR for reviewed task
 orange task merge <task_id> [--strategy ff|merge] [--local]  # --local: bypass PR check
 ```
 
 ## Future Work
 
-- Dashboard: show PR URL, CI check status, review decision
 - `orange task sync` command: poll reviewed tasks, auto-cleanup merged PRs
 - Webhook-based detection (currently polling-only)
 
 ## Edge Cases
 
-- **No remote** — push fails silently, skip PR creation
+- **No remote** — push fails, PR creation errors
 - **`gh` not installed** — all PR features disabled, local workflow works
 - **PR closed without merge** — leave task as-is, user decides
 - **PR merge conflicts** — user resolves on GitHub, orange detects the merge

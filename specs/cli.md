@@ -16,14 +16,17 @@ orange task spawn <task_id>
 orange task attach <task_id>
 orange task respawn <task_id>
 orange task complete <task_id>      # Called by hook → reviewing
+orange task approve <task_id>       # Human approves → reviewed, pushes + creates PR
 orange task stuck <task_id>         # Called by hook → stuck
-orange task merge <task_id> [--strategy ff|merge]
-orange task cancel <task_id>
-orange task delete <task_id>        # done/failed only
+orange task merge <task_id> [--strategy ff|merge] [--local]
+orange task cancel <task_id> [--yes]
+orange task delete <task_id> [--yes] # done/failed/cancelled only
+orange task create-pr <task_id>     # Create PR for reviewed task (retry/manual)
 
 # Workspaces (project inferred from cwd)
 orange workspace init
 orange workspace list [--all]
+orange workspace gc                 # Release orphaned workspaces
 
 # Session
 orange start                        # Start orchestrator for current project
@@ -54,13 +57,17 @@ Requirements:
 - Has assigned workspace
 - tmux session no longer exists
 
+## Task Approve
+
+Mark a reviewing task as reviewed (human approved). Also pushes branch and creates a GitHub PR if `gh` is available.
+
 ## Task Cancel
 
 Requires user confirmation before cancelling. CLI prompts "Cancel task <project>/<branch>? (y/N)". Skip with `--yes`.
 
 ## Task Delete
 
-Remove task folder. Only works for done/failed tasks. Active tasks must be cancelled first.
+Remove task folder. Only works for done/failed/cancelled tasks. Active tasks must be cancelled first.
 Requires user confirmation before deleting. CLI prompts "Delete task <project>/<branch>? (y/N)". Skip with `--yes`.
 
 ## Task Merge
@@ -68,9 +75,18 @@ Requires user confirmation before deleting. CLI prompts "Delete task <project>/<
 Auto-detects workflow:
 1. Check if PR exists and is merged
 2. PR merged → skip local merge; otherwise → local merge
-3. Snapshot conversation log to task dir
-4. Cleanup: release workspace, kill session, status → done
-5. Push default branch to remote
+3. Cleanup: release workspace, kill session, delete remote branch, status → done
+4. Push default branch to remote
+
+Use `--local` to bypass PR status check and force local merge.
+
+## Task Create-PR
+
+Create a GitHub PR for a reviewed task. Useful when `gh` was unavailable during approve, or for manual retry. Errors if task already has a PR.
+
+## Workspace GC
+
+Release workspaces bound to tasks that no longer exist (e.g., after manual deletion or crashed spawns).
 
 ## CWD Detection
 

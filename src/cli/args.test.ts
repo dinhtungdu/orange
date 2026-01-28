@@ -110,20 +110,17 @@ describe("parseArgs", () => {
     expect(result.args).toEqual(["abc12345"]);
   });
 
-  test("parses task peek with lines option", () => {
+  test("parses task create-pr with task id", () => {
     const result = parseArgs([
       "bun",
       "script.ts",
       "task",
-      "peek",
+      "create-pr",
       "abc12345",
-      "--lines",
-      "100",
     ]);
     expect(result.command).toBe("task");
-    expect(result.subcommand).toBe("peek");
+    expect(result.subcommand).toBe("create-pr");
     expect(result.args).toEqual(["abc12345"]);
-    expect(result.options.lines).toBe("100");
   });
 
   test("parses task merge with strategy", () => {

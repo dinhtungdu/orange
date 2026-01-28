@@ -5,7 +5,7 @@
  *
  * Routes commands to appropriate handlers:
  * - project: Project management (add, list, remove)
- * - task: Task management (create, list, spawn, peek, complete, stuck, merge, cancel)
+ * - task: Task management (create, list, spawn, attach, respawn, complete, approve, stuck, merge, cancel, delete, create-pr)
  * - workspace: Workspace pool management (init, list)
  * - start: Start orchestrator session (must be in project directory)
  * - install: Install orchestrator skill
@@ -103,7 +103,6 @@ function isSubcommand(command: string, arg: string): boolean {
       "spawn",
       "attach",
       "respawn",
-      "peek",
       "complete",
       "approve",
       "stuck",
@@ -154,11 +153,14 @@ Task Management (project inferred from cwd):
   orange task attach <task_id>        Attach to task's tmux session
   orange task respawn <task_id>       Restart dead session
   orange task complete <task_id>      Mark task complete (hook)
+  orange task approve <task_id>       Approve task (reviewing → reviewed)
   orange task stuck <task_id>         Mark task stuck (hook)
   orange task merge <task_id> [options] Merge and cleanup
     --strategy <ff|merge>             Merge strategy (default: ff)
+    --local                           Force local merge, bypass PR check
   orange task cancel <task_id> [--yes] Cancel task (prompts for confirmation)
-  orange task delete <task_id> [--yes] Delete task (only done/failed, prompts for confirmation)
+  orange task delete <task_id> [--yes] Delete task (only done/failed/cancelled)
+  orange task create-pr <task_id>     Create PR for reviewed task
 
 Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project
