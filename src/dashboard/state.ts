@@ -541,11 +541,11 @@ export class DashboardState {
     const tasksWithPR = this.data.tasks.filter((t) => t.pr_url);
     if (tasksWithPR.length === 0) return;
 
-    const ghAvailable = await this.deps.github.isAvailable();
-    if (!ghAvailable) return;
-
     const projects = await loadProjects(this.deps);
     const projectMap = new Map(projects.map((p) => [p.name, p]));
+
+    // Check gh availability per-project (different hosts may have different auth)
+    const ghAvailableByProject = new Map<string, boolean>();
 
     const mergedTasks: Task[] = [];
 
@@ -553,6 +553,14 @@ export class DashboardState {
       tasksWithPR.map(async (task) => {
         const project = projectMap.get(task.project);
         if (!project) return;
+
+        // Check gh availability for this project's host (cached per project)
+        if (!ghAvailableByProject.has(task.project)) {
+          const available = await this.deps.github.isAvailable(project.path);
+          ghAvailableByProject.set(task.project, available);
+        }
+        if (!ghAvailableByProject.get(task.project)) return;
+
         try {
           const status = await this.deps.github.getPRStatus(project.path, task.branch);
           this.data.prStatuses.set(task.id, status);

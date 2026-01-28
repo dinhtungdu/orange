@@ -158,8 +158,8 @@ export interface PRStatus {
  * Abstracted to support both real gh CLI and mock implementations for testing.
  */
 export interface GitHubExecutor {
-  /** Check if gh CLI is available and authenticated */
-  isAvailable(): Promise<boolean>;
+  /** Check if gh CLI is available and authenticated for the repo's host */
+  isAvailable(cwd?: string): Promise<boolean>;
   /** Create a PR. Returns PR URL. */
   createPR(
     cwd: string,

@@ -609,9 +609,9 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  const ghAvailable = await deps.github.isAvailable();
+  const ghAvailable = await deps.github.isAvailable(project.path);
   if (!ghAvailable) {
-    console.error("gh CLI is not available or not authenticated");
+    console.error("gh CLI is not available or not authenticated for this repository");
     process.exit(1);
   }
 

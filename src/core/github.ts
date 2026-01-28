@@ -49,17 +49,47 @@ function getProxyEnv(): Record<string, string> {
 }
 
 /**
+ * Extract GitHub hostname from git remote URL.
+ * Supports both HTTPS and SSH URLs.
+ */
+export function getGitHubHost(remoteUrl: string): string {
+  // SSH: git@github.example.com:org/repo.git
+  const sshMatch = remoteUrl.match(/^git@([^:]+):/);
+  if (sshMatch) return sshMatch[1];
+
+  // HTTPS: https://github.example.com/org/repo.git
+  try {
+    const url = new URL(remoteUrl);
+    return url.hostname;
+  } catch {
+    return "github.com";
+  }
+}
+
+/**
  * RealGitHub implements GitHubExecutor using the `gh` CLI.
  */
 export class RealGitHub implements GitHubExecutor {
-  async isAvailable(): Promise<boolean> {
+  async isAvailable(cwd?: string): Promise<boolean> {
     try {
-      // Check github.com specifically — gh auth status checks ALL hosts
-      // and times out on unreachable ones (e.g. enterprise GitHub).
+      let hostname = "github.com";
+
+      // If cwd provided, detect hostname from git remote
+      if (cwd) {
+        const { stdout, exitCode } = await exec(
+          "git",
+          ["remote", "get-url", "origin"],
+          cwd
+        );
+        if (exitCode === 0 && stdout.trim()) {
+          hostname = getGitHubHost(stdout.trim());
+        }
+      }
+
       const { exitCode } = await exec(
         "gh",
-        ["auth", "status", "--hostname", "github.com"],
-        "."
+        ["auth", "status", "--hostname", hostname],
+        cwd ?? "."
       );
       return exitCode === 0;
     } catch {
@@ -164,7 +194,7 @@ export class MockGitHub implements GitHubExecutor {
     body: string;
   }> = [];
 
-  async isAvailable(): Promise<boolean> {
+  async isAvailable(_cwd?: string): Promise<boolean> {
     return this.available;
   }
 

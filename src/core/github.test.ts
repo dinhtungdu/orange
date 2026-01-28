@@ -2,7 +2,26 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "node:path";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { MockGitHub, buildPRBody } from "./github.js";
+import { MockGitHub, buildPRBody, getGitHubHost } from "./github.js";
+
+describe("getGitHubHost", () => {
+  test("extracts host from HTTPS URL", () => {
+    expect(getGitHubHost("https://github.com/org/repo.git")).toBe("github.com");
+    expect(getGitHubHost("https://github.example.com/org/repo.git")).toBe("github.example.com");
+    expect(getGitHubHost("https://git.company.io/org/repo")).toBe("git.company.io");
+  });
+
+  test("extracts host from SSH URL", () => {
+    expect(getGitHubHost("git@github.com:org/repo.git")).toBe("github.com");
+    expect(getGitHubHost("git@github.example.com:org/repo.git")).toBe("github.example.com");
+    expect(getGitHubHost("git@git.company.io:org/repo")).toBe("git.company.io");
+  });
+
+  test("returns github.com for invalid URLs", () => {
+    expect(getGitHubHost("invalid")).toBe("github.com");
+    expect(getGitHubHost("")).toBe("github.com");
+  });
+});
 
 describe("MockGitHub", () => {
   let gh: MockGitHub;
