@@ -114,7 +114,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|stuck|merge|cancel|delete|create-pr>"
+        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|unapprove|stuck|merge|cancel|delete|create-pr>"
       );
       process.exit(1);
   }

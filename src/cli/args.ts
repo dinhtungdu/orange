@@ -105,6 +105,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "respawn",
       "complete",
       "approve",
+      "unapprove",
       "stuck",
       "merge",
       "cancel",
@@ -154,6 +155,7 @@ Task Management (project inferred from cwd):
   orange task respawn <task_id>       Restart dead session
   orange task complete <task_id>      Mark task complete (hook)
   orange task approve <task_id>       Approve task (reviewing → reviewed)
+  orange task unapprove <task_id>     Unapprove task (reviewed → reviewing)
   orange task stuck <task_id>         Mark task stuck (hook)
   orange task merge <task_id> [options] Merge and cleanup
     --strategy <ff|merge>             Merge strategy (default: ff)
