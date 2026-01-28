@@ -31,6 +31,10 @@ All data in `~/orange/`.
 ]
 ```
 
+## Task ID
+
+21-character alphanumeric string (nanoid with `[0-9A-Za-z]` alphabet). No hyphens or special characters — IDs are safe to use as CLI positional arguments.
+
 ## TASK.md
 
 Human-readable task file with YAML frontmatter:

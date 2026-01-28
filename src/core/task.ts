@@ -3,7 +3,7 @@
  */
 
 import { mkdir } from "node:fs/promises";
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
 import type { Deps, Task, Project } from "./types.js";
 import { loadTask, saveTask, appendHistory, getTaskDir } from "./state.js";
 
@@ -43,6 +43,9 @@ export async function createTaskRecord(
   await deps.git.fetch(project.path);
 
   const now = deps.clock.now();
+  // Use alphanumeric-only alphabet to avoid IDs starting with '-'
+  // which breaks CLI arg parsing
+  const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
   const id = nanoid();
 
   log.info("Creating task", { taskId: id, project: project.name, branch, description });
