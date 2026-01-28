@@ -96,7 +96,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
  */
 function isSubcommand(command: string, arg: string): boolean {
   const subcommands: Record<string, string[]> = {
-    project: ["add", "list", "remove"],
+    project: ["add", "list", "remove", "update"],
     task: [
       "create",
       "list",
@@ -140,6 +140,8 @@ Project Management:
     --name <name>                     Custom project name
     --pool-size <n>                   Worktree pool size (default: 2)
   orange project list                 List all projects
+  orange project update <name> [options] Update project settings
+    --pool-size <n>                   Worktree pool size
   orange project remove <name>        Remove a project
 
 Task Management (project inferred from cwd):

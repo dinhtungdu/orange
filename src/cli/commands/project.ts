@@ -29,6 +29,10 @@ export async function runProjectCommand(
       await listProjects(deps);
       break;
 
+    case "update":
+      await updateProject(parsed, deps);
+      break;
+
     case "remove":
       await removeProject(parsed, deps);
       break;
@@ -37,7 +41,7 @@ export async function runProjectCommand(
       console.error(
         `Unknown project subcommand: ${parsed.subcommand ?? "(none)"}`
       );
-      console.error("Usage: orange project <add|list|remove>");
+      console.error("Usage: orange project <add|list|update|remove>");
       process.exit(1);
   }
 }
@@ -114,6 +118,46 @@ async function listProjects(deps: Deps): Promise<void> {
     console.log(`    Pool size: ${project.pool_size}`);
     console.log();
   }
+}
+
+/**
+ * Update a project's settings.
+ */
+async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange project update <name> [--pool-size <n>]");
+    process.exit(1);
+  }
+
+  const name = parsed.args[0];
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === name);
+
+  if (!project) {
+    console.error(`Project '${name}' not found`);
+    process.exit(1);
+  }
+
+  let updated = false;
+
+  if (parsed.options["pool-size"] !== undefined) {
+    const poolSize = parseInt(parsed.options["pool-size"] as string);
+    if (isNaN(poolSize) || poolSize < 1) {
+      console.error("Error: pool-size must be a positive integer");
+      process.exit(1);
+    }
+    project.pool_size = poolSize;
+    updated = true;
+  }
+
+  if (!updated) {
+    console.error("Nothing to update. Use --pool-size <n> to change pool size.");
+    process.exit(1);
+  }
+
+  await saveProjects(deps, projects);
+  console.log(`Updated project '${name}'`);
+  console.log(`  Pool size: ${project.pool_size}`);
 }
 
 /**

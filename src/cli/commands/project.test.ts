@@ -368,6 +368,122 @@ describe("project remove command", () => {
   });
 });
 
+describe("project update command", () => {
+  let tempDir: string;
+  let projectDir: string;
+  let deps: Deps;
+  let consoleLogs: string[];
+  let consoleErrors: string[];
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-test-"));
+    projectDir = join(tempDir, "myproject");
+    createGitRepo(projectDir);
+
+    deps = {
+      tmux: new MockTmux(),
+      git: new MockGit(),
+      github: new MockGitHub(),
+      clock: new MockClock(),
+      dataDir: tempDir,
+      logger: new NullLogger(),
+    };
+
+    consoleLogs = [];
+    consoleErrors = [];
+    originalLog = console.log;
+    originalError = console.error;
+    originalExit = process.exit;
+
+    console.log = (...args: unknown[]) => {
+      consoleLogs.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      consoleErrors.push(args.map(String).join(" "));
+    };
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit;
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.log = originalLog;
+    console.error = originalError;
+    process.exit = originalExit;
+  });
+
+  test("updates pool size", async () => {
+    await runProjectCommand(
+      parseArgs(["bun", "script.ts", "project", "add", projectDir]),
+      deps
+    );
+    consoleLogs = [];
+
+    await runProjectCommand(
+      parseArgs(["bun", "script.ts", "project", "update", "myproject", "--pool-size", "5"]),
+      deps
+    );
+
+    const projects = await loadProjects(deps);
+    expect(projects[0].pool_size).toBe(5);
+    expect(consoleLogs[0]).toContain("Updated project 'myproject'");
+  });
+
+  test("errors when project not found", async () => {
+    await expect(
+      runProjectCommand(
+        parseArgs(["bun", "script.ts", "project", "update", "nonexistent", "--pool-size", "3"]),
+        deps
+      )
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors[0]).toContain("not found");
+  });
+
+  test("errors when name not provided", async () => {
+    await expect(
+      runProjectCommand(
+        parseArgs(["bun", "script.ts", "project", "update"]),
+        deps
+      )
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors[0]).toContain("Usage:");
+  });
+
+  test("errors when no options provided", async () => {
+    await runProjectCommand(
+      parseArgs(["bun", "script.ts", "project", "add", projectDir]),
+      deps
+    );
+
+    await expect(
+      runProjectCommand(
+        parseArgs(["bun", "script.ts", "project", "update", "myproject"]),
+        deps
+      )
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors.join(" ")).toContain("Nothing to update");
+  });
+
+  test("errors on invalid pool size", async () => {
+    await runProjectCommand(
+      parseArgs(["bun", "script.ts", "project", "add", projectDir]),
+      deps
+    );
+
+    await expect(
+      runProjectCommand(
+        parseArgs(["bun", "script.ts", "project", "update", "myproject", "--pool-size", "abc"]),
+        deps
+      )
+    ).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors.join(" ")).toContain("positive integer");
+  });
+});
+
 describe("project command error handling", () => {
   let tempDir: string;
   let deps: Deps;
