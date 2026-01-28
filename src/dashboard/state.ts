@@ -315,6 +315,9 @@ export class DashboardState {
       case "a":
         this.approveTask();
         break;
+      case "u":
+        this.unapproveTask();
+        break;
       case "p":
         this.createOrOpenPR();
         break;
@@ -727,6 +730,38 @@ export class DashboardState {
     });
   }
 
+  private unapproveTask(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    if (task.status !== "reviewed") {
+      this.data.error = "Only reviewed tasks can be unapproved.";
+      this.emit();
+      return;
+    }
+
+    const taskBranch = task.branch;
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "unapprove", task.id]), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.data.pendingOps.delete(task.id);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.data.error = `Unapprove failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+      } else {
+        this.data.message = `Unapproved ${taskBranch}`;
+      }
+      await this.refreshTasks();
+      this.emit();
+    });
+  }
+
   private mergeTask(): void {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
@@ -991,7 +1026,7 @@ export class DashboardState {
     } else if (isDead) {
       keys += "  r:respawn  x:cancel";
     } else if (task.status === "reviewed") {
-      keys += "  Enter:attach  m:merge";
+      keys += "  Enter:attach  u:unapprove  m:merge";
       keys += task.pr_url ? "  p:open PR" : "  p:create PR";
       keys += "  x:cancel";
     } else if (task.status === "stuck") {

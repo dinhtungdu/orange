@@ -13,6 +13,10 @@ Automate PR creation and merge detection via GitHub CLI (`gh`).
 
 `orange task approve <id>` moves task from `reviewing` → `reviewed`. Status change only — no push or PR creation.
 
+### Unapprove
+
+`orange task unapprove <id>` (or `u` key in dashboard) moves task from `reviewed` → `reviewing`. Undo for accidental approvals.
+
 ### Auto-detect Existing PR
 
 On task creation, Orange checks if the branch already has a PR on GitHub. If found, `pr_url` is populated automatically. This enables:
@@ -100,6 +104,7 @@ Null when no PR was created.
 
 ```bash
 orange task approve <task_id>                    # reviewing → reviewed
+orange task unapprove <task_id>                  # reviewed → reviewing
 orange task create-pr <task_id>                  # Push + create PR for reviewed task
 orange task merge <task_id> [--strategy ff|merge] [--local]  # --local: bypass PR check
 ```

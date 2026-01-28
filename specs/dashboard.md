@@ -69,6 +69,7 @@ Footer shows relevant actions based on selected task's state:
 | Enter | Switch to tmux session | Live sessions |
 | s | Spawn agent | Pending tasks |
 | a | Approve task | Reviewing tasks |
+| u | Unapprove task | Reviewed tasks |
 | r | Respawn agent | Dead sessions or stuck tasks |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
 | m | Merge task | Reviewed tasks |

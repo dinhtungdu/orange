@@ -77,6 +77,10 @@ export async function runTaskCommand(
       await approveTask(parsed, deps);
       break;
 
+    case "unapprove":
+      await unapproveTask(parsed, deps);
+      break;
+
     case "stuck":
       await stuckTask(parsed, deps);
       break;
@@ -511,6 +515,49 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   log.info("Task approved", { taskId });
   console.log(`Task ${taskId} approved (reviewed)`);
+}
+
+/**
+ * Undo approval — move task from reviewed back to reviewing.
+ */
+async function unapproveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task unapprove <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error("Task not found for unapprove", { taskId });
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  if (task.status !== "reviewed") {
+    log.error("Task not in reviewed status", { taskId, status: task.status });
+    console.error(`Task '${taskId}' is not in reviewed status (status: ${task.status})`);
+    process.exit(1);
+  }
+
+  const now = deps.clock.now();
+  task.status = "reviewing";
+  task.updated_at = now;
+
+  await saveTask(deps, task);
+  await appendHistory(deps, task.project, task.branch, {
+    type: "status.changed",
+    timestamp: now,
+    from: "reviewed",
+    to: "reviewing",
+  });
+
+  log.info("Task unapproved", { taskId });
+  console.log(`Task ${taskId} unapproved (back to reviewing)`);
 }
 
 /**
