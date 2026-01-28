@@ -118,6 +118,21 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
 
 Checked immediately on startup, then periodically. If session died, task shows as "dead" with ✗ icon. Available actions: respawn or cancel.
 
+## Theme
+
+Transparent background — works with user's terminal background/wallpaper.
+
+| Element | Color |
+|---------|-------|
+| Background | transparent |
+| Selected row | `#3a3a5a` (semi-transparent purple-gray) |
+| Header | `#00DDFF` (cyan) |
+| Separators | `#555555` (dim gray) |
+| Muted text | `#888888` (gray) |
+| Column headers | `#666666` (dark gray) |
+
+Status colors defined in `state.ts` (`STATUS_COLOR`).
+
 ## Polling
 
 - File watcher on `~/orange/tasks/` for TASK.md changes (debounced)

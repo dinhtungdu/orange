@@ -62,7 +62,7 @@ function createTableRow(
     flexDirection: "row",
     width: "100%",
     paddingLeft: 1,
-    backgroundColor: opts.selected ? "#333366" : "transparent",
+    backgroundColor: opts.selected ? "#3a3a5a" : "transparent",
   });
 
   // Task column: flex-grows to fill remaining space
@@ -160,7 +160,7 @@ function buildDashboard(
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    backgroundColor: "#1a1a2e",
+    backgroundColor: "transparent",
   });
 
   // --- Header ---
@@ -177,7 +177,7 @@ function buildDashboard(
   const separator = new TextRenderable(renderer, {
     id: "separator",
     content: "",
-    fg: "#444444",
+    fg: "#555555",
   });
 
   // --- Messages area ---
@@ -237,7 +237,7 @@ function buildDashboard(
   const footerSep = new TextRenderable(renderer, {
     id: "footer-sep",
     content: "",
-    fg: "#444444",
+    fg: "#555555",
   });
 
   const footerKeys = new TextRenderable(renderer, {
