@@ -18,6 +18,7 @@ import {
   TextRenderable,
   type CliRenderer,
   type KeyEvent,
+  type PasteEvent,
 } from "@opentui/core";
 import type { Deps, TaskStatus } from "../core/types.js";
 import {
@@ -437,13 +438,8 @@ export async function runDashboard(
         state.handleInput("tab");
       } else if (name === "backspace") {
         state.handleInput("backspace");
-      } else if (key.sequence && key.sequence.length >= 1 && !key.ctrl && !key.meta) {
-        // Handle single chars and pasted text (multiple chars in one sequence)
-        for (const ch of key.sequence) {
-          if (ch >= " ") {
-            state.handleInput(ch);
-          }
-        }
+      } else if (key.sequence && key.sequence.length === 1 && key.sequence >= " ") {
+        state.handleInput(key.sequence);
       }
       return;
     }
@@ -466,6 +462,16 @@ export async function runDashboard(
       state.handleInput(name);
     } else if (name === "return") {
       state.handleInput("enter");
+    }
+  });
+
+  renderer.keyInput.on("paste", (event: PasteEvent) => {
+    if (state.isCreateMode()) {
+      for (const ch of event.text) {
+        if (ch >= " ") {
+          state.handleInput(ch);
+        }
+      }
     }
   });
 
