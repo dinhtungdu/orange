@@ -1,10 +1,10 @@
 # Orange
 
-Agent orchestration. TS + pi-tui + tmux + SQLite.
+Agent orchestration. TS + opentui + tmux + SQLite.
 
 ## Related Projects
 
-- pi-tui: `~/workspace/pi-mono/packages/tui/` — TUI framework
+- opentui: `~/workspace/pi-mono/packages/tui/` — TUI framework (@opentui/core)
 
 ## Setup
 
@@ -17,7 +17,7 @@ Agent orchestration. TS + pi-tui + tmux + SQLite.
 
 ```
 src/cli/        # commands
-src/dashboard/  # TUI (pi-tui)
+src/dashboard/  # TUI (opentui)
 src/core/       # state, tmux, workspace
 skills/         # orchestrator skill
 ```
