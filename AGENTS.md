@@ -43,6 +43,7 @@ cancelled (from any active state)
 - Commits: `type(scope): msg`
 - Just run `git commit` — pre-commit hook runs `bun run check` (tsc + tests)
 - Don't run tests twice (no need for `bun run check` before commit)
+- **Specs sync**: whenever you add, change, or delete a function/command/keybinding, update the corresponding spec in `specs/` to match. Specs are the source of truth for design — keep them accurate.
 
 ## Testing
 
