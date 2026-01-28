@@ -6,7 +6,7 @@ All commands are **CWD-aware** — they infer the project from the current direc
 # Projects
 orange project add [path] [--name <name>] [--pool-size <n>]  # path defaults to cwd
 orange project list
-orange project update <name> [--pool-size <n>]
+orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
@@ -54,9 +54,14 @@ Requirements:
 - Has assigned workspace
 - tmux session no longer exists
 
+## Task Cancel
+
+Requires user confirmation before cancelling. CLI prompts "Cancel task <project>/<branch>? (y/N)". Skip with `--yes`.
+
 ## Task Delete
 
 Remove task folder. Only works for done/failed tasks. Active tasks must be cancelled first.
+Requires user confirmation before deleting. CLI prompts "Delete task <project>/<branch>? (y/N)". Skip with `--yes`.
 
 ## Task Merge
 

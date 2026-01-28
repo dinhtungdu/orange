@@ -7,16 +7,13 @@
 
 import { watch } from "chokidar";
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
-import { customAlphabet } from "nanoid";
 import type { Deps, Task, TaskStatus, PRStatus } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
-import { loadProjects, saveTask, appendHistory, getTaskDir } from "../core/state.js";
+import { loadProjects } from "../core/state.js";
+import { createTaskRecord } from "../core/task.js";
 import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
-
-const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 8);
 
 /**
  * Clean up nested error messages for display.
@@ -94,6 +91,12 @@ export interface CreateModeData {
   focusedField: CreateField;
 }
 
+export interface ConfirmModeData {
+  active: boolean;
+  message: string;
+  action: (() => void) | null;
+}
+
 export interface DashboardStateData {
   tasks: Task[];
   allTasks: Task[];
@@ -111,6 +114,7 @@ export interface DashboardStateData {
   poolUsed: number;
   poolTotal: number;
   createMode: CreateModeData;
+  confirmMode: ConfirmModeData;
 }
 
 type ChangeListener = () => void;
@@ -141,6 +145,11 @@ export class DashboardState {
       branch: "",
       description: "",
       focusedField: "branch",
+    },
+    confirmMode: {
+      active: false,
+      message: "",
+      action: null,
     },
   };
 
@@ -244,9 +253,18 @@ export class DashboardState {
     return this.data.createMode.active;
   }
 
+  isConfirmMode(): boolean {
+    return this.data.confirmMode.active;
+  }
+
   // --- Input handling ---
 
   handleInput(key: string): void {
+    if (this.data.confirmMode.active) {
+      this.handleConfirmInput(key);
+      return;
+    }
+
     if (this.data.createMode.active) {
       this.handleCreateInput(key);
       return;
@@ -315,6 +333,18 @@ export class DashboardState {
       focusedField: "branch",
     };
     this.emit();
+  }
+
+  private handleConfirmInput(key: string): void {
+    if (key === "y") {
+      const action = this.data.confirmMode.action;
+      this.data.confirmMode = { active: false, message: "", action: null };
+      if (action) action();
+    } else {
+      // Any other key (n, escape, etc.) cancels
+      this.data.confirmMode = { active: false, message: "", action: null };
+      this.emit();
+    }
   }
 
   private exitCreateMode(): void {
@@ -396,53 +426,20 @@ export class DashboardState {
     };
 
     try {
-      // Find unique branch name
-      await this.deps.git.fetch(project.path);
-      let finalBranch = branch;
-      let suffix = 1;
-      while (await this.deps.git.branchExists(project.path, finalBranch)) {
-        suffix++;
-        finalBranch = `${branch}-${suffix}`;
-      }
-
-      const now = this.deps.clock.now();
-      const id = nanoid();
-
-      const task: Task = {
-        id,
-        project: project.name,
-        branch: finalBranch,
-        status: "pending",
-        workspace: null,
-        tmux_session: null,
-        description,
-        context: null,
-        created_at: now,
-        updated_at: now,
-        pr_url: null,
-      };
-
-      const taskDir = getTaskDir(this.deps, project.name, finalBranch);
-      await mkdir(taskDir, { recursive: true });
-
-      await saveTask(this.deps, task);
-      await appendHistory(this.deps, project.name, finalBranch, {
-        type: "task.created",
-        timestamp: now,
-        task_id: id,
-        project: project.name,
-        branch: finalBranch,
+      const { task } = await createTaskRecord(this.deps, {
+        project,
+        branch,
         description,
       });
 
       // Refresh immediately so the new task shows up before spawning
-      this.data.message = `Created ${project.name}/${finalBranch}`;
+      this.data.message = `Created ${project.name}/${branch}`;
       await this.refreshTasks();
       this.emit();
 
       // Auto-spawn agent (may take time; task already visible)
       try {
-        await spawnTaskById(this.deps, id);
+        await spawnTaskById(this.deps, task.id);
         await this.refreshTasks();
         this.emit();
       } catch (spawnErr) {
@@ -734,17 +731,26 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    const taskBranch = task.branch;
-    this.data.pendingOps.add(task.id);
+    // Show confirmation
+    this.data.confirmMode = {
+      active: true,
+      message: `Cancel task ${task.project}/${task.branch}?`,
+      action: () => this.executeCancelTask(task.id, task.branch),
+    };
+    this.emit();
+  }
+
+  private executeCancelTask(taskId: string, taskBranch: string): void {
+    this.data.pendingOps.add(taskId);
     this.emit();
 
-    const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id]), {
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", taskId, "--yes"]), {
       stdout: "pipe",
       stderr: "pipe",
     });
 
     proc.exited.then(async (exitCode) => {
-      this.data.pendingOps.delete(task.id);
+      this.data.pendingOps.delete(taskId);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.data.error = `Cancel failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
@@ -766,17 +772,26 @@ export class DashboardState {
       return;
     }
 
-    const taskBranch = task.branch;
-    this.data.pendingOps.add(task.id);
+    // Show confirmation
+    this.data.confirmMode = {
+      active: true,
+      message: `Delete task ${task.project}/${task.branch}?`,
+      action: () => this.executeDeleteTask(task.id, task.branch),
+    };
+    this.emit();
+  }
+
+  private executeDeleteTask(taskId: string, taskBranch: string): void {
+    this.data.pendingOps.add(taskId);
     this.emit();
 
-    const proc = Bun.spawn(this.getOrangeCommand(["task", "delete", task.id]), {
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "delete", taskId, "--yes"]), {
       stdout: "pipe",
       stderr: "pipe",
     });
 
     proc.exited.then(async (exitCode) => {
-      this.data.pendingOps.delete(task.id);
+      this.data.pendingOps.delete(taskId);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.data.error = `Delete failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;

@@ -75,6 +75,7 @@ tmux sessions (per-project orchestrators):
 | logger | Structured JSON logger |
 | spawn | Task spawning lifecycle |
 | state | Task/project persistence (TASK.md, projects.json) |
+| task | Core task operations (create) shared between CLI and dashboard |
 | tmux | tmux session abstraction (real + mock) |
 | workspace | Workspace pool management |
 

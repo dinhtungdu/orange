@@ -67,8 +67,8 @@ Footer shows relevant actions based on selected task's state:
 | l | View conversation log | Dead/completed tasks |
 | r | Respawn agent | Dead sessions only |
 | m | Merge task | Live sessions |
-| x | Cancel task | Active tasks |
-| d | Delete task folder | Completed tasks only |
+| x | Cancel task (shows confirmation) | Active tasks |
+| d | Delete task folder (shows confirmation) | Completed tasks only |
 | o | Open PR in browser | Any task |
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
@@ -99,7 +99,7 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
 ### Behavior
 
 - Branch and description are required (submit is no-op if either is empty)
-- Branch deduplication: if branch exists, appends `-2`, `-3`, etc. (same as CLI)
+- Errors if an orange task already exists for the branch
 - Auto-spawns agent after creation (same as `orange task create` without `--no-spawn`)
 - On success: shows "Created project/branch" message, task appears in list
 - On error: shows error message, stays in task list mode

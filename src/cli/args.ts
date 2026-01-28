@@ -140,7 +140,7 @@ Project Management:
     --name <name>                     Custom project name
     --pool-size <n>                   Worktree pool size (default: 2)
   orange project list                 List all projects
-  orange project update <name> [options] Update project settings
+  orange project update [name] [options] Update project settings (name inferred from cwd)
     --pool-size <n>                   Worktree pool size
   orange project remove <name>        Remove a project
 
@@ -157,8 +157,8 @@ Task Management (project inferred from cwd):
   orange task stuck <task_id>         Mark task stuck (hook)
   orange task merge <task_id> [options] Merge and cleanup
     --strategy <ff|merge>             Merge strategy (default: ff)
-  orange task cancel <task_id>        Cancel task
-  orange task delete <task_id>        Delete task (only done/failed tasks)
+  orange task cancel <task_id> [--yes] Cancel task (prompts for confirmation)
+  orange task delete <task_id> [--yes] Delete task (only done/failed, prompts for confirmation)
 
 Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project

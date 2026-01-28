@@ -248,6 +248,14 @@ function buildDashboard(
   root.add(messageText);
   root.add(taskList);
   root.add(createForm);
+
+  const confirmPrompt = new TextRenderable(renderer, {
+    id: "confirm-prompt",
+    content: "",
+    fg: "#FFAA00",
+    visible: false,
+  });
+  root.add(confirmPrompt);
   root.add(footerSep);
   root.add(footerKeys);
   renderer.root.add(root);
@@ -289,6 +297,13 @@ function buildDashboard(
       createBranchLabel.fg = branchHighlight;
       createDescLabel.content = `Description: [${cm.description}${descCursor}]`;
       createDescLabel.fg = descHighlight;
+    }
+
+    // Confirm prompt
+    const cfm = s.confirmMode;
+    confirmPrompt.visible = cfm.active;
+    if (cfm.active) {
+      confirmPrompt.content = ` ${cfm.message} (y/N)`;
     }
 
     // Footer
@@ -424,6 +439,17 @@ export async function runDashboard(
         renderer.destroy();
         process.exit(0);
       });
+      return;
+    }
+
+    // In confirm mode, only y/n/escape are accepted
+    if (state.isConfirmMode()) {
+      const name = key.name;
+      if (name === "escape" || key.sequence === "n" || key.sequence === "N") {
+        state.handleInput("escape");
+      } else if (key.sequence === "y" || key.sequence === "Y") {
+        state.handleInput("y");
+      }
       return;
     }
 

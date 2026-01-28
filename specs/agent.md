@@ -3,7 +3,7 @@
 ## 1. Spawn
 
 1. Acquire workspace from pool
-2. Fetch and create task branch from `origin/<default_branch>`
+2. Fetch latest; checkout existing branch (local or remote) or create new from `origin/<default_branch>`
 3. Symlink `TASK.md` from task dir to worktree
 4. Write `.orange-outcome` with task ID for hook integration
 5. Add `TASK.md` and `.orange-outcome` to git exclude

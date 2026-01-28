@@ -774,7 +774,7 @@ describe("task cancel command", () => {
     consoleLogs = [];
 
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "cancel", taskId]),
+      parseArgs(["bun", "script.ts", "task", "cancel", taskId, "--yes"]),
       deps
     );
 
@@ -793,7 +793,7 @@ describe("task cancel command", () => {
     );
     const taskId = await getTaskIdByBranch(deps, "cancel-history");
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId, "--yes"]), deps);
 
     const history = await loadHistory(deps, "testproj", "cancel-history");
     expect(history.some(e => e.type === "task.cancelled")).toBe(true);
@@ -880,7 +880,7 @@ describe("task delete command", () => {
 
     // Delete the task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "delete", taskId]),
+      parseArgs(["bun", "script.ts", "task", "delete", taskId, "--yes"]),
       deps
     );
 
@@ -903,12 +903,12 @@ describe("task delete command", () => {
     );
     const taskId = await getTaskIdByBranch(deps, "delete-failed");
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
-    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId]), deps);
+    await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId, "--yes"]), deps);
     consoleLogs = [];
 
     // Delete the task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "delete", taskId]),
+      parseArgs(["bun", "script.ts", "task", "delete", taskId, "--yes"]),
       deps
     );
 
@@ -928,7 +928,7 @@ describe("task delete command", () => {
     consoleErrors = [];
 
     await expect(
-      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId]), deps)
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId, "--yes"]), deps)
     ).rejects.toThrow("process.exit(1)");
 
     expect(consoleErrors[0]).toContain("Cannot delete");
@@ -944,7 +944,7 @@ describe("task delete command", () => {
     consoleErrors = [];
 
     await expect(
-      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId]), deps)
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "delete", taskId, "--yes"]), deps)
     ).rejects.toThrow("process.exit(1)");
 
     expect(consoleErrors[0]).toContain("Cannot delete");

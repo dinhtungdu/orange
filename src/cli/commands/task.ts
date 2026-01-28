@@ -16,27 +16,38 @@
  * - orange task delete <task_id>
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { customAlphabet } from "nanoid";
 
-// Custom alphabet without - to avoid CLI parsing issues
-const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 8);
 import type { ParsedArgs } from "../args.js";
 import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
 import {
   loadProjects,
-  loadTask,
   saveTask,
   appendHistory,
   getTaskDir,
 } from "../../core/state.js";
+import { createTaskRecord } from "../../core/task.js";
 import { listTasks } from "../../core/db.js";
 import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
 
 import { buildPRBody } from "../../core/github.js";
+
+/**
+ * Prompt user for confirmation. Returns true if user confirms.
+ */
+async function confirm(message: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/N) `, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "y");
+    });
+  });
+}
 
 /**
  * Run a task subcommand.
@@ -148,58 +159,22 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     project = await requireProject(deps);
   }
 
-  // Check if an orange task already exists for this branch
-  const existingTask = await loadTask(deps, project.name, branch);
-  if (existingTask) {
-    log.error("Task already exists for branch", { project: project.name, branch });
-    console.error(`Task already exists for branch '${branch}' in project '${project.name}'`);
+  let task: Task;
+  try {
+    const result = await createTaskRecord(deps, { project, branch, description, context });
+    task = result.task;
+  } catch (err) {
+    log.error("Failed to create task", { error: String(err) });
+    console.error(err instanceof Error ? err.message : String(err));
     console.error(`Use 'orange task list' to see existing tasks.`);
     process.exit(1);
   }
 
-  // Fetch latest remote state
-  await deps.git.fetch(project.path);
-
-  const now = deps.clock.now();
-  const id = nanoid();
-
-  log.info("Creating task", { taskId: id, project: project.name, branch, description });
-
-  const task: Task = {
-    id,
-    project: project.name,
-    branch,
-    status: "pending",
-    workspace: null,
-    tmux_session: null,
-    description,
-    context,
-    created_at: now,
-    updated_at: now,
-    pr_url: null,
-  };
-
-  // Create task directory
-  const taskDir = getTaskDir(deps, project.name, branch);
-  await mkdir(taskDir, { recursive: true });
-
-  // Save task and initial history event
-  await saveTask(deps, task);
-  await appendHistory(deps, project.name, branch, {
-    type: "task.created",
-    timestamp: now,
-    task_id: id,
-    project: project.name,
-    branch: branch,
-    description,
-  });
-
-  log.info("Task created", { taskId: id, project: project.name, branch: branch });
-  console.log(`Created task ${id} (${project.name}/${branch})`);
+  console.log(`Created task ${task.id} (${project.name}/${branch})`);
 
   // Auto-spawn agent unless --no-spawn flag
   if (!parsed.options["no-spawn"]) {
-    await spawnTaskById(deps, id);
+    await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
   }
 }
@@ -807,6 +782,15 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  // Confirm unless --yes
+  if (!parsed.options.yes) {
+    const confirmed = await confirm(`Cancel task ${task.project}/${task.branch}?`);
+    if (!confirmed) {
+      console.log("Aborted.");
+      return;
+    }
+  }
+
   // Release workspace
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
@@ -875,6 +859,15 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     console.error(`Cannot delete task '${taskId}' with status '${task.status}'`);
     console.error("Only done or failed tasks can be deleted. Use 'orange task cancel' first.");
     process.exit(1);
+  }
+
+  // Confirm unless --yes
+  if (!parsed.options.yes) {
+    const confirmed = await confirm(`Delete task ${task.project}/${task.branch}?`);
+    if (!confirmed) {
+      console.log("Aborted.");
+      return;
+    }
   }
 
   // Release workspace if still bound (defensive - should already be released)
