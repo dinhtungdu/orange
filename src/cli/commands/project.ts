@@ -51,6 +51,8 @@ export async function runProjectCommand(
  * Path defaults to current directory if not provided.
  */
 async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("project");
+
   // Path defaults to current directory
   const inputPath = parsed.args[0] ?? process.cwd();
   const resolvedPath = resolve(inputPath);
@@ -58,6 +60,7 @@ async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Verify it's a git repository
   const gitRoot = getGitRoot(resolvedPath);
   if (!gitRoot) {
+    log.error("Not a git repository", { path: resolvedPath });
     console.error(`Error: '${resolvedPath}' is not a git repository`);
     process.exit(1);
   }
@@ -67,17 +70,21 @@ async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const poolSize = parseInt(parsed.options["pool-size"] as string) || 2;
   const defaultBranch = getDefaultBranch(path);
 
+  log.info("Adding project", { name, path, defaultBranch, poolSize });
+
   // Load existing projects
   const projects = await loadProjects(deps);
 
   // Check if project already exists by name or path
   if (projects.some((p) => p.name === name)) {
+    log.error("Project name already exists", { name });
     console.error(`Project '${name}' already exists`);
     process.exit(1);
   }
 
   if (projects.some((p) => resolve(p.path) === path)) {
     const existing = projects.find((p) => resolve(p.path) === path);
+    log.error("Project path already registered", { path, existingName: existing?.name });
     console.error(`Path '${path}' is already registered as project '${existing?.name}'`);
     process.exit(1);
   }
@@ -93,6 +100,7 @@ async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   projects.push(project);
   await saveProjects(deps, projects);
 
+  log.info("Project added", { name, path, defaultBranch, poolSize });
   console.log(`Added project '${name}' at ${path}`);
   console.log(`  Default branch: ${defaultBranch}`);
   console.log(`  Pool size: ${poolSize}`);
@@ -102,7 +110,11 @@ async function addProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * List all projects.
  */
 async function listProjects(deps: Deps): Promise<void> {
+  const log = deps.logger.child("project");
+
   const projects = await loadProjects(deps);
+
+  log.debug("Listing projects", { count: projects.length });
 
   if (projects.length === 0) {
     console.log("No projects registered.");
@@ -124,6 +136,8 @@ async function listProjects(deps: Deps): Promise<void> {
  * Update a project's settings.
  */
 async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("project");
+
   let name = parsed.args[0] ?? null;
 
   // Infer project from CWD if name not provided
@@ -141,6 +155,7 @@ async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const project = projects.find((p) => p.name === name);
 
   if (!project) {
+    log.error("Project not found for update", { name });
     console.error(`Project '${name}' not found`);
     process.exit(1);
   }
@@ -153,8 +168,10 @@ async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
       console.error("Error: pool-size must be a positive integer");
       process.exit(1);
     }
+    const oldPoolSize = project.pool_size;
     project.pool_size = poolSize;
     updated = true;
+    log.info("Updating project pool size", { name, from: oldPoolSize, to: poolSize });
   }
 
   if (!updated) {
@@ -163,6 +180,7 @@ async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   await saveProjects(deps, projects);
+  log.info("Project updated", { name, poolSize: project.pool_size });
   console.log(`Updated project '${name}'`);
   console.log(`  Pool size: ${project.pool_size}`);
 }
@@ -171,6 +189,8 @@ async function updateProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Remove a project.
  */
 async function removeProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("project");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange project remove <name>");
     process.exit(1);
@@ -178,12 +198,15 @@ async function removeProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const name = parsed.args[0];
 
+  log.info("Removing project", { name });
+
   // Load existing projects
   const projects = await loadProjects(deps);
 
   // Find project
   const index = projects.findIndex((p) => p.name === name);
   if (index === -1) {
+    log.error("Project not found for removal", { name });
     console.error(`Project '${name}' not found`);
     process.exit(1);
   }
@@ -192,6 +215,7 @@ async function removeProject(parsed: ParsedArgs, deps: Deps): Promise<void> {
   projects.splice(index, 1);
   await saveProjects(deps, projects);
 
+  log.info("Project removed", { name });
   console.log(`Removed project '${name}'`);
   console.log("Note: Workspaces and tasks are not deleted. Clean them up manually if needed.");
 }

@@ -21,7 +21,7 @@ import { createInterface } from "node:readline";
 import { join } from "node:path";
 
 import type { ParsedArgs } from "../args.js";
-import type { Deps, Task, TaskStatus, Logger } from "../../core/types.js";
+import type { Deps, Task, TaskStatus } from "../../core/types.js";
 import {
   loadProjects,
   saveTask,
@@ -185,6 +185,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Can also filter by explicit --project flag.
  */
 async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
   const showAll = parsed.options.all === true;
   const statusFilter = parsed.options.status as TaskStatus | undefined;
   const explicitProject = parsed.options.project as string | undefined;
@@ -204,6 +205,8 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   const tasks = await listTasks(deps, { project: projectFilter, status: statusFilter });
+
+  log.debug("Listing tasks", { project: projectFilter, status: statusFilter, count: tasks.length });
 
   if (tasks.length === 0) {
     if (projectFilter) {
@@ -240,6 +243,8 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Spawn an agent for a task.
  */
 async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task spawn <task_id>");
     process.exit(1);
@@ -247,14 +252,18 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const taskId = parsed.args[0];
 
+  log.info("Spawning task", { taskId });
+
   try {
     await spawnTaskById(deps, taskId);
 
     // Fetch the task again to get the tmux session name
     const tasks = await listTasks(deps, {});
     const task = tasks.find((t) => t.id === taskId);
+    log.info("Task spawned", { taskId, session: task?.tmux_session });
     console.log(`Spawned agent for task ${taskId} in ${task?.tmux_session ?? "unknown"}`);
   } catch (err) {
+    log.error("Spawn failed", { taskId, error: String(err) });
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
@@ -265,6 +274,8 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Only works for active tasks (working, reviewing, stuck).
  */
 async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
   if (parsed.args.length < 1) {
     console.error("Usage: orange task attach <task_id>");
     process.exit(1);
@@ -272,10 +283,13 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const taskId = parsed.args[0];
 
+  log.info("Attaching to task", { taskId });
+
   // Find task
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    log.error("Task not found for attach", { taskId });
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
@@ -283,12 +297,14 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Check task has an active session
   const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
   if (!activeStatuses.includes(task.status)) {
+    log.error("Task not active for attach", { taskId, status: task.status });
     console.error(`Task '${taskId}' is ${task.status}, not active`);
     console.error("Use 'orange task log <id>' to view completed task output");
     process.exit(1);
   }
 
   if (!task.tmux_session) {
+    log.error("Task has no session", { taskId });
     console.error(`Task '${taskId}' has no session`);
     process.exit(1);
   }
@@ -296,11 +312,13 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Check session exists
   const exists = await deps.tmux.sessionExists(task.tmux_session);
   if (!exists) {
+    log.error("Session no longer exists", { taskId, session: task.tmux_session });
     console.error(`Session '${task.tmux_session}' no longer exists`);
     process.exit(1);
   }
 
   // Use switch-client if inside tmux, attach if outside
+  log.debug("Attaching to session", { session: task.tmux_session, insideTmux: !!process.env.TMUX });
   const insideTmux = !!process.env.TMUX;
   const cmd = insideTmux
     ? ["tmux", "switch-client", "-t", task.tmux_session]

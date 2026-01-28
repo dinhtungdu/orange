@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
-import type { Deps, Project, PoolState, WorkspaceEntry, Logger } from "./types.js";
+import type { Deps, Project, PoolState } from "./types.js";
 import { loadProjects } from "./state.js";
 
 /**

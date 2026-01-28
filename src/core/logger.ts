@@ -10,6 +10,7 @@
 
 import { appendFileSync, existsSync, renameSync, statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
+import type { Logger } from "./types.js";
 
 /**
  * Log levels in order of severity.
@@ -25,17 +26,6 @@ export interface LogEntry {
   component: string;
   msg: string;
   [key: string]: unknown;
-}
-
-/**
- * Logger interface for dependency injection.
- */
-export interface Logger {
-  error(msg: string, context?: Record<string, unknown>): void;
-  warn(msg: string, context?: Record<string, unknown>): void;
-  info(msg: string, context?: Record<string, unknown>): void;
-  debug(msg: string, context?: Record<string, unknown>): void;
-  child(component: string): Logger;
 }
 
 /**

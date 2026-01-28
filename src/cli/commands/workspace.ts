@@ -48,10 +48,14 @@ export async function runWorkspaceCommand(
  * Initialize workspaces for the current project.
  */
 async function initWorkspace(deps: Deps): Promise<void> {
+  const log = deps.logger.child("workspace");
+
   // Get project from cwd
   const project = await requireProject(deps);
 
+  log.info("Initializing workspace pool", { project: project.name, poolSize: project.pool_size });
   await initWorkspacePool(deps, project);
+  log.info("Workspace pool initialized", { project: project.name, poolSize: project.pool_size });
   console.log(
     `Initialized ${project.pool_size} workspaces for project '${project.name}'`
   );
@@ -61,6 +65,7 @@ async function initWorkspace(deps: Deps): Promise<void> {
  * List workspace pool status.
  */
 async function listWorkspaces(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("workspace");
   const showAll = parsed.options.all === true;
   const poolState = await loadPoolState(deps);
 
@@ -75,6 +80,8 @@ async function listWorkspaces(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
     // If not in a project and no --all, show all workspaces (global view)
   }
+
+  log.debug("Listing workspaces", { count: workspaces.length, showAll });
 
   if (workspaces.length === 0) {
     const detection = await detectProject(deps);
@@ -117,6 +124,8 @@ async function listWorkspaces(parsed: ParsedArgs, deps: Deps): Promise<void> {
  */
 async function gcWorkspaces(deps: Deps): Promise<void> {
   const log = deps.logger.child("workspace");
+
+  log.info("Starting workspace garbage collection");
   const poolState = await loadPoolState(deps);
   const tasks = await listTasks(deps, {});
 
@@ -132,10 +141,12 @@ async function gcWorkspaces(deps: Deps): Promise<void> {
   }
 
   if (orphaned.length === 0) {
+    log.debug("No orphaned workspaces found");
     console.log("No orphaned workspaces found.");
     return;
   }
 
+  log.info("Found orphaned workspaces", { count: orphaned.length, workspaces: orphaned });
   console.log(`Found ${orphaned.length} orphaned workspace(s):\n`);
   for (const name of orphaned) {
     const entry = poolState.workspaces[name];
@@ -150,5 +161,6 @@ async function gcWorkspaces(deps: Deps): Promise<void> {
     console.log(`Released ${name}`);
   }
 
+  log.info("Workspace GC complete", { released: orphaned.length });
   console.log(`\nReleased ${orphaned.length} workspace(s).`);
 }

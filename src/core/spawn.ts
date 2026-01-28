@@ -8,10 +8,10 @@
 
 import { join } from "node:path";
 import { writeFile, symlink, readFile, unlink, stat } from "node:fs/promises";
-import type { Deps, Task, Project, Logger } from "./types.js";
+import type { Deps } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
-import { acquireWorkspace, releaseWorkspace, addGitExcludes } from "./workspace.js";
+import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
 
 /**
@@ -126,7 +126,7 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
 
   try {
     // Setup git branch in workspace
-    const workspacePath = join(deps.dataDir, "workspaces", workspace);
+    const workspacePath = getWorkspacePath(deps, workspace);
     log.debug("Setting up git branch", { workspacePath, branch: task.branch });
 
     // Pull latest default branch from origin if available

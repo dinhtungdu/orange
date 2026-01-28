@@ -26,9 +26,12 @@ export function getOrchestratorSession(projectName: string): string {
  * Run the start command.
  */
 export async function runStartCommand(deps: Deps): Promise<void> {
+  const log = deps.logger.child("start");
+
   // Check if tmux is available
   const tmuxAvailable = await deps.tmux.isAvailable();
   if (!tmuxAvailable) {
+    log.error("tmux not available");
     console.error("Error: tmux is not installed or not in PATH");
     console.error("Install tmux to use the orchestrator:");
     console.error("  macOS: brew install tmux");
@@ -40,9 +43,13 @@ export async function runStartCommand(deps: Deps): Promise<void> {
   const project = await autoRegisterProject(deps);
   const sessionName = getOrchestratorSession(project.name);
 
+  log.info("Starting orchestrator", { project: project.name, session: sessionName });
+
   // Check if session exists - if not, set it up first
   const exists = await deps.tmux.sessionExists(sessionName);
   if (!exists) {
+    log.info("Creating orchestrator session", { session: sessionName, cwd: project.path });
+
     // Create new session with Claude Code in first pane
     // Working directory is the project path (orchestrator has full context)
     await deps.tmux.newSession(
@@ -60,12 +67,16 @@ export async function runStartCommand(deps: Deps): Promise<void> {
       : `${scriptPath} dashboard --project ${project.name}`;
     try {
       await deps.tmux.splitWindow(sessionName, dashboardCmd);
+      log.debug("Dashboard pane created", { session: sessionName });
     } catch (err) {
       // If split fails, the session is still usable - just warn
+      log.warn("Failed to create dashboard pane", { error: String(err) });
       console.warn("Warning: Failed to set up dashboard pane");
       console.warn(err instanceof Error ? err.message : String(err));
       console.warn("You can manually split the window and run 'orange dashboard' for the dashboard");
     }
+  } else {
+    log.info("Attaching to existing orchestrator session", { session: sessionName });
   }
 
   // Attach to session (works whether we just created it or it already existed)
