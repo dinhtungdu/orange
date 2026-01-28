@@ -54,7 +54,8 @@ Footer shows relevant actions based on selected task's state:
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
 | Pending | j/k:nav  s:spawn  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
-| Reviewing | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (with PR) | j/k:nav  Enter:attach  m:merge  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewed | j/k:nav  Enter:attach  m:merge  p:create PR/open PR  x:cancel  c:create  f:filter  q:quit |
 | Stuck | j/k:nav  Enter:attach  r:respawn  x:cancel  c:create  f:filter  q:quit |
 | Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |

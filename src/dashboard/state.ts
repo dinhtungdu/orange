@@ -1032,7 +1032,14 @@ export class DashboardState {
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  r:respawn  x:cancel";
     } else if (task.status === "reviewing") {
-      keys += "  Enter:attach  a:approve  x:cancel";
+      keys += "  Enter:attach";
+      if (task.pr_url) {
+        // PR exists = implicitly approved, show reviewed actions
+        keys += "  m:merge  p:open PR";
+      } else {
+        keys += "  a:approve";
+      }
+      keys += "  x:cancel";
     } else {
       // working
       keys += "  Enter:attach  x:cancel";
