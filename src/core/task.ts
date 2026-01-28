@@ -12,6 +12,8 @@ export interface CreateTaskOptions {
   branch: string;
   description: string;
   context?: string | null;
+  /** Initial status. Defaults to "pending". Only "pending" or "reviewing" allowed. */
+  status?: "pending" | "reviewing";
 }
 
 export interface CreateTaskResult {
@@ -30,7 +32,7 @@ export async function createTaskRecord(
   deps: Deps,
   options: CreateTaskOptions
 ): Promise<CreateTaskResult> {
-  const { project, branch, description, context = null } = options;
+  const { project, branch, description, context = null, status = "pending" } = options;
   const log = deps.logger.child("task");
 
   // Check if an orange task already exists for this branch
@@ -54,7 +56,7 @@ export async function createTaskRecord(
     id,
     project: project.name,
     branch,
-    status: "pending",
+    status,
     workspace: null,
     tmux_session: null,
     description,

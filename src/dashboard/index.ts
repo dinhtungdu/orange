@@ -223,9 +223,15 @@ function buildDashboard(
     content: "",
     fg: "#FFFFFF",
   });
+  const createStatusLabel = new TextRenderable(renderer, {
+    id: "create-status",
+    content: "",
+    fg: "#FFFFFF",
+  });
   createForm.add(createTitle);
   createForm.add(createBranchLabel);
   createForm.add(createDescLabel);
+  createForm.add(createStatusLabel);
 
   // --- Footer ---
   const footerSep = new TextRenderable(renderer, {
@@ -293,10 +299,15 @@ function buildDashboard(
       const descCursor = cm.focusedField === "description" ? "█" : "";
       const branchHighlight = cm.focusedField === "branch" ? "#00DDFF" : "#888888";
       const descHighlight = cm.focusedField === "description" ? "#00DDFF" : "#888888";
+      const statusHighlight = cm.focusedField === "status" ? "#00DDFF" : "#888888";
       createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]`;
       createBranchLabel.fg = branchHighlight;
       createDescLabel.content = `Description: [${cm.description}${descCursor}]`;
       createDescLabel.fg = descHighlight;
+      // Status field: show as toggleable with indicator
+      const statusDisplay = cm.status === "pending" ? "pending ◀" : "reviewing ◀";
+      createStatusLabel.content = `Status:      [${statusDisplay}]`;
+      createStatusLabel.fg = statusHighlight;
     }
 
     // Confirm prompt

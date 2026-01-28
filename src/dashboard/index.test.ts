@@ -287,6 +287,9 @@ describe("Dashboard State", () => {
     expect(state.data.createMode.focusedField).toBe("description");
 
     state.handleInput("tab");
+    expect(state.data.createMode.focusedField).toBe("status");
+
+    state.handleInput("tab");
     expect(state.data.createMode.focusedField).toBe("branch");
   });
 

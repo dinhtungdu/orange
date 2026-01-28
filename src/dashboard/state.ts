@@ -82,12 +82,16 @@ export interface DiffStats {
 }
 
 /** Which field is focused in create mode. */
-export type CreateField = "branch" | "description";
+export type CreateField = "branch" | "description" | "status";
+
+/** Initial status options for task creation. */
+export type CreateStatus = "pending" | "reviewing";
 
 export interface CreateModeData {
   active: boolean;
   branch: string;
   description: string;
+  status: CreateStatus;
   focusedField: CreateField;
 }
 
@@ -144,6 +148,7 @@ export class DashboardState {
       active: false,
       branch: "",
       description: "",
+      status: "pending",
       focusedField: "branch",
     },
     confirmMode: {
@@ -330,6 +335,7 @@ export class DashboardState {
       active: true,
       branch: "",
       description: "",
+      status: "pending",
       focusedField: "branch",
     };
     this.emit();
@@ -352,6 +358,7 @@ export class DashboardState {
       active: false,
       branch: "",
       description: "",
+      status: "pending",
       focusedField: "branch",
     };
     this.emit();
@@ -364,19 +371,24 @@ export class DashboardState {
       case "escape":
         this.exitCreateMode();
         return;
-      case "tab":
-        cm.focusedField = cm.focusedField === "branch" ? "description" : "branch";
+      case "tab": {
+        // Cycle through fields: branch → description → status → branch
+        const fields: CreateField[] = ["branch", "description", "status"];
+        const currentIdx = fields.indexOf(cm.focusedField);
+        cm.focusedField = fields[(currentIdx + 1) % fields.length];
         this.emit();
         return;
+      }
       case "enter":
         this.submitCreateTask();
         return;
       case "backspace": {
         if (cm.focusedField === "branch") {
           cm.branch = cm.branch.slice(0, -1);
-        } else {
+        } else if (cm.focusedField === "description") {
           cm.description = cm.description.slice(0, -1);
         }
+        // No backspace for status field
         this.emit();
         return;
       }
@@ -388,8 +400,11 @@ export class DashboardState {
             if (/[a-zA-Z0-9\-_/.]/.test(key)) {
               cm.branch += key;
             }
-          } else {
+          } else if (cm.focusedField === "description") {
             cm.description += key;
+          } else if (cm.focusedField === "status") {
+            // Toggle status on any key press (space or arrow-like behavior)
+            cm.status = cm.status === "pending" ? "reviewing" : "pending";
           }
           this.emit();
         }
@@ -401,6 +416,7 @@ export class DashboardState {
     const cm = this.data.createMode;
     const branch = cm.branch.trim();
     const description = cm.description.trim();
+    const status = cm.status;
 
     if (!branch || !description) {
       this.data.error = "Both branch and description are required.";
@@ -422,6 +438,7 @@ export class DashboardState {
       active: false,
       branch: "",
       description: "",
+      status: "pending",
       focusedField: "branch",
     };
 
@@ -430,22 +447,25 @@ export class DashboardState {
         project,
         branch,
         description,
+        status,
       });
 
       // Refresh immediately so the new task shows up before spawning
-      this.data.message = `Created ${project.name}/${branch}`;
+      this.data.message = `Created ${project.name}/${branch} [${status}]`;
       await this.refreshTasks();
       this.emit();
 
-      // Auto-spawn agent (may take time; task already visible)
-      try {
-        await spawnTaskById(this.deps, task.id);
-        await this.refreshTasks();
-        this.emit();
-      } catch (spawnErr) {
-        // Spawn failed but task was created successfully — show warning, keep task
-        this.data.error = `Task created but spawn failed: ${spawnErr instanceof Error ? spawnErr.message : "Unknown error"}`;
-        this.emit();
+      // Auto-spawn agent only for pending tasks
+      if (status === "pending") {
+        try {
+          await spawnTaskById(this.deps, task.id);
+          await this.refreshTasks();
+          this.emit();
+        } catch (spawnErr) {
+          // Spawn failed but task was created successfully — show warning, keep task
+          this.data.error = `Task created but spawn failed: ${spawnErr instanceof Error ? spawnErr.message : "Unknown error"}`;
+          this.emit();
+        }
       }
     } catch (err) {
       this.data.error = `Create failed: ${err instanceof Error ? err.message : "Unknown error"}`;

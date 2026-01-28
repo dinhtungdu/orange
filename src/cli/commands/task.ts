@@ -124,12 +124,23 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
   if (parsed.args.length < 2) {
-    console.error("Usage: orange task create <branch> <description>");
+    console.error("Usage: orange task create <branch> <description> [--status pending|reviewing]");
     process.exit(1);
   }
 
   const [branch, ...descParts] = parsed.args;
   const description = descParts.join(" ");
+
+  // Parse --status flag (default: pending)
+  const statusArg = parsed.options.status as string | undefined;
+  let status: "pending" | "reviewing" = "pending";
+  if (statusArg) {
+    if (statusArg !== "pending" && statusArg !== "reviewing") {
+      console.error("Invalid status. Use 'pending' or 'reviewing'");
+      process.exit(1);
+    }
+    status = statusArg;
+  }
 
   // Read context from stdin if --context - is passed
   let context: string | null = null;
@@ -161,7 +172,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   let task: Task;
   try {
-    const result = await createTaskRecord(deps, { project, branch, description, context });
+    const result = await createTaskRecord(deps, { project, branch, description, context, status });
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });
@@ -170,10 +181,10 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`Created task ${task.id} (${project.name}/${branch})`);
+  console.log(`Created task ${task.id} (${project.name}/${branch}) [${status}]`);
 
-  // Auto-spawn agent unless --no-spawn flag
-  if (!parsed.options["no-spawn"]) {
+  // Auto-spawn agent only for pending tasks without --no-spawn flag
+  if (status === "pending" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
   }

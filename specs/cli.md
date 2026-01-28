@@ -10,7 +10,7 @@ orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create <branch> <description> [--context -] [--no-spawn] [--project <name>]
+orange task create <branch> <description> [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
@@ -42,8 +42,11 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 
 ## Task Create
 
-- Auto-spawns agent unless `--no-spawn`
+- Auto-spawns agent unless `--no-spawn` or `--status=reviewing`
 - `--context -` reads implementation context from stdin
+- `--status` sets initial status: `pending` (default) or `reviewing`
+  - `pending`: normal flow, spawns agent
+  - `reviewing`: for existing work, skips agent spawn, goes to review queue
 - `--project` specifies project explicitly (otherwise inferred from cwd)
 - Errors if an orange task already exists for the branch
 - If the git branch exists (local or remote), the agent reuses it on spawn

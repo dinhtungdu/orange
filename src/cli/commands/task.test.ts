@@ -175,6 +175,35 @@ describe("task create command", () => {
     await expect(runTaskCommand(parsed, deps)).rejects.toThrow("process.exit(1)");
     expect(consoleErrors[0]).toContain("Usage:");
   });
+
+  test("creates task with --status=reviewing and skips spawn", async () => {
+    const parsed = parseArgs([
+      "bun", "script.ts", "task", "create", "--project", "testproj", "--status", "reviewing", "existing-work", "Already done"
+    ]);
+
+    await runTaskCommand(parsed, deps);
+
+    // Verify task created with reviewing status
+    const task = await loadTask(deps, "testproj", "existing-work");
+    expect(task).not.toBeNull();
+    expect(task!.status).toBe("reviewing");
+    expect(task!.workspace).toBeNull();  // No workspace assigned
+    expect(task!.tmux_session).toBeNull();  // No session spawned
+
+    // Verify console output shows status
+    expect(consoleLogs[0]).toContain("[reviewing]");
+    // Should not have spawn message
+    expect(consoleLogs).toHaveLength(1);
+  });
+
+  test("errors on invalid status", async () => {
+    const parsed = parseArgs([
+      "bun", "script.ts", "task", "create", "--project", "testproj", "--status", "working", "branch", "desc"
+    ]);
+
+    await expect(runTaskCommand(parsed, deps)).rejects.toThrow("process.exit(1)");
+    expect(consoleErrors[0]).toContain("Invalid status");
+  });
 });
 
 describe("task list command", () => {

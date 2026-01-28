@@ -94,18 +94,21 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
     Create Task
     Branch:      [feature-login____________]
     Description: [Fix the OAuth redirect___]
+    Status:      [pending ◀]
     Enter:submit  Escape:cancel
    ```
-3. `Tab` moves between branch and description fields
-4. `Enter` submits the form → creates task + auto-spawns agent
-5. `Escape` cancels and returns to task list
+3. `Tab` cycles through branch → description → status fields
+4. Status field: any key toggles between `pending` and `reviewing`
+5. `Enter` submits the form → creates task + auto-spawns agent (if pending)
+6. `Escape` cancels and returns to task list
 
 ### Behavior
 
 - Branch and description are required (submit is no-op if either is empty)
+- Status defaults to `pending`; set to `reviewing` for existing work (skips agent spawn)
 - Errors if an orange task already exists for the branch
-- Auto-spawns agent after creation (same as `orange task create` without `--no-spawn`)
-- On success: shows "Created project/branch" message, task appears in list
+- Auto-spawns agent after creation only for `pending` status
+- On success: shows "Created project/branch [status]" message, task appears in list
 - On error: shows error message, stays in task list mode
 - While in create mode, task list navigation keys (j/k/etc.) are disabled
 
