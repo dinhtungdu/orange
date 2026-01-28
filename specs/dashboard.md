@@ -55,8 +55,9 @@ Footer shows relevant actions based on selected task's state:
 | Pending | j/k:nav  s:spawn  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (with PR) | j/k:nav  Enter:attach  m:merge  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Reviewed | j/k:nav  Enter:attach  m:merge  p:create PR/open PR  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
+| Reviewed (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
+| Reviewed (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Stuck | j/k:nav  Enter:attach  r:respawn  x:cancel  c:create  f:filter  q:quit |
 | Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |
 | Completed (done/failed/cancelled) | j/k:nav  d:del  c:create  f:filter  q:quit |
@@ -69,12 +70,12 @@ Footer shows relevant actions based on selected task's state:
 | c | Create new task | Always (project-scoped only) |
 | Enter | Switch to tmux session | Live sessions |
 | s | Spawn agent | Pending tasks |
-| a | Approve task | Reviewing tasks |
+| a | Approve task | Reviewing tasks (no PR) |
 | u | Unapprove task | Reviewed tasks |
 | r | Respawn agent | Dead sessions or stuck tasks |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
-| m | Merge task | Reviewed tasks |
-| p | Create PR / Open PR in browser | Reviewed (no PR) / Any task with PR |
+| m | Merge task (local) | Reviewed tasks (no PR) |
+| p | Create PR / Open PR in browser | Reviewed (no PR) creates, any with PR opens |
 | x | Cancel task (shows confirmation) | Active tasks |
 | d | Delete task folder (shows confirmation) | Completed tasks only |
 | f | Filter by status (cycle: all → active → done) | Always |

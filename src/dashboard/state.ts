@@ -1026,19 +1026,14 @@ export class DashboardState {
     } else if (isDead) {
       keys += "  r:respawn  x:cancel";
     } else if (task.status === "reviewed") {
-      keys += "  Enter:attach  u:unapprove  m:merge";
-      keys += task.pr_url ? "  p:open PR" : "  p:create PR";
+      keys += "  Enter:attach  u:unapprove";
+      keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  r:respawn  x:cancel";
     } else if (task.status === "reviewing") {
       keys += "  Enter:attach";
-      if (task.pr_url) {
-        // PR exists = implicitly approved, show reviewed actions
-        keys += "  m:merge  p:open PR";
-      } else {
-        keys += "  a:approve";
-      }
+      keys += task.pr_url ? "  p:open PR" : "  a:approve";
       keys += "  x:cancel";
     } else {
       // working
