@@ -14,6 +14,7 @@ import { loadProjects } from "../core/state.js";
 import { createTaskRecord } from "../core/task.js";
 import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
+import { refreshTaskPR } from "../core/task.js";
 
 /**
  * Clean up nested error messages for display.
@@ -316,6 +317,9 @@ export class DashboardState {
         break;
       case "p":
         this.createOrOpenPR();
+        break;
+      case "R":
+        this.refreshPR();
         break;
       case "f":
         this.cycleStatusFilter();
@@ -931,6 +935,36 @@ export class DashboardState {
       await this.refreshTasks();
       this.emit();
     });
+  }
+
+  private async refreshPR(): Promise<void> {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    const taskBranch = task.branch;
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    try {
+      const updated = await refreshTaskPR(this.deps, task.id);
+      this.data.pendingOps.delete(task.id);
+
+      if (updated?.pr_url && updated.pr_url !== task.pr_url) {
+        this.data.message = `PR linked: ${taskBranch}`;
+      } else if (updated?.pr_url) {
+        this.data.message = `PR status refreshed: ${taskBranch}`;
+      } else {
+        this.data.message = `No PR found for ${taskBranch}`;
+      }
+
+      await this.refreshTasks();
+      await this.refreshPRStatuses();
+      this.emit();
+    } catch (err) {
+      this.data.pendingOps.delete(task.id);
+      this.data.error = `PR refresh failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      this.emit();
+    }
   }
 
   /**

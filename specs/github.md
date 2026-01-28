@@ -13,6 +13,22 @@ Automate PR creation and merge detection via GitHub CLI (`gh`).
 
 `orange task approve <id>` moves task from `reviewing` → `reviewed`. Status change only — no push or PR creation.
 
+### Auto-detect Existing PR
+
+On task creation, Orange checks if the branch already has a PR on GitHub. If found, `pr_url` is populated automatically. This enables:
+
+- Creating tasks for existing PRs (e.g., review tasks)
+- Adopting branches with PRs created outside Orange
+
+Best-effort: errors are ignored silently.
+
+### Manual PR Refresh
+
+`R` key in dashboard refreshes PR status for selected task. Useful when:
+
+- PR was created outside Orange after task creation
+- PR URL needs updating
+
 ### Create PR
 
 `orange task create-pr <id>` (or `p` key in dashboard) for reviewed tasks:

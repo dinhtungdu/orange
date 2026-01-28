@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { customAlphabet } from "nanoid";
 import type { Deps, Task, Project } from "./types.js";
 import { loadTask, saveTask, appendHistory, getTaskDir } from "./state.js";
+import { loadProjects } from "./state.js";
 
 export interface CreateTaskOptions {
   project: Project;
@@ -83,5 +84,76 @@ export async function createTaskRecord(
 
   log.info("Task created", { taskId: id, project: project.name, branch });
 
+  // Check if branch already has a PR on GitHub
+  try {
+    const ghAvailable = await deps.github.isAvailable(project.path);
+    if (ghAvailable) {
+      const prStatus = await deps.github.getPRStatus(project.path, branch);
+      if (prStatus.exists && prStatus.url) {
+        task.pr_url = prStatus.url;
+        task.updated_at = deps.clock.now();
+        await saveTask(deps, task);
+        log.info("Linked existing PR", { taskId: id, prUrl: prStatus.url });
+      }
+    }
+  } catch {
+    // Ignore errors — PR detection is best-effort
+  }
+
   return { task };
+}
+
+/**
+ * Refresh PR status for a task.
+ * Checks GitHub for PR existence and updates task.pr_url if found.
+ *
+ * @returns Updated task, or null if task/project not found
+ */
+export async function refreshTaskPR(
+  deps: Deps,
+  taskId: string
+): Promise<Task | null> {
+  const log = deps.logger.child("task");
+
+  // Find task by ID across all projects
+  const projects = await loadProjects(deps);
+  let task: Task | null = null;
+  let project: Project | null = null;
+
+  for (const p of projects) {
+    // Need to scan tasks — loadTask requires branch, not ID
+    const { listTasks } = await import("./db.js");
+    const tasks = await listTasks(deps, { project: p.name });
+    const found = tasks.find((t) => t.id === taskId);
+    if (found) {
+      task = found;
+      project = p;
+      break;
+    }
+  }
+
+  if (!task || !project) {
+    log.warn("Task not found for PR refresh", { taskId });
+    return null;
+  }
+
+  const ghAvailable = await deps.github.isAvailable(project.path);
+  if (!ghAvailable) {
+    log.debug("GitHub not available for PR refresh", { taskId });
+    return task;
+  }
+
+  try {
+    const prStatus = await deps.github.getPRStatus(project.path, task.branch);
+    if (prStatus.exists && prStatus.url && task.pr_url !== prStatus.url) {
+      task.pr_url = prStatus.url;
+      task.updated_at = deps.clock.now();
+      await saveTask(deps, task);
+      log.info("PR URL updated", { taskId, prUrl: prStatus.url });
+    }
+  } catch (err) {
+    log.warn("PR refresh failed", { taskId, error: err instanceof Error ? err.message : String(err) });
+  }
+
+  return task;
 }

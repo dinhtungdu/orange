@@ -70,6 +70,7 @@ Footer shows relevant actions based on selected task's state:
 | s | Spawn agent | Pending tasks |
 | a | Approve task | Reviewing tasks |
 | r | Respawn agent | Dead sessions or stuck tasks |
+| R | Refresh PR status | Any task (checks GitHub for PR) |
 | m | Merge task | Reviewed tasks |
 | p | Create PR / Open PR in browser | Reviewed (no PR) / Any task with PR |
 | x | Cancel task (shows confirmation) | Active tasks |
