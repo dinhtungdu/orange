@@ -492,9 +492,12 @@ export async function runDashboard(
     // Map key events to state machine
     const name = key.name;
     if (name === "j" || name === "k" || name === "m" || name === "x" ||
-        name === "d" || name === "r" || name === "p" ||
+        name === "d" || name === "r" || name === "p" || name === "u" ||
         name === "f" || name === "c" || name === "s" || name === "a") {
       state.handleInput(name);
+    } else if (key.sequence === "R") {
+      // Shift+R for PR refresh (key.name is 'r' for both r and R)
+      state.handleInput("R");
     } else if (name === "up" || name === "down") {
       state.handleInput(name);
     } else if (name === "return") {
