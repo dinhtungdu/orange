@@ -209,7 +209,8 @@ export class DashboardState {
       depth: 3,
       ignored: (path: string) => {
         if (!path.includes(".")) return false;
-        return !path.endsWith("TASK.md");
+        // Watch TASK.md and .orange-outcome files
+        return !path.endsWith("TASK.md") && !path.endsWith(".orange-outcome");
       },
     });
 
