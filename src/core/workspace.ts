@@ -8,7 +8,7 @@
  * when task spawn requests a workspace and none are available.
  */
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import type { Deps, Project, PoolState } from "./types.js";
@@ -349,6 +349,17 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
 
     // Clean untracked files
     await deps.git.clean(workspacePath);
+
+    // Remove orange-specific files (excluded from git, so git clean won't remove them)
+    const outcomeFile = join(workspacePath, ".orange-outcome");
+    const taskSymlink = join(workspacePath, "TASK.md");
+    for (const file of [outcomeFile, taskSymlink]) {
+      try {
+        await unlink(file);
+      } catch {
+        // File may not exist
+      }
+    }
 
     // Mark as available
     poolState.workspaces[workspace] = { status: "available" };
