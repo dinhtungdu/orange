@@ -48,9 +48,10 @@ Throws if pool exhausted.
 1. Lock pool file
 2. Fail if workspace has uncommitted changes
 3. Fetch latest, reset to `origin/<default_branch>`, clean untracked files
-4. Mark as available
-5. Release lock
-6. Auto-spawn next pending task for the project (FIFO)
+4. Remove `.orange-outcome` and `TASK.md` symlink (excluded from git, so `git clean` doesn't remove them)
+5. Mark as available
+6. Release lock
+7. Auto-spawn next pending task for the project (FIFO)
 
 ## Notes
 
