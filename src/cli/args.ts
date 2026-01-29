@@ -47,17 +47,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     };
   }
 
-  // First arg is a flag → dashboard with options
-  if (args[0].startsWith("-")) {
-    const options = parseOptions(args);
-    return {
-      command: "dashboard",
-      subcommand: null,
-      args: [],
-      options,
-    };
-  }
-
   const command = args[0];
 
   // Unknown command → treat as dashboard (error will be shown later if truly invalid)
@@ -192,9 +181,7 @@ orange - Agent orchestration system
 All commands are CWD-aware - they infer project from current directory.
 
 Usage:
-  orange                              Launch dashboard (auto-register if in git repo)
-    --all, -a                         Show all tasks (global view)
-    --project, -p <name>              Show specific project's tasks
+  orange                              Launch dashboard (auto-register if in git repo, global if not)
   orange install                      Install agent skill
 
 Project Management:

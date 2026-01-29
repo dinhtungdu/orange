@@ -19,24 +19,6 @@ describe("parseArgs", () => {
     expect(result.subcommand).toBeNull();
   });
 
-  test("parses root level flags as dashboard", () => {
-    const result = parseArgs(["bun", "script.ts", "--all"]);
-    expect(result.command).toBe("dashboard");
-    expect(result.options.all).toBe(true);
-  });
-
-  test("parses short flags as dashboard", () => {
-    const result = parseArgs(["bun", "script.ts", "-a"]);
-    expect(result.command).toBe("dashboard");
-    expect(result.options.a).toBe(true);
-  });
-
-  test("parses --project flag as dashboard", () => {
-    const result = parseArgs(["bun", "script.ts", "--project", "myproj"]);
-    expect(result.command).toBe("dashboard");
-    expect(result.options.project).toBe("myproj");
-  });
-
   test("parses command with subcommand", () => {
     const result = parseArgs(["bun", "script.ts", "project", "list"]);
     expect(result.command).toBe("project");

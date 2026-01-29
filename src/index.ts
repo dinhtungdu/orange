@@ -36,21 +36,14 @@ async function main(): Promise<void> {
   try {
     switch (parsed.command) {
       case "dashboard": {
-        // Handle --all/-a and --project/-p flags
-        const all = parsed.options.all === true || parsed.options.a === true;
-        const project = (parsed.options.project ?? parsed.options.p) as string | undefined;
-
-        if (!all && !project) {
-          // Auto-register if in git repo, fallback to global if not
-          const detection = await detectProject(deps);
-          if (detection.gitRoot && !detection.project) {
-            // In git repo but not registered → auto-register
-            await autoRegisterProject(deps);
-          }
-          // If not in git repo, detection.gitRoot is null → global view (handled by dashboard)
+        // Auto-register if in git repo, fallback to global if not
+        const detection = await detectProject(deps);
+        if (detection.gitRoot && !detection.project) {
+          // In git repo but not registered → auto-register
+          await autoRegisterProject(deps);
         }
-
-        await runDashboard(deps, { all, project });
+        // If not in git repo, detection.gitRoot is null → global view (handled by dashboard)
+        await runDashboard(deps);
         break;
       }
 
