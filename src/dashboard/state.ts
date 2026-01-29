@@ -497,14 +497,26 @@ export class DashboardState {
   private async refreshPoolStatus(): Promise<void> {
     try {
       const poolState = await loadPoolState(this.deps);
-      const entries = Object.values(poolState.workspaces);
-      // If project-scoped, only count that project's workspaces
+      const projects = await loadProjects(this.deps);
       const projectFilter = this.data.projectFilter;
-      const relevant = projectFilter
-        ? Object.entries(poolState.workspaces).filter(([name]) => name.startsWith(`${projectFilter}--`))
-        : Object.entries(poolState.workspaces);
-      this.data.poolTotal = relevant.length;
-      this.data.poolUsed = relevant.filter(([, e]) => e.status === "bound").length;
+
+      if (projectFilter) {
+        // Project-scoped: show that project's pool_size and used count
+        const project = projects.find((p) => p.name === projectFilter);
+        if (project) {
+          const relevant = Object.entries(poolState.workspaces).filter(([name]) =>
+            name.startsWith(`${projectFilter}--`)
+          );
+          this.data.poolTotal = project.pool_size;
+          this.data.poolUsed = relevant.filter(([, e]) => e.status === "bound").length;
+        }
+      } else {
+        // Global: sum all projects' pool_size and used count
+        this.data.poolTotal = projects.reduce((sum, p) => sum + p.pool_size, 0);
+        this.data.poolUsed = Object.values(poolState.workspaces).filter(
+          (e) => e.status === "bound"
+        ).length;
+      }
     } catch {
       // Pool not initialized yet
     }
