@@ -10,7 +10,7 @@ Git worktrees managed as a reusable pool.
 
 Each workspace is a git worktree created with detached HEAD at `origin/<default_branch>`. Detached because git doesn't allow the same branch checked out in multiple worktrees.
 
-On creation, each worktree gets agent permission settings (e.g., `.claude/settings.local.json`).
+Harness-specific setup happens at spawn time (not worktree creation) based on task's harness. See [harness.md](./harness.md) for details.
 
 ## Pool State
 

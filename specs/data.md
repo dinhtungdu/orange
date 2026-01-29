@@ -45,6 +45,7 @@ Human-readable task file with YAML frontmatter:
 id: abc123
 project: orange
 branch: dark-mode
+harness: pi
 status: working
 workspace: orange--1
 tmux_session: orange/dark-mode
@@ -59,6 +60,10 @@ Task description here.
 Optional implementation context (separated by `---`).
 Piped via `--context -` on task create.
 ```
+
+## Harness
+
+The `harness` field specifies which coding agent runs the task (`pi`, `opencode`, `claude`, `codex`). See [harness.md](./harness.md) for details.
 
 ## history.jsonl
 

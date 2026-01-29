@@ -8,6 +8,7 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 - [CLI Commands](./cli.md) — project, task, workspace commands
 - [Dashboard](./dashboard.md) — TUI, keybindings
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
+- [Harness Configuration](./harness.md) — multi-harness support (pi, opencode, claude, codex)
 - [Workspace Pool](./workspace.md) — worktree management
 - [Logging](./logging.md) — structured logging, debugging
 - [Testing](./testing.md) — setup, strategy
@@ -18,7 +19,7 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 ```
 Your terminal (orchestrator):
 ┌─────────────────────────────────────────────────────┐
-│ Claude Code session in ~/workspace/coffee           │
+│ Agent session in ~/workspace/coffee                 │
 │ (you chat here, create tasks via CLI or dashboard)  │
 └─────────────────────────────────────────────────────┘
 
@@ -31,7 +32,7 @@ Task sessions (one per task):
 ┌─────────────────────────┐  ┌─────────────────────────┐
 │ coffee/login-fix        │  │ coffee/password-reset   │
 │ ┌─────────────────────┐ │  │ ┌─────────────────────┐ │
-│ │ Claude Code agent   │ │  │ │ Claude Code agent   │ │
+│ │ Agent (pi/claude/…) │ │  │ │ Agent (pi/claude/…) │ │
 │ └─────────────────────┘ │  │ └─────────────────────┘ │
 └─────────────────────────┘  └─────────────────────────┘
 
@@ -44,9 +45,9 @@ Task sessions (one per task):
 
 1. **Run `orange`** from project directory (auto-registers if needed)
 2. **Dashboard opens**: Create tasks, monitor progress
-3. **Agents spawn**: One tmux session + worktree + Claude per task
+3. **Agents spawn**: One tmux session + worktree + agent per task
 4. **Agents work**: Visible in dashboard (includes self-review loop)
-5. **Agent stops**: Review passed → hook marks `reviewing`
+5. **Agent stops**: Review passed → status becomes `reviewing`
 6. **Human reviews**: Attach to session, review, merge
 
 ## Components
@@ -54,7 +55,7 @@ Task sessions (one per task):
 | Component | Description |
 |-----------|-------------|
 | CLI + Dashboard | Unified binary — CLI commands and TUI dashboard |
-| Skills | Claude skills (installed to `~/.claude/skills/orange-<name>`) |
+| Skills | Agent skills (installed to harness skills dir, see [harness.md](./harness.md)) |
 
 ## Modules
 

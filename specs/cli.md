@@ -13,7 +13,7 @@ orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create <branch> <description> [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
+orange task create <branch> <description> [--harness <name>] [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
@@ -32,7 +32,7 @@ orange workspace list [--all]
 orange workspace gc                 # Release orphaned workspaces
 
 # Other
-orange install                      # Install agent skill
+orange install [--harness <name>] [--all]   # Install agent skill
 
 # Logs
 orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
@@ -41,6 +41,9 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 ## Task Create
 
 - Auto-spawns agent unless `--no-spawn` or `--status=reviewing`
+- `--harness` specifies which agent to use: `pi`, `opencode`, `claude`, `codex`
+  - If omitted: fallback to first installed (pi → opencode → claude → codex)
+  - Skills should pass `--harness <name>` to identify the orchestrator
 - `--context -` reads implementation context from stdin
 - `--status` sets initial status: `pending` (default) or `reviewing`
   - `pending`: normal flow, spawns agent
@@ -88,6 +91,16 @@ Create a GitHub PR for a reviewed task. Useful when `gh` was unavailable during 
 ## Workspace GC
 
 Release workspaces bound to tasks that no longer exist (e.g., after manual deletion or crashed spawns).
+
+## Install
+
+Installs the Orange orchestrator skill to the harness skills directory.
+
+- `--harness <name>` installs only for specified harness (pi, opencode, claude, codex)
+- `--all` installs for all detected harnesses
+- No flags: installs for first detected harness (pi → opencode → claude → codex)
+
+See [harness.md](./harness.md) for skills directories per harness.
 
 ## CWD Detection
 

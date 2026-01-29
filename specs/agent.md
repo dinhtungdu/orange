@@ -6,17 +6,20 @@
 2. Fetch latest; checkout existing branch (local or remote) or create new from `origin/<default_branch>`
 3. Symlink `TASK.md` from task dir to worktree
 4. Create `.orange-outcome` in task dir, symlink to worktree
-5. Add `TASK.md` and `.orange-outcome` to git exclude
-6. Create tmux session running Claude with agent prompt (full permissions)
-7. Update task: status → `working`, set workspace + tmux_session, log events
+5. Setup harness-specific files (see [harness.md](./harness.md))
+6. Add harness files to git exclude
+7. Create tmux session running agent with prompt (harness-specific command)
+8. Update task: status → `working`, set workspace + tmux_session, log events
 
 On spawn failure, release workspace to prevent leaks.
+
+See [harness.md](./harness.md) for spawn commands per harness.
 
 ## 2. Agent Prompt
 
 The prompt includes:
 - Task description and branch name
-- Workflow: read TASK.md → read CLAUDE.md → implement → test → self-review via `/code-review` skill
+- Workflow: read TASK.md → read project rules (AGENTS.md/CLAUDE.md) → implement → test → self-review
 - Max 2 review attempts before marking stuck
 - Must write outcome to `.orange-outcome` before stopping
 - Must not push (orchestrator handles merge)
@@ -27,7 +30,7 @@ For dead sessions reusing existing workspace:
 - Check `.orange-outcome` first
 - If already `passed` → write `reviewing` and stop
 - If `stuck` or missing → continue implementation
-- Uses reduced permissions (accept edits only, not full skip)
+- Uses reduced permissions where supported (see [harness.md](./harness.md))
 
 ## 4. Self-Review Loop
 
