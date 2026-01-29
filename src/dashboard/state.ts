@@ -224,9 +224,10 @@ export class DashboardState {
       }, 100);
     });
 
+    // Health check for dead sessions (30s is fine, not time-critical)
     this.captureInterval = setInterval(() => {
       this.captureOutputs().then(() => this.emit());
-    }, 5000);
+    }, 30000);
 
     // Poll PR statuses every 30s
     await this.refreshPRStatuses();
