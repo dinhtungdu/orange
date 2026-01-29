@@ -267,8 +267,8 @@ describe("Integration: Full Task Lifecycle", () => {
 
     await saveTask(deps, task);
 
-    // Verify in file
-    const loadedTask = await loadTask(deps, "test-repo", "feature-x");
+    // Verify in file (load by task ID)
+    const loadedTask = await loadTask(deps, "test-repo", "task123");
     expect(loadedTask).not.toBeNull();
     expect(loadedTask?.id).toBe("task123");
 
@@ -351,8 +351,8 @@ describe("Integration: Full Task Lifecycle", () => {
 
     await saveTask(deps, updatedTask);
 
-    // Verify updated state
-    const loadedTask = await loadTask(deps, "test-repo", "feature-y");
+    // Verify updated state (load by task ID)
+    const loadedTask = await loadTask(deps, "test-repo", "task456");
     expect(loadedTask?.status).toBe("working");
     expect(loadedTask?.workspace).toBe(workspace);
   });

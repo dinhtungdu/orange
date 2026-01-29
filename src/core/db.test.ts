@@ -15,7 +15,7 @@ import { MockTmux } from "./tmux.js";
 import { MockClock } from "./clock.js";
 import { NullLogger } from "./logger.js";
 import { saveTask } from "./state.js";
-import { listTasks, getTaskById } from "./db.js";
+import { listTasks, getTaskById, getTaskByBranch } from "./db.js";
 
 describe("Task Queries", () => {
   let tempDir: string;
@@ -124,6 +124,20 @@ describe("Task Queries", () => {
     expect(task).toBeNull();
   });
 
+  test("getTaskByBranch returns task", async () => {
+    await saveTask(deps, createTask({ id: "abc12345", project: "orange", branch: "feature-x" }));
+
+    const task = await getTaskByBranch(deps, "orange", "feature-x");
+    expect(task).not.toBeNull();
+    expect(task?.id).toBe("abc12345");
+    expect(task?.branch).toBe("feature-x");
+  });
+
+  test("getTaskByBranch returns null for non-existent branch", async () => {
+    const task = await getTaskByBranch(deps, "orange", "nonexistent");
+    expect(task).toBeNull();
+  });
+
   test("listTasks finds tasks with slashes in branch names", async () => {
     await saveTask(deps, createTask({ id: "task1", branch: "feature/auth" }));
     await saveTask(deps, createTask({ id: "task2", branch: "fix/login/oauth" }));
@@ -142,15 +156,15 @@ describe("Task Queries", () => {
     expect(byId.task3.branch).toBe("simple-branch");
   });
 
-  test("slashed branches stored in flat directories", async () => {
+  test("task directories are named by task ID", async () => {
     await saveTask(deps, createTask({ id: "task1", branch: "feature/auth" }));
 
-    // Directory should be sanitized: feature/auth → feature--auth
+    // Directory should be task ID, not branch name
     const { existsSync } = await import("node:fs");
-    const flatDir = join(tempDir, "tasks", "orange", "feature--auth", "TASK.md");
-    const nestedDir = join(tempDir, "tasks", "orange", "feature", "auth", "TASK.md");
-    expect(existsSync(flatDir)).toBe(true);
-    expect(existsSync(nestedDir)).toBe(false);
+    const idDir = join(tempDir, "tasks", "orange", "task1", "TASK.md");
+    const branchDir = join(tempDir, "tasks", "orange", "feature--auth", "TASK.md");
+    expect(existsSync(idDir)).toBe(true);
+    expect(existsSync(branchDir)).toBe(false);
   });
 
   test("listTasks filters by project with slashed branches", async () => {

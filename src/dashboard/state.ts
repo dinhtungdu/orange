@@ -547,7 +547,7 @@ export class DashboardState {
 
     for (const task of workingTasks) {
       try {
-        const outcomePath = getOutcomePath(this.deps, task.project, task.branch);
+        const outcomePath = getOutcomePath(this.deps, task.project, task.id);
         const content = await readFile(outcomePath, "utf-8");
         const outcome = parseAgentOutcome(content);
 
@@ -560,12 +560,12 @@ export class DashboardState {
           task.status = "reviewing";
           task.updated_at = now;
           await saveTask(this.deps, task);
-          await appendHistory(this.deps, task.project, task.branch, {
+          await appendHistory(this.deps, task.project, task.id, {
             type: "agent.stopped",
             timestamp: now,
             outcome: "passed",
           });
-          await appendHistory(this.deps, task.project, task.branch, {
+          await appendHistory(this.deps, task.project, task.id, {
             type: "status.changed",
             timestamp: now,
             from: previousStatus,
@@ -577,13 +577,13 @@ export class DashboardState {
           task.status = "stuck";
           task.updated_at = now;
           await saveTask(this.deps, task);
-          await appendHistory(this.deps, task.project, task.branch, {
+          await appendHistory(this.deps, task.project, task.id, {
             type: "agent.stopped",
             timestamp: now,
             outcome: "stuck",
             reason: outcome.reason,
           });
-          await appendHistory(this.deps, task.project, task.branch, {
+          await appendHistory(this.deps, task.project, task.id, {
             type: "status.changed",
             timestamp: now,
             from: previousStatus,

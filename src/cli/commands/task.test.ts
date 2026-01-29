@@ -106,8 +106,9 @@ describe("task create command", () => {
 
     await runTaskCommand(parsed, deps);
 
-    // Verify task file
-    const task = await loadTask(deps, "testproj", "feature-x");
+    // Get task ID then load by ID
+    const taskId = await getTaskIdByBranch(deps, "feature-x");
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task).not.toBeNull();
     expect(task!.project).toBe("testproj");
     expect(task!.branch).toBe("feature-x");
@@ -129,7 +130,8 @@ describe("task create command", () => {
 
     await runTaskCommand(parsed, deps);
 
-    const task = await loadTask(deps, "testproj", "my-branch");
+    const taskId = await getTaskIdByBranch(deps, "my-branch");
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.description).toBe("This is a multi word description");
   });
 
@@ -140,7 +142,8 @@ describe("task create command", () => {
 
     await runTaskCommand(parsed, deps);
 
-    const history = await loadHistory(deps, "testproj", "feature-y");
+    const taskId = await getTaskIdByBranch(deps, "feature-y");
+    const history = await loadHistory(deps, "testproj", taskId);
     expect(history).toHaveLength(1);
     expect(history[0].type).toBe("task.created");
     const createdEvent = history[0] as TaskCreatedEvent;
@@ -184,7 +187,8 @@ describe("task create command", () => {
     await runTaskCommand(parsed, deps);
 
     // Verify task created with reviewing status
-    const task = await loadTask(deps, "testproj", "existing-work");
+    const taskId = await getTaskIdByBranch(deps, "existing-work");
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task).not.toBeNull();
     expect(task!.status).toBe("reviewing");
     expect(task!.workspace).toBeNull();  // No workspace assigned
@@ -420,8 +424,8 @@ describe("task spawn command", () => {
       deps
     );
 
-    // Verify status changed
-    const task = await loadTask(deps, "testproj", "spawn-feature");
+    // Verify status changed (load by task ID)
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.status).toBe("working");
     expect(task!.workspace).toBe("testproj--1");
     expect(task!.tmux_session).toBe("testproj/spawn-feature");
@@ -443,7 +447,8 @@ describe("task spawn command", () => {
       deps
     );
 
-    const history = await loadHistory(deps, "testproj", "spawn-history");
+    // Load history by task ID
+    const history = await loadHistory(deps, "testproj", taskId);
     expect(history.length).toBeGreaterThanOrEqual(3); // created + spawned + status.changed
     expect(history.some(e => e.type === "agent.spawned")).toBe(true);
     expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "working")).toBe(true);
@@ -543,7 +548,8 @@ describe("task complete command", () => {
       deps
     );
 
-    const task = await loadTask(deps, "testproj", "complete-feature");
+    // Load by task ID
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.status).toBe("reviewing");
     expect(consoleLogs[0]).toContain("reviewing");
   });
@@ -557,7 +563,8 @@ describe("task complete command", () => {
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "complete", taskId]), deps);
 
-    const history = await loadHistory(deps, "testproj", "complete-history");
+    // Load history by task ID
+    const history = await loadHistory(deps, "testproj", taskId);
     expect(history.some(e => e.type === "agent.stopped" && (e as AgentStoppedEvent).outcome === "passed")).toBe(true);
     expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "reviewing")).toBe(true);
   });
@@ -629,7 +636,8 @@ describe("task stuck command", () => {
       deps
     );
 
-    const task = await loadTask(deps, "testproj", "stuck-feature");
+    // Load by task ID
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.status).toBe("stuck");
     expect(consoleLogs[0]).toContain("stuck");
   });
@@ -709,7 +717,8 @@ describe("task merge command", () => {
       deps
     );
 
-    const task = await loadTask(deps, "testproj", "merge-feature");
+    // Load by task ID
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.status).toBe("done");
     expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
@@ -735,7 +744,8 @@ describe("task merge command", () => {
 
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "merge", taskId]), deps);
 
-    const history = await loadHistory(deps, "testproj", "merge-history");
+    // Load history by task ID
+    const history = await loadHistory(deps, "testproj", taskId);
     expect(history.some(e => e.type === "task.merged")).toBe(true);
     expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "done")).toBe(true);
   });
@@ -807,7 +817,8 @@ describe("task cancel command", () => {
       deps
     );
 
-    const task = await loadTask(deps, "testproj", "cancel-feature");
+    // Load by task ID
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task!.status).toBe("cancelled");
     expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
@@ -824,7 +835,8 @@ describe("task cancel command", () => {
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "spawn", taskId]), deps);
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "cancel", taskId, "--yes"]), deps);
 
-    const history = await loadHistory(deps, "testproj", "cancel-history");
+    // Load history by task ID
+    const history = await loadHistory(deps, "testproj", taskId);
     expect(history.some(e => e.type === "task.cancelled")).toBe(true);
     expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "cancelled")).toBe(true);
   });
@@ -902,8 +914,8 @@ describe("task delete command", () => {
     await runTaskCommand(parseArgs(["bun", "script.ts", "task", "merge", taskId]), deps);
     consoleLogs = [];
 
-    // Verify task exists before delete
-    let task = await loadTask(deps, "testproj", "delete-done");
+    // Verify task exists before delete (load by task ID)
+    let task = await loadTask(deps, "testproj", taskId);
     expect(task).not.toBeNull();
     expect(task!.status).toBe("done");
 
@@ -913,8 +925,8 @@ describe("task delete command", () => {
       deps
     );
 
-    // Verify task folder is gone
-    task = await loadTask(deps, "testproj", "delete-done");
+    // Verify task folder is gone (load by task ID)
+    task = await loadTask(deps, "testproj", taskId);
     expect(task).toBeNull();
 
     // Verify task is removed from db
@@ -941,8 +953,8 @@ describe("task delete command", () => {
       deps
     );
 
-    // Verify task is gone
-    const task = await loadTask(deps, "testproj", "delete-failed");
+    // Verify task is gone (load by task ID)
+    const task = await loadTask(deps, "testproj", taskId);
     expect(task).toBeNull();
     expect(consoleLogs[0]).toContain("deleted");
   });

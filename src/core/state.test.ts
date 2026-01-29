@@ -120,7 +120,8 @@ describe("Task state (TASK.md)", () => {
 
     await saveTask(deps, task);
 
-    const taskPath = join(getTaskDir(deps, "orange", "feature-x"), "TASK.md");
+    // Task dir is now by ID, not branch
+    const taskPath = join(getTaskDir(deps, "orange", "abc12345"), "TASK.md");
     const content = readFileSync(taskPath, "utf-8");
 
     expect(content).toContain("id: abc12345");
@@ -145,7 +146,8 @@ describe("Task state (TASK.md)", () => {
     };
 
     await saveTask(deps, task);
-    const loaded = await loadTask(deps, "orange", "feature-x");
+    // loadTask now takes task ID, not branch
+    const loaded = await loadTask(deps, "orange", "abc12345");
 
     expect(loaded).toEqual(task);
   });
@@ -179,7 +181,8 @@ describe("Task state (TASK.md)", () => {
 
     await saveTask(deps, task);
 
-    const loaded = await loadTask(deps, "orange", "feature-x");
+    // loadTask now takes task ID, not branch
+    const loaded = await loadTask(deps, "orange", "abc12345");
     expect(loaded?.status).toBe("working");
     expect(loaded?.workspace).toBe("orange--1");
     expect(loaded?.description).toBe("Updated description");
@@ -224,7 +227,8 @@ describe("History (history.jsonl)", () => {
     };
     await saveTask(deps, task);
 
-    await appendHistory(deps, "orange", "feature-x", {
+    // appendHistory now takes task ID, not branch
+    await appendHistory(deps, "orange", "abc12345", {
       type: "task.created",
       timestamp: "2024-01-01T00:00:00.000Z",
       task_id: "abc12345",
@@ -233,7 +237,8 @@ describe("History (history.jsonl)", () => {
       description: "Test",
     });
 
-    const events = await loadHistory(deps, "orange", "feature-x");
+    // loadHistory now takes task ID, not branch
+    const events = await loadHistory(deps, "orange", "abc12345");
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("task.created");
   });
@@ -255,7 +260,8 @@ describe("History (history.jsonl)", () => {
     };
     await saveTask(deps, task);
 
-    await appendHistory(deps, "orange", "feature-x", {
+    // All history functions now take task ID, not branch
+    await appendHistory(deps, "orange", "abc12345", {
       type: "task.created",
       timestamp: "2024-01-01T00:00:00.000Z",
       task_id: "abc12345",
@@ -264,21 +270,21 @@ describe("History (history.jsonl)", () => {
       description: "Test",
     });
 
-    await appendHistory(deps, "orange", "feature-x", {
+    await appendHistory(deps, "orange", "abc12345", {
       type: "agent.spawned",
       timestamp: "2024-01-01T00:01:00.000Z",
       workspace: "orange--1",
       tmux_session: "orange/feature-x",
     });
 
-    await appendHistory(deps, "orange", "feature-x", {
+    await appendHistory(deps, "orange", "abc12345", {
       type: "status.changed",
       timestamp: "2024-01-01T00:01:00.000Z",
       from: "pending",
       to: "working",
     });
 
-    const events = await loadHistory(deps, "orange", "feature-x");
+    const events = await loadHistory(deps, "orange", "abc12345");
     expect(events).toHaveLength(3);
     expect(events[0].type).toBe("task.created");
     expect(events[1].type).toBe("agent.spawned");

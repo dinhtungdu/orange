@@ -452,7 +452,7 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "agent.spawned",
     timestamp: now,
     workspace,
@@ -492,12 +492,12 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   log.info("Task completed", { taskId, from: previousStatus, to: "reviewing" });
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "agent.stopped",
     timestamp: now,
     outcome: "passed",
   });
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
@@ -540,7 +540,7 @@ async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: "reviewing",
@@ -583,7 +583,7 @@ async function unapproveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: "reviewed",
@@ -624,12 +624,12 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   log.warn("Task stuck", { taskId, from: previousStatus, to: "stuck" });
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "agent.stopped",
     timestamp: now,
     outcome: "stuck",
   });
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
@@ -721,7 +721,7 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.pr_url = prUrl;
   task.updated_at = deps.clock.now();
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "pr.created",
     timestamp: deps.clock.now(),
     url: prUrl,
@@ -791,7 +791,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
       await deps.git.resetHard(project.path, `origin/${project.default_branch}`);
 
       // Log PR merged event
-      await appendHistory(deps, task.project, task.branch, {
+      await appendHistory(deps, task.project, task.id, {
         type: "pr.merged",
         timestamp: deps.clock.now(),
         url: task.pr_url,
@@ -850,13 +850,13 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "task.merged",
     timestamp: now,
     commit_hash: commitHash!,
     strategy: mergeVia === "pr" ? "merge" : (strategy as "ff" | "merge"),
   });
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
@@ -922,12 +922,12 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   task.updated_at = now;
 
   await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "task.cancelled",
     timestamp: now,
     reason: "User cancelled",
   });
-  await appendHistory(deps, task.project, task.branch, {
+  await appendHistory(deps, task.project, task.id, {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
@@ -993,7 +993,7 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Delete task folder
-  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const taskDir = getTaskDir(deps, task.project, task.id);
   await rm(taskDir, { recursive: true, force: true });
 
   log.info("Task deleted", { taskId, project: task.project, branch: task.branch });

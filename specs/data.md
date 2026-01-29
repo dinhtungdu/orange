@@ -13,7 +13,7 @@ All data in `~/orange/`.
 │   └── .pool.json          # Pool state
 └── tasks/                  # Task folders (source of truth)
     └── <project>/
-        └── <branch>/
+        └── <task_id>/          # Directory named by task ID (not branch)
             ├── TASK.md           # Description, metadata (frontmatter)
             ├── .orange-outcome   # Agent outcome (symlinked to worktree)
             └── history.jsonl     # Event log

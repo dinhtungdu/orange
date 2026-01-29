@@ -5,7 +5,8 @@
 import { mkdir } from "node:fs/promises";
 import { customAlphabet } from "nanoid";
 import type { Deps, Task, Project, Harness } from "./types.js";
-import { loadTask, saveTask, appendHistory, getTaskDir } from "./state.js";
+import { saveTask, appendHistory, getTaskDir } from "./state.js";
+import { getTaskByBranch } from "./db.js";
 import { loadProjects } from "./state.js";
 import { resolveHarness } from "./harness.js";
 
@@ -40,7 +41,7 @@ export async function createTaskRecord(
   const log = deps.logger.child("task");
 
   // Check if an orange task already exists for this branch
-  const existingTask = await loadTask(deps, project.name, branch);
+  const existingTask = await getTaskByBranch(deps, project.name, branch);
   if (existingTask) {
     throw new Error(`Task already exists for branch '${branch}' in project '${project.name}'`);
   }
@@ -75,12 +76,12 @@ export async function createTaskRecord(
   };
 
   // Create task directory
-  const taskDir = getTaskDir(deps, project.name, branch);
+  const taskDir = getTaskDir(deps, project.name, id);
   await mkdir(taskDir, { recursive: true });
 
   // Save task and initial history event
   await saveTask(deps, task);
-  await appendHistory(deps, project.name, branch, {
+  await appendHistory(deps, project.name, id, {
     type: "task.created",
     timestamp: now,
     task_id: id,

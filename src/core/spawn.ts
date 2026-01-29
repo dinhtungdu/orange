@@ -43,9 +43,9 @@ async function linkTaskFile(
   deps: Deps,
   workspacePath: string,
   project: string,
-  branch: string
+  taskId: string
 ): Promise<void> {
-  const taskMdPath = getTaskPath(deps, project, branch);
+  const taskMdPath = getTaskPath(deps, project, taskId);
   const symlinkPath = join(workspacePath, "TASK.md");
 
   // Remove existing symlink if present
@@ -148,12 +148,12 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     await addGitExcludes(project.path);
 
     // Symlink TASK.md to worktree
-    await linkTaskFile(deps, workspacePath, task.project, task.branch);
+    await linkTaskFile(deps, workspacePath, task.project, task.id);
     log.debug("Linked task file to worktree", { workspacePath });
 
     // Create .orange-outcome in task dir and symlink to worktree
     // Agent writes outcome here; dashboard watches task dir for changes
-    const outcomeSourcePath = getOutcomePath(deps, task.project, task.branch);
+    const outcomeSourcePath = getOutcomePath(deps, task.project, task.id);
     const outcomeSymlinkPath = join(workspacePath, ".orange-outcome");
     await writeFile(outcomeSourcePath, JSON.stringify({ id: task.id }), "utf-8");
     try {
@@ -187,13 +187,13 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     task.updated_at = now;
 
     await saveTask(deps, task);
-    await appendHistory(deps, task.project, task.branch, {
+    await appendHistory(deps, task.project, task.id, {
       type: "agent.spawned",
       timestamp: now,
       workspace,
       tmux_session: tmuxSession,
     });
-    await appendHistory(deps, task.project, task.branch, {
+    await appendHistory(deps, task.project, task.id, {
       type: "status.changed",
       timestamp: now,
       from: "pending",

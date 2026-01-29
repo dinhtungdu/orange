@@ -20,40 +20,31 @@ function getProjectsPath(deps: Deps): string {
 }
 
 /**
- * Sanitize a branch name for use as a directory name.
- * Replaces slashes with double-dash to keep storage flat.
- * e.g., "feature/auth" → "feature--auth"
+ * Get the task directory for a project/task ID.
  */
-export function sanitizeBranch(branch: string): string {
-  return branch.replace(/\//g, "--");
+export function getTaskDir(deps: Deps, project: string, taskId: string): string {
+  return join(deps.dataDir, "tasks", project, taskId);
 }
 
 /**
- * Get the task directory for a project/branch.
+ * Get the TASK.md path for a project/task ID.
  */
-export function getTaskDir(deps: Deps, project: string, branch: string): string {
-  return join(deps.dataDir, "tasks", project, sanitizeBranch(branch));
+export function getTaskPath(deps: Deps, project: string, taskId: string): string {
+  return join(getTaskDir(deps, project, taskId), "TASK.md");
 }
 
 /**
- * Get the TASK.md path for a project/branch.
+ * Get the history.jsonl path for a project/task ID.
  */
-export function getTaskPath(deps: Deps, project: string, branch: string): string {
-  return join(getTaskDir(deps, project, branch), "TASK.md");
+function getHistoryPath(deps: Deps, project: string, taskId: string): string {
+  return join(getTaskDir(deps, project, taskId), "history.jsonl");
 }
 
 /**
- * Get the history.jsonl path for a project/branch.
+ * Get the .orange-outcome path for a project/task ID.
  */
-function getHistoryPath(deps: Deps, project: string, branch: string): string {
-  return join(getTaskDir(deps, project, branch), "history.jsonl");
-}
-
-/**
- * Get the .orange-outcome path for a project/branch.
- */
-export function getOutcomePath(deps: Deps, project: string, branch: string): string {
-  return join(getTaskDir(deps, project, branch), ".orange-outcome");
+export function getOutcomePath(deps: Deps, project: string, taskId: string): string {
+  return join(getTaskDir(deps, project, taskId), ".orange-outcome");
 }
 
 /**
@@ -77,15 +68,15 @@ export async function saveProjects(deps: Deps, projects: Project[]): Promise<voi
 }
 
 /**
- * Load a task from TASK.md.
+ * Load a task from TASK.md by task ID.
  */
 export async function loadTask(
   deps: Deps,
   project: string,
-  branch: string
+  taskId: string
 ): Promise<Task | null> {
   try {
-    const content = await readFile(getTaskPath(deps, project, branch), "utf-8");
+    const content = await readFile(getTaskPath(deps, project, taskId), "utf-8");
     const { data, content: description } = matter(content);
 
     // Parse description and context from body
@@ -119,7 +110,7 @@ export async function loadTask(
  * Save a task to TASK.md.
  */
 export async function saveTask(deps: Deps, task: Task): Promise<void> {
-  const taskDir = getTaskDir(deps, task.project, task.branch);
+  const taskDir = getTaskDir(deps, task.project, task.id);
   await mkdir(taskDir, { recursive: true });
 
   const frontmatter: Record<string, unknown> = {
@@ -142,7 +133,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     ? `${task.description}\n\n---\n\n${task.context}`
     : task.description;
   const content = matter.stringify(body, frontmatter);
-  await writeFile(getTaskPath(deps, task.project, task.branch), content);
+  await writeFile(getTaskPath(deps, task.project, task.id), content);
 }
 
 /**
@@ -151,10 +142,10 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
 export async function appendHistory(
   deps: Deps,
   project: string,
-  branch: string,
+  taskId: string,
   event: HistoryEvent
 ): Promise<void> {
-  const historyPath = getHistoryPath(deps, project, branch);
+  const historyPath = getHistoryPath(deps, project, taskId);
   const line = JSON.stringify(event) + "\n";
   await appendFile(historyPath, line);
 }
@@ -165,10 +156,10 @@ export async function appendHistory(
 export async function loadHistory(
   deps: Deps,
   project: string,
-  branch: string
+  taskId: string
 ): Promise<HistoryEvent[]> {
   try {
-    const content = await readFile(getHistoryPath(deps, project, branch), "utf-8");
+    const content = await readFile(getHistoryPath(deps, project, taskId), "utf-8");
     return content
       .trim()
       .split("\n")

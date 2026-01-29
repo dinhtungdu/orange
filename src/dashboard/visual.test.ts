@@ -243,9 +243,10 @@ describe("Dashboard Visual", () => {
   });
 
   test("renders task list with proper column alignment", async () => {
-    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", description: "Fix OAuth redirect loop" }));
-    await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", description: "Add dark theme" }));
-    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", description: "Password reset flow" }));
+    // Use different timestamps for deterministic ordering (newest first)
+    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", description: "Fix OAuth redirect loop", created_at: "2024-01-15T12:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", description: "Add dark theme", created_at: "2024-01-15T11:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", description: "Password reset flow", created_at: "2024-01-15T10:00:00.000Z" }));
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,
@@ -318,8 +319,9 @@ describe("Dashboard Visual", () => {
   });
 
   test("cursor navigation changes selected row", async () => {
-    await saveTask(deps, createTask({ id: "t1", branch: "branch-a", status: "working", description: "First task" }));
-    await saveTask(deps, createTask({ id: "t2", branch: "branch-b", status: "done", description: "Second task" }));
+    // Use different timestamps for deterministic ordering (newest first)
+    await saveTask(deps, createTask({ id: "t1", branch: "branch-a", status: "working", description: "First task", created_at: "2024-01-15T12:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "branch-b", status: "done", description: "Second task", created_at: "2024-01-15T11:00:00.000Z" }));
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,
