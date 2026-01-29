@@ -136,23 +136,15 @@ When user provides a PR URL for review (e.g., "review this PR: https://github.co
 
 1. **Extract branch name from PR**:
    ```bash
-   gh pr view 123 --json headRefName,title --jq '.headRefName + "|" + .title'
+   gh pr view 123 --json headRefName --jq '.headRefName'
    ```
 
-2. **Create task using the PR's branch** so agent reviews existing code:
+2. **Create task with the same branch** using `--status reviewing`:
    ```bash
-   orange task create <branch-from-pr> "Review PR #123: <title>" --context - << 'EOF'
-   Review the changes in this PR. Check for:
-   - Code quality and best practices
-   - Potential bugs or edge cases
-   - Test coverage
-   - Documentation
-   
-   If changes needed, implement fixes. If looks good, report findings.
-   EOF
+   orange task create <branch-from-pr> "Review PR #123: <title>" --status reviewing
    ```
 
-The agent spawns on the existing branch and reviews/improves the PR code.
+Using `--status reviewing` skips agent spawn — the work is already done, it just needs human review in the dashboard.
 
 ### Task session died
 If dashboard shows a task as "dead" (✗ icon):
