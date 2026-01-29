@@ -709,6 +709,10 @@ export class DashboardState {
     }
 
     // Attach to live session
+    await this.attachToSession(task.tmux_session);
+  }
+
+  private async attachToSession(session: string): Promise<void> {
     const tmuxAvailable = await this.deps.tmux.isAvailable();
     if (!tmuxAvailable) {
       this.data.error = "tmux is not installed or not in PATH";
@@ -718,7 +722,7 @@ export class DashboardState {
 
     const insideTmux = !!process.env.TMUX;
     if (insideTmux) {
-      const proc = Bun.spawn(["tmux", "switch-client", "-t", task.tmux_session], {
+      const proc = Bun.spawn(["tmux", "switch-client", "-t", session], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -936,11 +940,18 @@ export class DashboardState {
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
         this.data.error = `Run failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+        await this.refreshTasks();
+        this.emit();
       } else {
-        this.data.message = `Started agent for ${taskBranch}`;
+        // Refresh to get new tmux_session, then attach
+        await this.refreshTasks();
+        this.emit();
+        // Re-fetch task to get updated tmux_session
+        const updatedTask = this.data.tasks.find((t) => t.id === task.id);
+        if (updatedTask?.tmux_session) {
+          await this.attachToSession(updatedTask.tmux_session);
+        }
       }
-      await this.refreshTasks();
-      this.emit();
     });
   }
 
