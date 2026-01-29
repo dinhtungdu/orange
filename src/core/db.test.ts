@@ -41,6 +41,7 @@ describe("Task Queries", () => {
     id: "abc12345",
     project: "orange",
     branch: "feature-x",
+    harness: "claude",
     status: "pending",
     workspace: null,
     tmux_session: null,

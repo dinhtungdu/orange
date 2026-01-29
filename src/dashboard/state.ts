@@ -7,7 +7,7 @@
 
 import { watch } from "chokidar";
 import { join } from "node:path";
-import type { Deps, Task, TaskStatus, PRStatus } from "../core/types.js";
+import type { Deps, Task, TaskStatus, PRStatus, Harness } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 import { loadProjects, getOutcomePath, saveTask, appendHistory } from "../core/state.js";
@@ -17,6 +17,7 @@ import { createTaskRecord } from "../core/task.js";
 import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
 import { refreshTaskPR } from "../core/task.js";
+import { getInstalledHarnesses } from "../core/harness.js";
 
 /**
  * Clean up nested error messages for display.
@@ -85,7 +86,7 @@ export interface DiffStats {
 }
 
 /** Which field is focused in create mode. */
-export type CreateField = "branch" | "description" | "status";
+export type CreateField = "branch" | "description" | "harness" | "status";
 
 /** Initial status options for task creation. */
 export type CreateStatus = "pending" | "reviewing";
@@ -94,6 +95,8 @@ export interface CreateModeData {
   active: boolean;
   branch: string;
   description: string;
+  harness: Harness;
+  installedHarnesses: Harness[];
   status: CreateStatus;
   focusedField: CreateField;
 }
@@ -120,6 +123,8 @@ export interface DashboardStateData {
   prStatuses: Map<string, PRStatus>;
   poolUsed: number;
   poolTotal: number;
+  /** Cached installed harnesses (loaded once during init) */
+  installedHarnesses: Harness[];
   createMode: CreateModeData;
   confirmMode: ConfirmModeData;
 }
@@ -147,10 +152,13 @@ export class DashboardState {
     prStatuses: new Map(),
     poolUsed: 0,
     poolTotal: 0,
+    installedHarnesses: [],
     createMode: {
       active: false,
       branch: "",
       description: "",
+      harness: "claude", // Will be updated when entering create mode
+      installedHarnesses: [],
       status: "pending",
       focusedField: "branch",
     },
@@ -198,6 +206,9 @@ export class DashboardState {
       }
     }
 
+    // Load installed harnesses (cached for create mode)
+    this.data.installedHarnesses = await getInstalledHarnesses();
+
     await this.refreshTasks();
     await this.captureOutputs();
 
@@ -244,6 +255,10 @@ export class DashboardState {
 
   /** Load tasks without starting watchers. For testing. */
   async loadTasks(): Promise<void> {
+    // Also load installed harnesses if not already loaded
+    if (this.data.installedHarnesses.length === 0) {
+      this.data.installedHarnesses = await getInstalledHarnesses();
+    }
     await this.refreshTasks();
   }
 
@@ -336,10 +351,22 @@ export class DashboardState {
       this.emit();
       return;
     }
+
+    // Use cached installed harnesses
+    const installed = this.data.installedHarnesses;
+
+    if (installed.length === 0) {
+      this.data.error = "No coding agent harness installed. Install one of: pi, opencode, claude, codex";
+      this.emit();
+      return;
+    }
+
     this.data.createMode = {
       active: true,
       branch: "",
       description: "",
+      harness: installed[0],
+      installedHarnesses: installed,
       status: "pending",
       focusedField: "branch",
     };
@@ -363,6 +390,8 @@ export class DashboardState {
       active: false,
       branch: "",
       description: "",
+      harness: "claude",
+      installedHarnesses: [],
       status: "pending",
       focusedField: "branch",
     };
@@ -377,8 +406,8 @@ export class DashboardState {
         this.exitCreateMode();
         return;
       case "tab": {
-        // Cycle through fields: branch → description → status → branch
-        const fields: CreateField[] = ["branch", "description", "status"];
+        // Cycle through fields: branch → description → harness → status → branch
+        const fields: CreateField[] = ["branch", "description", "harness", "status"];
         const currentIdx = fields.indexOf(cm.focusedField);
         cm.focusedField = fields[(currentIdx + 1) % fields.length];
         this.emit();
@@ -393,7 +422,7 @@ export class DashboardState {
         } else if (cm.focusedField === "description") {
           cm.description = cm.description.slice(0, -1);
         }
-        // No backspace for status field
+        // No backspace for harness/status fields
         this.emit();
         return;
       }
@@ -407,6 +436,10 @@ export class DashboardState {
             }
           } else if (cm.focusedField === "description") {
             cm.description += key;
+          } else if (cm.focusedField === "harness") {
+            // Cycle through installed harnesses on any key press
+            const idx = cm.installedHarnesses.indexOf(cm.harness);
+            cm.harness = cm.installedHarnesses[(idx + 1) % cm.installedHarnesses.length];
           } else if (cm.focusedField === "status") {
             // Toggle status on any key press (space or arrow-like behavior)
             cm.status = cm.status === "pending" ? "reviewing" : "pending";
@@ -421,6 +454,7 @@ export class DashboardState {
     const cm = this.data.createMode;
     const branch = cm.branch.trim();
     const description = cm.description.trim();
+    const harness = cm.harness;
     const status = cm.status;
 
     if (!branch || !description) {
@@ -443,6 +477,8 @@ export class DashboardState {
       active: false,
       branch: "",
       description: "",
+      harness: "claude",
+      installedHarnesses: [],
       status: "pending",
       focusedField: "branch",
     };
@@ -452,11 +488,12 @@ export class DashboardState {
         project,
         branch,
         description,
+        harness,
         status,
       });
 
       // Refresh immediately so the new task shows up before spawning
-      this.data.message = `Created ${project.name}/${branch} [${status}]`;
+      this.data.message = `Created ${project.name}/${branch} [${status}] [${harness}]`;
       await this.refreshTasks();
       this.emit();
 

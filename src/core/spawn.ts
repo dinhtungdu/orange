@@ -13,6 +13,7 @@ import { loadProjects, saveTask, appendHistory, getTaskPath, getOutcomePath } fr
 import { listTasks } from "./db.js";
 import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
+import { HARNESSES } from "./harness.js";
 
 /**
  * Get the actual git directory path.
@@ -58,17 +59,7 @@ async function linkTaskFile(
   await symlink(taskMdPath, symlinkPath);
 }
 
-/**
- * Escape a string for use in a shell double-quoted context.
- */
-function shellEscape(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, "\\$")
-    .replace(/`/g, "\\`")
-    .replace(/\n/g, "\\n");
-}
+
 
 /**
  * Spawn an agent for a task by ID.
@@ -173,10 +164,17 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     await symlink(outcomeSourcePath, outcomeSymlinkPath);
     log.debug("Created outcome file and symlink", { source: outcomeSourcePath, symlink: outcomeSymlinkPath });
 
+    // Run harness-specific workspace setup
+    const harnessConfig = HARNESSES[task.harness];
+    if (harnessConfig.workspaceSetup) {
+      await harnessConfig.workspaceSetup(workspacePath);
+      log.debug("Harness workspace setup complete", { harness: task.harness });
+    }
+
     // Create tmux session
     const tmuxSession = `${task.project}/${task.branch}`;
     const prompt = buildAgentPrompt(task);
-    const command = `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`;
+    const command = harnessConfig.spawnCommand(prompt);
 
     log.debug("Creating tmux session", { session: tmuxSession });
     await deps.tmux.newSession(tmuxSession, workspacePath, command);

@@ -10,7 +10,7 @@
 import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import matter from "gray-matter";
-import type { Deps, Project, Task, HistoryEvent } from "./types.js";
+import type { Deps, Project, Task, HistoryEvent, Harness } from "./types.js";
 
 /**
  * Get the path to projects.json.
@@ -100,6 +100,7 @@ export async function loadTask(
       id: data.id as string,
       project: data.project as string,
       branch: data.branch as string,
+      harness: (data.harness as Harness) ?? "claude", // Default for backward compat
       status: data.status as Task["status"],
       workspace: (data.workspace as string) ?? null,
       tmux_session: (data.tmux_session as string) ?? null,
@@ -125,6 +126,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     id: task.id,
     project: task.project,
     branch: task.branch,
+    harness: task.harness,
     status: task.status,
     workspace: task.workspace,
     tmux_session: task.tmux_session,

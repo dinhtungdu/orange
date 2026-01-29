@@ -24,6 +24,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   id: "test123",
   project: "testproj",
   branch: "feature-x",
+  harness: "claude",
   status: "pending",
   workspace: null,
   tmux_session: null,
@@ -31,7 +32,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   context: null,
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
-    pr_url: null,
+  pr_url: null,
   ...overrides,
 });
 

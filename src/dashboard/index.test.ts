@@ -24,6 +24,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   id: "test123",
   project: "testproj",
   branch: "feature-x",
+  harness: "claude",
   status: "pending",
   workspace: null,
   tmux_session: null,
@@ -31,7 +32,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   context: null,
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
-    pr_url: null,
+  pr_url: null,
   ...overrides,
 });
 
@@ -247,6 +248,7 @@ describe("Dashboard State", () => {
   test("c key enters create mode when project-scoped", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks(); // Loads installed harnesses
 
     expect(state.isCreateMode()).toBe(false);
     state.handleInput("c");
@@ -266,6 +268,7 @@ describe("Dashboard State", () => {
   test("escape exits create mode", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     expect(state.isCreateMode()).toBe(true);
@@ -279,12 +282,16 @@ describe("Dashboard State", () => {
   test("tab switches focus between fields", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     expect(state.data.createMode.focusedField).toBe("branch");
 
     state.handleInput("tab");
     expect(state.data.createMode.focusedField).toBe("description");
+
+    state.handleInput("tab");
+    expect(state.data.createMode.focusedField).toBe("harness");
 
     state.handleInput("tab");
     expect(state.data.createMode.focusedField).toBe("status");
@@ -296,6 +303,7 @@ describe("Dashboard State", () => {
   test("typing appends to focused field", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     // Type into branch field
@@ -315,6 +323,7 @@ describe("Dashboard State", () => {
   test("backspace removes last character from focused field", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     state.handleInput("a");
@@ -329,6 +338,7 @@ describe("Dashboard State", () => {
   test("branch field rejects invalid characters", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     state.handleInput("a");
@@ -340,6 +350,7 @@ describe("Dashboard State", () => {
   test("branch field allows hyphens, underscores, slashes, dots", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     for (const ch of "fix/bug-1_test.ts") {
@@ -351,6 +362,7 @@ describe("Dashboard State", () => {
   test("enter with empty fields shows error", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     state.handleInput("enter");
@@ -377,6 +389,7 @@ describe("Dashboard State", () => {
   test("context keys show create mode hints", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
 
     state.handleInput("c");
     const keys = state.getContextKeys();

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import type { Deps, Project, PoolState } from "./types.js";
 import { loadProjects } from "./state.js";
+import { getAllGitExcludes } from "./harness.js";
 
 /**
  * Get the path to the workspaces directory.
@@ -86,28 +87,11 @@ function getNextWorkspaceNumber(poolState: PoolState, projectName: string): numb
 }
 
 /**
- * Default Claude settings for autonomous agents.
- * Pre-allows common dev commands to avoid permission prompts.
- */
-const AGENT_SETTINGS = {
-  permissions: {
-    allow: [
-      "Bash(bun run check:*)",
-      "Bash(bunx tsc:*)",
-      "Bash(bun test:*)",
-      "Bash(bun install)",
-      "Bash(git stash:*)",
-    ],
-  },
-  sandbox: {
-    enabled: true,
-    autoAllowBashIfSandboxed: true,
-  },
-};
-
-/**
  * Create a single worktree for a project.
  * Returns the workspace name.
+ *
+ * Note: Harness-specific setup happens at spawn time, not here.
+ * This allows different tasks to use different harnesses in the same worktree pool.
  */
 async function createWorktree(
   deps: Deps,
@@ -120,14 +104,6 @@ async function createWorktree(
 
   console.log(`Creating workspace ${name}...`);
   await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
-
-  // Create .claude/settings.local.json for autonomous agent permissions
-  const claudeDir = join(worktreePath, ".claude");
-  await mkdir(claudeDir, { recursive: true });
-  await writeFile(
-    join(claudeDir, "settings.local.json"),
-    JSON.stringify(AGENT_SETTINGS, null, 2)
-  );
 
   // Add orange files to main repo's .git/info/exclude
   await addGitExcludes(project.path);
@@ -144,26 +120,27 @@ async function createWorktree(
  */
 export async function addGitExcludes(projectPath: string): Promise<void> {
   try {
-  const gitDir = join(projectPath, ".git");
-  const excludeDir = join(gitDir, "info");
-  await mkdir(excludeDir, { recursive: true });
-  const excludePath = join(excludeDir, "exclude");
+    const gitDir = join(projectPath, ".git");
+    const excludeDir = join(gitDir, "info");
+    await mkdir(excludeDir, { recursive: true });
+    const excludePath = join(excludeDir, "exclude");
 
-  let excludeContent = "";
-  try {
-    excludeContent = await readFile(excludePath, "utf-8");
-  } catch {
-    // File doesn't exist
-  }
-
-  const entries = ["TASK.md", ".orange-outcome", ".claude/"];
-  for (const entry of entries) {
-    if (!excludeContent.includes(entry)) {
-      const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
-      excludeContent += `${newLine}${entry}\n`;
+    let excludeContent = "";
+    try {
+      excludeContent = await readFile(excludePath, "utf-8");
+    } catch {
+      // File doesn't exist
     }
-  }
-  await writeFile(excludePath, excludeContent);
+
+    // Get all excludes from all harnesses
+    const entries = getAllGitExcludes();
+    for (const entry of entries) {
+      if (!excludeContent.includes(entry)) {
+        const newLine = excludeContent.endsWith("\n") || excludeContent === "" ? "" : "\n";
+        excludeContent += `${newLine}${entry}\n`;
+      }
+    }
+    await writeFile(excludePath, excludeContent);
   } catch {
     // Best-effort — project path may not be a real git repo in tests
   }
@@ -174,6 +151,7 @@ export async function addGitExcludes(projectPath: string): Promise<void> {
  * Creates worktrees based on pool_size.
  *
  * This is optional - workspaces can be created lazily on first spawn.
+ * Note: Harness-specific setup happens at spawn time, not here.
  */
 export async function initWorkspacePool(deps: Deps, project: Project): Promise<void> {
   await ensureWorkspacesDir(deps);
@@ -191,14 +169,6 @@ export async function initWorkspacePool(deps: Deps, project: Project): Promise<v
 
     // Create worktree
     await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
-
-    // Create .claude/settings.local.json for autonomous agent permissions
-    const claudeDir = join(worktreePath, ".claude");
-    await mkdir(claudeDir, { recursive: true });
-    await writeFile(
-      join(claudeDir, "settings.local.json"),
-      JSON.stringify(AGENT_SETTINGS, null, 2)
-    );
 
     // Add orange files to main repo's .git/info/exclude
     await addGitExcludes(project.path);

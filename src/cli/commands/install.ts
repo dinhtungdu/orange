@@ -1,35 +1,37 @@
 /**
- * Install command - installs Orange skills, stop hook (optional), and permissions.
+ * Install command - installs Orange skills to harness-specific directories.
  *
- * - Symlinks each skill folder to ~/.claude/skills/<skill-name> (dev changes reflect immediately)
- * - Adds stop hook to ~/.claude/settings.json (optional: dashboard polls outcome files anyway)
- * - Creates hook script at ~/.claude/hooks/stop-orange.sh
- * - Adds Bash(orange:*) permission to ~/.claude/settings.json
+ * Usage:
+ *   orange install                    # Install for first detected harness
+ *   orange install --harness claude   # Install only for Claude Code
+ *   orange install --all              # Install for all detected harnesses
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
- * is symlinked as a separate skill (e.g., skills/orchestrator -> ~/.claude/skills/orange-orchestrator).
+ * is installed to the harness-specific skills directory.
  *
- * Note: The stop hook provides immediate status updates for Claude Code, but is not required.
- * The dashboard polls .orange-outcome files in task dirs, making Orange harness-agnostic.
- * Any harness (Claude Code, pi, Cursor, etc.) that lets agents write files will work.
+ * The SKILL.md is modified to include --harness <name> in orange commands,
+ * so spawned agents pass their identity back to orange.
  */
 
-import { mkdir, symlink, writeFile, chmod, readFile, unlink, lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile, chmod, readFile, unlink, lstat, readdir, cp } from "node:fs/promises";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
+import type { Harness } from "../../core/types.js";
+import { HARNESSES, getInstalledHarnesses } from "../../core/harness.js";
+import type { ParsedArgs } from "../args.js";
 
 const SKILLS_DIR = join(import.meta.dir, "../../../skills");
+
+// Claude-specific paths for stop hook
 const CLAUDE_DIR = join(homedir(), ".claude");
-const SKILLS_DEST_DIR = join(CLAUDE_DIR, "skills");
 const HOOKS_DIR = join(CLAUDE_DIR, "hooks");
 const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
 const STOP_HOOK_SCRIPT = join(HOOKS_DIR, "stop-orange.sh");
 
 /**
- * Stop hook script content (optional, for immediate status updates).
- * Called by the settings.json hook entry.
- * Dashboard polls outcome files anyway, so this hook is not required.
+ * Stop hook script content (Claude Code only).
+ * Provides immediate status updates when agent stops.
  */
 const STOP_HOOK_CONTENT = `#!/bin/bash
 # Orange stop hook - provides immediate status updates for Claude Code
@@ -75,28 +77,64 @@ interface Settings {
 }
 
 /**
- * Install a single skill by creating a symlink.
+ * Template SKILL.md content with harness-specific commands.
+ * Adds --harness <name> to orange task create commands.
  */
-async function installSkill(skillName: string, sourcePath: string): Promise<void> {
-  const destPath = join(SKILLS_DEST_DIR, `orange-${skillName}`);
-
-  // Remove existing symlink/file if it exists
-  try {
-    await lstat(destPath);
-    await unlink(destPath);
-  } catch {
-    // File doesn't exist, that's fine
-  }
-
-  // Create symlink
-  await symlink(sourcePath, destPath, "dir");
-  console.log(`Installed skill: orange-${skillName}`);
+function templateSkillContent(content: string, harness: Harness): string {
+  // Replace 'orange task create' with 'orange task create --harness <harness>'
+  // but only if --harness is not already present
+  return content.replace(
+    /orange task create (?!--harness)/g,
+    `orange task create --harness ${harness} `
+  );
 }
 
 /**
- * Install the stop hook into settings.json.
+ * Install a single skill to a harness's skills directory.
  */
-async function installStopHook(): Promise<void> {
+async function installSkillForHarness(
+  skillName: string,
+  sourcePath: string,
+  harness: Harness
+): Promise<void> {
+  const config = HARNESSES[harness];
+  const destDir = join(config.skillsDir, `orange-${skillName}`);
+
+  // Create destination directory
+  await mkdir(destDir, { recursive: true });
+
+  // Read and template SKILL.md
+  const skillMdPath = join(sourcePath, "SKILL.md");
+  const skillContent = await readFile(skillMdPath, "utf-8");
+  const templatedContent = templateSkillContent(skillContent, harness);
+
+  // Write templated SKILL.md
+  await writeFile(join(destDir, "SKILL.md"), templatedContent);
+
+  // Copy any other files in the skill directory
+  const entries = await readdir(sourcePath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === "SKILL.md") continue; // Already handled
+    const srcFile = join(sourcePath, entry.name);
+    const destFile = join(destDir, entry.name);
+    await cp(srcFile, destFile, { recursive: true });
+  }
+
+  console.log(`  ${harness}: orange-${skillName}`);
+}
+
+/**
+ * Install the stop hook into Claude's settings.json.
+ */
+async function installClaudeStopHook(): Promise<void> {
+  // Create hooks directory
+  await mkdir(HOOKS_DIR, { recursive: true });
+
+  // Write hook script
+  await writeFile(STOP_HOOK_SCRIPT, STOP_HOOK_CONTENT);
+  await chmod(STOP_HOOK_SCRIPT, 0o755);
+  console.log(`Installed hook script to ${STOP_HOOK_SCRIPT}`);
+
   // Load existing settings
   let settings: Settings = {};
   try {
@@ -119,39 +157,18 @@ async function installStopHook(): Promise<void> {
     matcher.hooks?.some((hook) => hook.command.includes("stop-orange.sh"))
   );
 
-  if (orangeHookExists) {
+  if (!orangeHookExists) {
+    // Add orange hook
+    if (settings.hooks.Stop.length === 0) {
+      settings.hooks.Stop.push({ hooks: [] });
+    }
+    settings.hooks.Stop[0].hooks.push({
+      command: ORANGE_HOOK_COMMAND,
+      type: "command",
+    });
+    console.log("Added stop hook to settings.json");
+  } else {
     console.log("Stop hook already installed in settings.json");
-    return;
-  }
-
-  // Add orange hook
-  // Find existing matcher or create new one
-  if (settings.hooks.Stop.length === 0) {
-    settings.hooks.Stop.push({ hooks: [] });
-  }
-
-  // Add to first matcher's hooks array
-  settings.hooks.Stop[0].hooks.push({
-    command: ORANGE_HOOK_COMMAND,
-    type: "command",
-  });
-
-  // Write back settings
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
-  console.log("Added stop hook to settings.json");
-}
-
-/**
- * Install the Bash(orange:*) permission into settings.json.
- */
-async function installPermission(): Promise<void> {
-  // Load existing settings
-  let settings: Settings = {};
-  try {
-    const content = await readFile(SETTINGS_PATH, "utf-8");
-    settings = JSON.parse(content);
-  } catch {
-    // File doesn't exist or invalid JSON, start fresh
   }
 
   // Ensure permissions.allow structure exists
@@ -163,59 +180,94 @@ async function installPermission(): Promise<void> {
   }
 
   const permission = "Bash(orange:*)";
-
-  // Check if permission already exists
-  if (settings.permissions.allow.includes(permission)) {
+  if (!settings.permissions.allow.includes(permission)) {
+    settings.permissions.allow.unshift(permission);
+    console.log("Added Bash(orange:*) permission to settings.json");
+  } else {
     console.log("Permission already installed in settings.json");
-    return;
   }
-
-  // Add permission
-  settings.permissions.allow.unshift(permission);
 
   // Write back settings
   await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
-  console.log("Added Bash(orange:*) permission to settings.json");
 }
 
 /**
  * Run the install command.
  */
-export async function runInstallCommand(): Promise<void> {
-  // Create destination directories
-  await mkdir(SKILLS_DEST_DIR, { recursive: true });
-  await mkdir(HOOKS_DIR, { recursive: true });
+export async function runInstallCommand(parsed?: ParsedArgs): Promise<void> {
+  const harnessArg = parsed?.options.harness as string | undefined;
+  const installAll = parsed?.options.all === true;
 
-  // Discover and install all skills
+  // Determine which harnesses to install for
+  let harnesses: Harness[];
+
+  if (harnessArg) {
+    // Explicit harness specified
+    const validHarnesses: Harness[] = ["pi", "opencode", "claude", "codex"];
+    if (!validHarnesses.includes(harnessArg as Harness)) {
+      console.error(`Invalid harness '${harnessArg}'. Valid options: ${validHarnesses.join(", ")}`);
+      process.exit(1);
+    }
+    harnesses = [harnessArg as Harness];
+  } else if (installAll) {
+    // Install for all detected harnesses
+    harnesses = await getInstalledHarnesses();
+    if (harnesses.length === 0) {
+      console.error("No coding agent harness detected. Install one of: pi, opencode, claude, codex");
+      process.exit(1);
+    }
+  } else {
+    // Install for first detected harness
+    harnesses = await getInstalledHarnesses();
+    if (harnesses.length === 0) {
+      console.error("No coding agent harness detected. Install one of: pi, opencode, claude, codex");
+      process.exit(1);
+    }
+    harnesses = [harnesses[0]];
+  }
+
+  console.log(`Installing for harness(es): ${harnesses.join(", ")}`);
+  console.log();
+
+  // Discover skills
   const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
-  let skillCount = 0;
+  const skills: { name: string; path: string }[] = [];
 
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const skillPath = join(SKILLS_DIR, entry.name);
       const skillFile = join(skillPath, "SKILL.md");
-
       if (existsSync(skillFile)) {
-        await installSkill(entry.name, skillPath);
-        skillCount++;
+        skills.push({ name: entry.name, path: skillPath });
       }
     }
   }
 
-  if (skillCount === 0) {
+  if (skills.length === 0) {
     console.log("No skills found to install");
-  } else {
-    console.log(`Installed ${skillCount} skill(s) to ${SKILLS_DEST_DIR}`);
+    return;
   }
 
-  // Write hook script
-  await writeFile(STOP_HOOK_SCRIPT, STOP_HOOK_CONTENT);
-  await chmod(STOP_HOOK_SCRIPT, 0o755);
-  console.log(`Installed hook script to ${STOP_HOOK_SCRIPT}`);
+  // Install skills for each harness
+  console.log("Installing skills:");
+  for (const harness of harnesses) {
+    const config = HARNESSES[harness];
 
-  // Add hook to settings.json
-  await installStopHook();
+    // Create skills directory
+    await mkdir(config.skillsDir, { recursive: true });
 
-  // Add permission to settings.json
-  await installPermission();
+    for (const skill of skills) {
+      await installSkillForHarness(skill.name, skill.path, harness);
+    }
+  }
+
+  console.log();
+  console.log(`Installed ${skills.length} skill(s) for ${harnesses.length} harness(es)`);
+
+  // Install Claude-specific extras (stop hook, permissions)
+  if (harnesses.includes("claude")) {
+    console.log();
+    console.log("Installing Claude Code extras:");
+    await installClaudeStopHook();
+  }
 }

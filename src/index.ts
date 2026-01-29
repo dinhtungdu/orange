@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         break;
 
       case "install":
-        await runInstallCommand();
+        await runInstallCommand(parsed);
         break;
 
       case "log":

@@ -8,6 +8,11 @@
  */
 
 /**
+ * Supported coding agent harnesses.
+ */
+export type Harness = "pi" | "opencode" | "claude" | "codex";
+
+/**
  * Task status represents the lifecycle state of a task.
  *
  * Flow: pending → working → reviewing → reviewed → done
@@ -36,6 +41,8 @@ export interface Task {
   project: string;
   /** Git branch name for this task */
   branch: string;
+  /** Which coding agent harness to use */
+  harness: Harness;
   /** Current status of the task */
   status: TaskStatus;
   /** Assigned workspace path (e.g., "orange--1"), null if not spawned */

@@ -4,9 +4,10 @@
 
 import { mkdir } from "node:fs/promises";
 import { customAlphabet } from "nanoid";
-import type { Deps, Task, Project } from "./types.js";
+import type { Deps, Task, Project, Harness } from "./types.js";
 import { loadTask, saveTask, appendHistory, getTaskDir } from "./state.js";
 import { loadProjects } from "./state.js";
+import { resolveHarness } from "./harness.js";
 
 export interface CreateTaskOptions {
   project: Project;
@@ -15,6 +16,8 @@ export interface CreateTaskOptions {
   context?: string | null;
   /** Initial status. Defaults to "pending". Only "pending" or "reviewing" allowed. */
   status?: "pending" | "reviewing";
+  /** Harness to use. If omitted, auto-detects first installed. */
+  harness?: Harness | string;
 }
 
 export interface CreateTaskResult {
@@ -42,6 +45,9 @@ export async function createTaskRecord(
     throw new Error(`Task already exists for branch '${branch}' in project '${project.name}'`);
   }
 
+  // Resolve harness (validates and auto-detects if not specified)
+  const harness = await resolveHarness(options.harness as string | undefined);
+
   // Fetch latest remote state
   await deps.git.fetch(project.path);
 
@@ -51,12 +57,13 @@ export async function createTaskRecord(
   const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
   const id = nanoid();
 
-  log.info("Creating task", { taskId: id, project: project.name, branch, description });
+  log.info("Creating task", { taskId: id, project: project.name, branch, description, harness });
 
   const task: Task = {
     id,
     project: project.name,
     branch,
+    harness,
     status,
     workspace: null,
     tmux_session: null,

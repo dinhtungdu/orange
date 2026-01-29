@@ -128,7 +128,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
   if (parsed.args.length < 2) {
-    console.error("Usage: orange task create <branch> <description> [--status pending|reviewing]");
+    console.error("Usage: orange task create <branch> <description> [--harness <name>] [--status pending|reviewing]");
     process.exit(1);
   }
 
@@ -145,6 +145,9 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
     status = statusArg;
   }
+
+  // Parse --harness flag (optional, auto-detects if not specified)
+  const harnessArg = parsed.options.harness as string | undefined;
 
   // Read context from stdin if --context - is passed
   let context: string | null = null;
@@ -176,7 +179,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   let task: Task;
   try {
-    const result = await createTaskRecord(deps, { project, branch, description, context, status });
+    const result = await createTaskRecord(deps, { project, branch, description, context, status, harness: harnessArg });
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });
@@ -185,7 +188,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`Created task ${task.id} (${project.name}/${branch}) [${status}]`);
+  console.log(`Created task ${task.id} (${project.name}/${branch}) [${status}] [${task.harness}]`);
 
   // Auto-spawn agent only for pending tasks without --no-spawn flag
   if (status === "pending" && !parsed.options["no-spawn"]) {
@@ -434,8 +437,10 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
   const { buildRespawnPrompt } = await import("../../core/agent.js");
+  const { HARNESSES } = await import("../../core/harness.js");
   const prompt = buildRespawnPrompt(task);
-  const command = `claude --permission-mode acceptEdits "${prompt.replace(/"/g, '\\"')}"`;
+  const harnessConfig = HARNESSES[task.harness];
+  const command = harnessConfig.respawnCommand(prompt);
 
   log.info("Respawning task", { taskId, session: tmuxSession });
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
