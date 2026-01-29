@@ -131,21 +131,6 @@ EOF
 
 ## Handling Common Scenarios
 
-### PR review request
-When user provides a PR URL for review (e.g., "review this PR: https://github.com/org/repo/pull/123"):
-
-1. **Extract branch name from PR**:
-   ```bash
-   gh pr view 123 --json headRefName --jq '.headRefName'
-   ```
-
-2. **Create task with the same branch** using `--status reviewing`:
-   ```bash
-   orange task create <branch-from-pr> "Review PR #123: <title>" --status reviewing
-   ```
-
-Using `--status reviewing` skips agent spawn — the work is already done, it just needs human review in the dashboard.
-
 ### Task session died
 If dashboard shows a task as "dead" (✗ icon):
 ```bash
