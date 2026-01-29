@@ -196,7 +196,6 @@ async function installClaudeStopHook(): Promise<void> {
  */
 export async function runInstallCommand(parsed?: ParsedArgs): Promise<void> {
   const harnessArg = parsed?.options.harness as string | undefined;
-  const installAll = parsed?.options.all === true;
 
   // Determine which harnesses to install for
   let harnesses: Harness[];
@@ -209,21 +208,13 @@ export async function runInstallCommand(parsed?: ParsedArgs): Promise<void> {
       process.exit(1);
     }
     harnesses = [harnessArg as Harness];
-  } else if (installAll) {
+  } else {
     // Install for all detected harnesses
     harnesses = await getInstalledHarnesses();
     if (harnesses.length === 0) {
       console.error("No coding agent harness detected. Install one of: pi, opencode, claude, codex");
       process.exit(1);
     }
-  } else {
-    // Install for first detected harness
-    harnesses = await getInstalledHarnesses();
-    if (harnesses.length === 0) {
-      console.error("No coding agent harness detected. Install one of: pi, opencode, claude, codex");
-      process.exit(1);
-    }
-    harnesses = [harnesses[0]];
   }
 
   console.log(`Installing for harness(es): ${harnesses.join(", ")}`);

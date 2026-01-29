@@ -32,7 +32,7 @@ orange workspace list [--all]
 orange workspace gc                 # Release orphaned workspaces
 
 # Other
-orange install [--harness <name>] [--all]   # Install agent skill
+orange install [--harness <name>]           # Install agent skill
 
 # Logs
 orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
@@ -94,11 +94,10 @@ Release workspaces bound to tasks that no longer exist (e.g., after manual delet
 
 ## Install
 
-Installs the Orange orchestrator skill to the harness skills directory.
+Installs the Orange orchestrator skill to harness skills directories.
 
 - `--harness <name>` installs only for specified harness (pi, opencode, claude, codex)
-- `--all` installs for all detected harnesses
-- No flags: installs for first detected harness (pi → opencode → claude → codex)
+- No flags: installs for all detected harnesses
 
 See [harness.md](./harness.md) for skills directories per harness.
 
