@@ -60,8 +60,6 @@ The `.orange-outcome` file is symlinked from the task dir (`~/orange/tasks/<proj
 - `passed` or `reviewing` → status = `reviewing`
 - `stuck` → status = `stuck`
 
-**Optional hook (Claude Code):** For immediate feedback, Claude Code's stop hook can still call `orange task complete/stuck`, but it's no longer required — dashboard polling handles it.
-
 ## 6. Human Review
 
 1. Dashboard shows task needing attention

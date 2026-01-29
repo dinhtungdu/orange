@@ -2,9 +2,8 @@
  * Install command - installs Orange skills to harness-specific directories.
  *
  * Usage:
- *   orange install                    # Install for first detected harness
+ *   orange install                    # Install for all detected harnesses
  *   orange install --harness claude   # Install only for Claude Code
- *   orange install --all              # Install for all detected harnesses
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
  * is installed to the harness-specific skills directory.
@@ -13,8 +12,8 @@
  * so spawned agents pass their identity back to orange.
  */
 
-import { mkdir, writeFile, chmod, readFile, unlink, lstat, readdir, cp } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { mkdir, writeFile, readFile, readdir, cp } from "node:fs/promises";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import type { Harness } from "../../core/types.js";
@@ -23,52 +22,11 @@ import type { ParsedArgs } from "../args.js";
 
 const SKILLS_DIR = join(import.meta.dir, "../../../skills");
 
-// Claude-specific paths for stop hook
+// Claude-specific paths for permissions
 const CLAUDE_DIR = join(homedir(), ".claude");
-const HOOKS_DIR = join(CLAUDE_DIR, "hooks");
 const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
-const STOP_HOOK_SCRIPT = join(HOOKS_DIR, "stop-orange.sh");
-
-/**
- * Stop hook script content (Claude Code only).
- * Provides immediate status updates when agent stops.
- */
-const STOP_HOOK_CONTENT = `#!/bin/bash
-# Orange stop hook - provides immediate status updates for Claude Code
-# Optional: dashboard polls .orange-outcome files anyway
-# Installed by: orange install
-
-if [[ -f .orange-outcome ]]; then
-  # Parse JSON without jq dependency (pure bash)
-  TASK_ID=$(grep -o '"id":"[^"]*"' .orange-outcome 2>/dev/null | head -1 | cut -d'"' -f4)
-  OUTCOME=$(grep -o '"outcome":"[^"]*"' .orange-outcome 2>/dev/null | head -1 | cut -d'"' -f4)
-
-  if [[ -n "$TASK_ID" ]]; then
-    if [[ "$OUTCOME" == "passed" || "$OUTCOME" == "reviewing" ]]; then
-      orange task complete "$TASK_ID"
-    elif [[ "$OUTCOME" == "stuck" ]]; then
-      orange task stuck "$TASK_ID"
-    fi
-  fi
-fi
-`;
-
-/** Hook command that goes into settings.json */
-const ORANGE_HOOK_COMMAND = `bash ${STOP_HOOK_SCRIPT}`;
-
-interface HookEntry {
-  command: string;
-  type: "command";
-}
-
-interface HookMatcher {
-  hooks: HookEntry[];
-}
 
 interface Settings {
-  hooks?: {
-    Stop?: HookMatcher[];
-  };
   permissions?: {
     allow?: string[];
     [key: string]: unknown;
@@ -124,16 +82,10 @@ async function installSkillForHarness(
 }
 
 /**
- * Install the stop hook into Claude's settings.json.
+ * Install the Bash(orange:*) permission into Claude's settings.json.
  */
-async function installClaudeStopHook(): Promise<void> {
-  // Create hooks directory
-  await mkdir(HOOKS_DIR, { recursive: true });
-
-  // Write hook script
-  await writeFile(STOP_HOOK_SCRIPT, STOP_HOOK_CONTENT);
-  await chmod(STOP_HOOK_SCRIPT, 0o755);
-  console.log(`Installed hook script to ${STOP_HOOK_SCRIPT}`);
+async function installClaudePermission(): Promise<void> {
+  await mkdir(CLAUDE_DIR, { recursive: true });
 
   // Load existing settings
   let settings: Settings = {};
@@ -142,33 +94,6 @@ async function installClaudeStopHook(): Promise<void> {
     settings = JSON.parse(content);
   } catch {
     // File doesn't exist or invalid JSON, start fresh
-  }
-
-  // Ensure hooks.Stop structure exists
-  if (!settings.hooks) {
-    settings.hooks = {};
-  }
-  if (!settings.hooks.Stop) {
-    settings.hooks.Stop = [];
-  }
-
-  // Check if orange hook already exists
-  const orangeHookExists = settings.hooks.Stop.some((matcher) =>
-    matcher.hooks?.some((hook) => hook.command.includes("stop-orange.sh"))
-  );
-
-  if (!orangeHookExists) {
-    // Add orange hook
-    if (settings.hooks.Stop.length === 0) {
-      settings.hooks.Stop.push({ hooks: [] });
-    }
-    settings.hooks.Stop[0].hooks.push({
-      command: ORANGE_HOOK_COMMAND,
-      type: "command",
-    });
-    console.log("Added stop hook to settings.json");
-  } else {
-    console.log("Stop hook already installed in settings.json");
   }
 
   // Ensure permissions.allow structure exists
@@ -182,13 +107,11 @@ async function installClaudeStopHook(): Promise<void> {
   const permission = "Bash(orange:*)";
   if (!settings.permissions.allow.includes(permission)) {
     settings.permissions.allow.unshift(permission);
-    console.log("Added Bash(orange:*) permission to settings.json");
+    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+    console.log("  Added Bash(orange:*) permission to settings.json");
   } else {
-    console.log("Permission already installed in settings.json");
+    console.log("  Bash(orange:*) permission already installed");
   }
-
-  // Write back settings
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2));
 }
 
 /**
@@ -255,10 +178,10 @@ export async function runInstallCommand(parsed?: ParsedArgs): Promise<void> {
   console.log();
   console.log(`Installed ${skills.length} skill(s) for ${harnesses.length} harness(es)`);
 
-  // Install Claude-specific extras (stop hook, permissions)
+  // Install Claude-specific extras (permissions)
   if (harnesses.includes("claude")) {
     console.log();
-    console.log("Installing Claude Code extras:");
-    await installClaudeStopHook();
+    console.log("Claude Code:");
+    await installClaudePermission();
   }
 }

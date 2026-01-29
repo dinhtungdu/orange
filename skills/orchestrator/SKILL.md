@@ -21,7 +21,7 @@ All commands operate on the current project (inferred from your working director
 
 ```bash
 # Task management
-orange task create <branch> <description>
+orange task create --harness claude <branch> <description>
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task log <task_id>                # View conversation history
@@ -76,7 +76,7 @@ If you find a branch that seems related to the task the user is asking for:
 Use `--context -` with heredoc to pass implementation details:
 
 ```bash
-orange task create add-login "Implement login form with email/password" --context - << 'EOF'
+orange task create --harness claude add-login "Implement login form with email/password" --context - << 'EOF'
 ## Implementation Notes
 
 - Use existing AuthService in src/services/auth.ts
@@ -101,7 +101,7 @@ User: "I want to add user authentication. It needs login, logout, and password r
 Orchestrator:
 ```bash
 # Create and spawn first task with context
-orange task create add-login "Implement login form and authentication flow" --context - << 'EOF'
+orange task create --harness claude add-login "Implement login form and authentication flow" --context - << 'EOF'
 ## Implementation Notes
 - Create LoginForm component in src/components/
 - Use AuthService.login() for API call
@@ -109,7 +109,7 @@ orange task create add-login "Implement login form and authentication flow" --co
 EOF
 
 # Create and spawn second task with context
-orange task create add-logout "Implement logout functionality" --context - << 'EOF'
+orange task create --harness claude add-logout "Implement logout functionality" --context - << 'EOF'
 ## Implementation Notes
 - Add logout button to Header component
 - Call AuthService.logout() and clear localStorage
