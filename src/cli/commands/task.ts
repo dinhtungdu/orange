@@ -369,20 +369,19 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Must be an active task (working/reviewing/stuck)
-  const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
-  if (!activeStatuses.includes(task.status)) {
-    console.error(`Task '${taskId}' is ${task.status}, cannot respawn`);
+  // Cannot respawn done tasks
+  if (task.status === "done") {
+    console.error(`Task '${taskId}' is done, cannot respawn`);
     process.exit(1);
   }
 
-  // Must have a workspace assigned
-  if (!task.workspace) {
-    console.error(`Task '${taskId}' has no workspace. Use 'spawn' instead.`);
+  // Cannot respawn pending tasks (use spawn instead)
+  if (task.status === "pending") {
+    console.error(`Task '${taskId}' is pending. Use 'spawn' instead.`);
     process.exit(1);
   }
 
-  // Check session is actually dead
+  // Check if session is still active (for tasks with workspace)
   if (task.tmux_session) {
     const exists = await deps.tmux.sessionExists(task.tmux_session);
     if (exists) {
@@ -399,8 +398,38 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
+  // Acquire workspace if needed
+  let workspace = task.workspace;
+  if (!workspace) {
+    const { acquireWorkspace, getWorkspacePath } = await import("../../core/workspace.js");
+    workspace = await acquireWorkspace(deps, task.project, `${task.project}/${task.branch}`);
+    task.workspace = workspace;
+
+    // Setup git branch in new workspace
+    const workspacePath = getWorkspacePath(deps, workspace);
+    try {
+      await deps.git.fetch(workspacePath);
+      await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
+    } catch {
+      // No remote — use local default branch as-is
+    }
+
+    // Create or checkout branch
+    const branchExists = await deps.git.branchExists(workspacePath, task.branch);
+    if (branchExists) {
+      try {
+        await deps.git.checkout(workspacePath, task.branch);
+      } catch {
+        // Local branch doesn't exist but remote does — create tracking branch
+        await deps.git.createBranch(workspacePath, task.branch, `origin/${task.branch}`);
+      }
+    } else {
+      await deps.git.createBranch(workspacePath, task.branch);
+    }
+  }
+
   // Get workspace path
-  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const workspacePath = join(deps.dataDir, "workspaces", workspace);
 
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
@@ -421,7 +450,7 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   await appendHistory(deps, task.project, task.branch, {
     type: "agent.spawned",
     timestamp: now,
-    workspace: task.workspace,
+    workspace,
     tmux_session: tmuxSession,
   });
 

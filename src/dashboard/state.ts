@@ -874,8 +874,15 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (!this.data.deadSessions.has(task.id) && task.status !== "stuck") {
-      this.data.error = "Only stuck or dead tasks can be respawned.";
+    const isDead = this.data.deadSessions.has(task.id);
+    const noWorkspace = !task.workspace;
+    const isCancelledOrFailed = task.status === "cancelled" || task.status === "failed";
+    const isStuck = task.status === "stuck";
+    const isReviewing = task.status === "reviewing";
+
+    // Allow: dead, stuck, cancelled/failed, or reviewing without workspace
+    if (!isDead && !isStuck && !isCancelledOrFailed && !(isReviewing && noWorkspace)) {
+      this.data.error = "Cannot run agent for this task.";
       this.emit();
       return;
     }
@@ -894,9 +901,9 @@ export class DashboardState {
       this.data.deadSessions.delete(task.id);
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text();
-        this.data.error = `Respawn failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+        this.data.error = `Run failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
       } else {
-        this.data.message = `Respawned ${taskBranch}`;
+        this.data.message = `Started agent for ${taskBranch}`;
       }
       await this.refreshTasks();
       this.emit();
@@ -1018,26 +1025,34 @@ export class DashboardState {
     const isDead = this.data.deadSessions.has(task.id);
     const completedStatuses: TaskStatus[] = ["done", "failed", "cancelled"];
 
+    const hasWorkspace = !!task.workspace;
+    const canAttach = hasWorkspace && !isDead;
+
     let keys = " j/k:nav";
     if (task.status === "pending") {
       keys += "  s:spawn  x:cancel";
-    } else if (completedStatuses.includes(task.status)) {
+    } else if (task.status === "done") {
       keys += "  d:del";
+    } else if (task.status === "cancelled" || task.status === "failed") {
+      keys += "  r:run  d:del";
     } else if (isDead) {
-      keys += "  r:respawn  x:cancel";
+      keys += "  r:run  x:cancel";
     } else if (task.status === "reviewed") {
-      keys += "  Enter:attach  u:unapprove";
+      keys += canAttach ? "  Enter:attach" : "";
+      keys += "  u:unapprove";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else if (task.status === "stuck") {
-      keys += "  Enter:attach  r:respawn  x:cancel";
+      keys += canAttach ? "  Enter:attach" : "";
+      keys += "  r:run  x:cancel";
     } else if (task.status === "reviewing") {
-      keys += "  Enter:attach";
+      keys += canAttach ? "  Enter:attach" : "  r:run";
       keys += task.pr_url ? "  p:open PR" : "  a:approve";
       keys += "  x:cancel";
     } else {
       // working
-      keys += "  Enter:attach  x:cancel";
+      keys += canAttach ? "  Enter:attach" : "";
+      keys += "  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;
     return keys;

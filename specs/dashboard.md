@@ -55,12 +55,16 @@ Footer shows relevant actions based on selected task's state:
 | Pending | j/k:nav  s:spawn  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (no PR, no workspace) | j/k:nav  r:run  a:approve  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (with PR, no workspace) | j/k:nav  r:run  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewed (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewed (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Stuck | j/k:nav  Enter:attach  r:respawn  x:cancel  c:create  f:filter  q:quit |
-| Dead session | j/k:nav  r:respawn  x:cancel  c:create  f:filter  q:quit |
-| Completed (done/failed/cancelled) | j/k:nav  d:del  c:create  f:filter  q:quit |
+| Stuck | j/k:nav  Enter:attach  r:run  x:cancel  c:create  f:filter  q:quit |
+| Dead session | j/k:nav  r:run  x:cancel  c:create  f:filter  q:quit |
+| Cancelled/Failed (no workspace) | j/k:nav  r:run  d:del  c:create  f:filter  q:quit |
+| Cancelled/Failed (with workspace) | j/k:nav  r:run  d:del  c:create  f:filter  q:quit |
+| Done | j/k:nav  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
 
@@ -72,7 +76,7 @@ Footer shows relevant actions based on selected task's state:
 | s | Spawn agent | Pending tasks |
 | a | Approve task | Reviewing tasks (no PR) |
 | u | Unapprove task | Reviewed tasks |
-| r | Respawn agent | Dead sessions or stuck tasks |
+| r | Run/respawn agent | Stuck, dead, no workspace, or cancelled/failed tasks |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
 | m | Merge task (local) | Reviewed tasks (no PR) |
 | p | Create PR / Open PR in browser | Reviewed (no PR) creates, any with PR opens |
