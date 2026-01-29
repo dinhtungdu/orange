@@ -1,13 +1,17 @@
 /**
- * Install command - installs Orange skills, stop hook, and permissions.
+ * Install command - installs Orange skills, stop hook (optional), and permissions.
  *
  * - Symlinks each skill folder to ~/.claude/skills/<skill-name> (dev changes reflect immediately)
- * - Adds stop hook to ~/.claude/settings.json
+ * - Adds stop hook to ~/.claude/settings.json (optional: dashboard polls outcome files anyway)
  * - Creates hook script at ~/.claude/hooks/stop-orange.sh
  * - Adds Bash(orange:*) permission to ~/.claude/settings.json
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
  * is symlinked as a separate skill (e.g., skills/orchestrator -> ~/.claude/skills/orange-orchestrator).
+ *
+ * Note: The stop hook provides immediate status updates for Claude Code, but is not required.
+ * The dashboard polls .orange-outcome files in task dirs, making Orange harness-agnostic.
+ * Any harness (Claude Code, pi, Cursor, etc.) that lets agents write files will work.
  */
 
 import { mkdir, symlink, writeFile, chmod, readFile, unlink, lstat, readdir } from "node:fs/promises";
@@ -23,11 +27,13 @@ const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
 const STOP_HOOK_SCRIPT = join(HOOKS_DIR, "stop-orange.sh");
 
 /**
- * Stop hook script content.
+ * Stop hook script content (optional, for immediate status updates).
  * Called by the settings.json hook entry.
+ * Dashboard polls outcome files anyway, so this hook is not required.
  */
 const STOP_HOOK_CONTENT = `#!/bin/bash
-# Orange stop hook - notifies orange when agent completes
+# Orange stop hook - provides immediate status updates for Claude Code
+# Optional: dashboard polls .orange-outcome files anyway
 # Installed by: orange install
 
 if [[ -f .orange-outcome ]]; then

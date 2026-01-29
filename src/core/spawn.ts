@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { writeFile, symlink, readFile, unlink, stat } from "node:fs/promises";
 import type { Deps } from "./types.js";
-import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
+import { loadProjects, saveTask, appendHistory, getTaskPath, getOutcomePath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
@@ -160,9 +160,18 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     await linkTaskFile(deps, workspacePath, task.project, task.branch);
     log.debug("Linked task file to worktree", { workspacePath });
 
-    // Write .orange-outcome file for hook integration (agent writes outcome here)
-    const outcomeFile = join(workspacePath, ".orange-outcome");
-    await writeFile(outcomeFile, JSON.stringify({ id: task.id }), "utf-8");
+    // Create .orange-outcome in task dir and symlink to worktree
+    // Agent writes outcome here; dashboard watches task dir for changes
+    const outcomeSourcePath = getOutcomePath(deps, task.project, task.branch);
+    const outcomeSymlinkPath = join(workspacePath, ".orange-outcome");
+    await writeFile(outcomeSourcePath, JSON.stringify({ id: task.id }), "utf-8");
+    try {
+      await unlink(outcomeSymlinkPath);
+    } catch {
+      // Doesn't exist, fine
+    }
+    await symlink(outcomeSourcePath, outcomeSymlinkPath);
+    log.debug("Created outcome file and symlink", { source: outcomeSourcePath, symlink: outcomeSymlinkPath });
 
     // Create tmux session
     const tmuxSession = `${task.project}/${task.branch}`;

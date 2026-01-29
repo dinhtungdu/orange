@@ -5,7 +5,7 @@
 1. Acquire workspace from pool
 2. Fetch latest; checkout existing branch (local or remote) or create new from `origin/<default_branch>`
 3. Symlink `TASK.md` from task dir to worktree
-4. Write `.orange-outcome` with task ID for hook integration
+4. Create `.orange-outcome` in task dir, symlink to worktree
 5. Add `TASK.md` and `.orange-outcome` to git exclude
 6. Create tmux session running Claude with agent prompt (full permissions)
 7. Update task: status → `working`, set workspace + tmux_session, log events
@@ -41,16 +41,23 @@ implement → /code-review → feedback
                         fail + ≥2 → stop (stuck)
 ```
 
-## 5. Completion Hook
+## 5. Completion (Harness-Agnostic)
 
 Agent writes outcome to `.orange-outcome` before stopping:
 - `{"id":"...","outcome":"passed"}`
 - `{"id":"...","outcome":"stuck","reason":"..."}`
 - `{"id":"...","outcome":"reviewing"}`
 
-Claude's stop hook reads the file and calls:
-- `orange task complete <id>` → status = `reviewing`
-- `orange task stuck <id>` → status = `stuck`
+The `.orange-outcome` file is symlinked from the task dir (`~/orange/tasks/<project>/<branch>/.orange-outcome`). This means:
+- Outcome persists even if workspace is released
+- Dashboard watches task dir and detects outcome changes
+- Works with any harness (Claude Code, pi, Cursor, etc.) — no stop hook required
+
+**Status transitions:**
+- `passed` or `reviewing` → status = `reviewing`
+- `stuck` → status = `stuck`
+
+**Optional hook (Claude Code):** For immediate feedback, Claude Code's stop hook can still call `orange task complete/stuck`, but it's no longer required — dashboard polling handles it.
 
 ## 6. Human Review
 

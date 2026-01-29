@@ -50,6 +50,13 @@ function getHistoryPath(deps: Deps, project: string, branch: string): string {
 }
 
 /**
+ * Get the .orange-outcome path for a project/branch.
+ */
+export function getOutcomePath(deps: Deps, project: string, branch: string): string {
+  return join(getTaskDir(deps, project, branch), ".orange-outcome");
+}
+
+/**
  * Load projects from projects.json.
  */
 export async function loadProjects(deps: Deps): Promise<Project[]> {

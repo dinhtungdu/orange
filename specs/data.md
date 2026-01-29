@@ -14,8 +14,9 @@ All data in `~/orange/`.
 └── tasks/                  # Task folders (source of truth)
     └── <project>/
         └── <branch>/
-            ├── TASK.md         # Description, metadata (frontmatter)
-            └── history.jsonl   # Event log
+            ├── TASK.md           # Description, metadata (frontmatter)
+            ├── .orange-outcome   # Agent outcome (symlinked to worktree)
+            └── history.jsonl     # Event log
 ```
 
 ## projects.json
