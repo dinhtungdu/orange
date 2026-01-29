@@ -129,7 +129,7 @@ Transparent background — works with user's terminal background/wallpaper.
 | Element | Color |
 |---------|-------|
 | Background | transparent |
-| Selected row | `#3a3a5a` (semi-transparent purple-gray) |
+| Selected row | `❯` prefix (no background — theme-agnostic) |
 | Header | `#00DDFF` (cyan) |
 | Separators | `#555555` (dim gray) |
 | Muted text | `#888888` (gray) |

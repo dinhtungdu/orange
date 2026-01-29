@@ -62,13 +62,13 @@ function createTableRow(
     flexDirection: "row",
     width: "100%",
     paddingLeft: 1,
-    backgroundColor: opts.selected ? "#3a3a5a" : "transparent",
   });
 
-  // Task column: flex-grows to fill remaining space
+  // Selection indicator + task column: flex-grows to fill remaining space
+  const selectionPrefix = opts.selected ? "❯ " : "  ";
   const taskCell = new TextRenderable(renderer, {
     id: `${id}-task`,
-    content: opts.task,
+    content: `${selectionPrefix}${opts.task}`,
     fg: opts.taskColor,
     flexGrow: 1,
     flexShrink: 1,
