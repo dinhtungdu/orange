@@ -4,13 +4,11 @@
  * All commands are CWD-aware - they infer project from current directory.
  *
  * Routes commands to appropriate handlers:
+ * - (no args or flags only): Dashboard (auto-register if in git repo, fallback to global)
  * - project: Project management (add, list, remove)
  * - task: Task management (create, list, spawn, attach, respawn, complete, approve, stuck, merge, cancel, delete, create-pr)
  * - workspace: Workspace pool management (init, list)
- * - start: Start orchestrator session (must be in project directory)
  * - install: Install orchestrator skill
- * - dashboard: Launch dashboard (scoped to project if in project directory)
- * - (no args): Same as dashboard
  */
 
 export interface ParsedArgs {
@@ -20,6 +18,8 @@ export interface ParsedArgs {
   options: Record<string, string | boolean>;
 }
 
+const COMMANDS = ["project", "task", "workspace", "install", "log", "help", "--help", "-h"];
+
 /**
  * Parse command line arguments.
  */
@@ -27,6 +27,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   // Skip 'bun' and script path if present
   const args = argv.slice(2);
 
+  // No args → dashboard
   if (args.length === 0) {
     return {
       command: "dashboard",
@@ -36,7 +37,35 @@ export function parseArgs(argv: string[]): ParsedArgs {
     };
   }
 
+  // Help flags at root level
+  if (args[0] === "--help" || args[0] === "-h") {
+    return {
+      command: args[0],
+      subcommand: null,
+      args: [],
+      options: {},
+    };
+  }
+
+  // First arg is a flag → dashboard with options
+  if (args[0].startsWith("-")) {
+    const options = parseOptions(args);
+    return {
+      command: "dashboard",
+      subcommand: null,
+      args: [],
+      options,
+    };
+  }
+
   const command = args[0];
+
+  // Unknown command → treat as dashboard (error will be shown later if truly invalid)
+  if (!COMMANDS.includes(command)) {
+    console.error(`Unknown command: ${command}`);
+    printUsage();
+    process.exit(1);
+  }
   const remaining = args.slice(1);
 
   // Parse options and positional args
@@ -92,6 +121,41 @@ export function parseArgs(argv: string[]): ParsedArgs {
 }
 
 /**
+ * Parse options from an array of arguments.
+ */
+function parseOptions(args: string[]): Record<string, string | boolean> {
+  const options: Record<string, string | boolean> = {};
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("-")) {
+        options[key] = nextArg;
+        i += 2;
+      } else {
+        options[key] = true;
+        i += 1;
+      }
+    } else if (arg.startsWith("-")) {
+      const key = arg.slice(1);
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("-")) {
+        options[key] = nextArg;
+        i += 2;
+      } else {
+        options[key] = true;
+        i += 1;
+      }
+    } else {
+      i += 1;
+    }
+  }
+  return options;
+}
+
+/**
  * Check if an argument is a valid subcommand for the given command.
  */
 function isSubcommand(command: string, arg: string): boolean {
@@ -128,12 +192,10 @@ orange - Agent orchestration system
 All commands are CWD-aware - they infer project from current directory.
 
 Usage:
-  orange                              Launch dashboard (project-scoped if in project)
-  orange dashboard [options]          Launch dashboard
-    --all                             Show all tasks (global view)
-    --project <name>                  Show specific project's tasks
-  orange start                        Start orchestrator for current project
-  orange install                      Install orchestrator skill
+  orange                              Launch dashboard (auto-register if in git repo)
+    --all, -a                         Show all tasks (global view)
+    --project, -p <name>              Show specific project's tasks
+  orange install                      Install agent skill
 
 Project Management:
   orange project add [path] [options] Add a project (defaults to current directory)

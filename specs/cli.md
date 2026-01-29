@@ -3,6 +3,11 @@
 All commands are **CWD-aware** — they infer the project from the current directory when run inside a git repository.
 
 ```bash
+# Dashboard (default command)
+orange                              # In git repo: auto-register + project-scoped; otherwise: global
+orange --all                        # Global view (all projects)
+orange --project <name>             # Specific project view
+
 # Projects
 orange project add [path] [--name <name>] [--pool-size <n>]  # path defaults to cwd
 orange project list
@@ -28,13 +33,8 @@ orange workspace init
 orange workspace list [--all]
 orange workspace gc                 # Release orphaned workspaces
 
-# Session
-orange start                        # Start orchestrator for current project
-orange install                      # Install orchestrator skill
-
-# Dashboard
-orange                              # In project: project-scoped; otherwise: global
-orange dashboard [--all] [--project <name>]
+# Other
+orange install                      # Install agent skill
 
 # Logs
 orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
@@ -95,4 +95,4 @@ Release workspaces bound to tasks that no longer exist (e.g., after manual delet
 
 1. Find git root of current directory
 2. Look up path in `projects.json`
-3. If not found: auto-register (for `orange start`) or error (for other commands)
+3. If not found: auto-register (for `orange`) or error (for other commands)

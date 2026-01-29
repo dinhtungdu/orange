@@ -118,7 +118,7 @@ async function listProjects(deps: Deps): Promise<void> {
 
   if (projects.length === 0) {
     console.log("No projects registered.");
-    console.log("Use 'orange project add' from a project directory, or 'orange start' to auto-register.");
+    console.log("Use 'orange project add' from a project directory, or just 'orange' to auto-register.");
     return;
   }
 

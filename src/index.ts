@@ -11,11 +11,11 @@ import { parseArgs, printUsage } from "./cli/args.js";
 import { runProjectCommand } from "./cli/commands/project.js";
 import { runTaskCommand } from "./cli/commands/task.js";
 import { runWorkspaceCommand } from "./cli/commands/workspace.js";
-import { runStartCommand } from "./cli/commands/start.js";
 import { runInstallCommand } from "./cli/commands/install.js";
 import { runLogCommand } from "./cli/commands/log.js";
 import { runDashboard } from "./dashboard/index.js";
 import { createDeps } from "./core/deps.js";
+import { autoRegisterProject, detectProject } from "./core/cwd.js";
 
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv);
@@ -35,12 +35,24 @@ async function main(): Promise<void> {
 
   try {
     switch (parsed.command) {
-      case "dashboard":
-        await runDashboard(deps, {
-          all: parsed.options.all === true,
-          project: parsed.options.project as string | undefined,
-        });
+      case "dashboard": {
+        // Handle --all/-a and --project/-p flags
+        const all = parsed.options.all === true || parsed.options.a === true;
+        const project = (parsed.options.project ?? parsed.options.p) as string | undefined;
+
+        if (!all && !project) {
+          // Auto-register if in git repo, fallback to global if not
+          const detection = await detectProject(deps);
+          if (detection.gitRoot && !detection.project) {
+            // In git repo but not registered → auto-register
+            await autoRegisterProject(deps);
+          }
+          // If not in git repo, detection.gitRoot is null → global view (handled by dashboard)
+        }
+
+        await runDashboard(deps, { all, project });
         break;
+      }
 
       case "project":
         await runProjectCommand(parsed, deps);
@@ -52,10 +64,6 @@ async function main(): Promise<void> {
 
       case "workspace":
         await runWorkspaceCommand(parsed, deps);
-        break;
-
-      case "start":
-        await runStartCommand(deps);
         break;
 
       case "install":

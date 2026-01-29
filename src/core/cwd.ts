@@ -4,7 +4,7 @@
  * Commands detect the current project by:
  * 1. Finding git root of current directory
  * 2. Looking up path in projects.json
- * 3. Auto-registering if needed (for `orange start`)
+ * 3. Auto-registering if needed (for `orange`)
  */
 
 import { execSync } from "node:child_process";
@@ -138,7 +138,7 @@ export async function requireProject(
 
   if (!detection.project) {
     throw new Error(
-      `Project not registered. Run 'orange start' from this directory to register it, ` +
+      `Project not registered. Run 'orange' from this directory to register it, ` +
       `or use 'orange project add ${detection.gitRoot}'.`
     );
   }
@@ -148,7 +148,7 @@ export async function requireProject(
 
 /**
  * Auto-register a project if not already registered.
- * Used by `orange start` for seamless project setup.
+ * Used by `orange` for seamless project setup.
  *
  * @param deps - Dependencies
  * @param cwd - Current working directory (defaults to process.cwd())
