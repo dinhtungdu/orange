@@ -187,6 +187,23 @@ interface Task {
 }
 ```
 
+## Ralph ↔ Orange Mapping
+
+| Ralph | Orange |
+|-------|--------|
+| `IMPLEMENTATION_PLAN.md` | Task DB (`orange task list`) |
+| Plan loop → generates plan | Planning mode → creates tasks with dependencies |
+| Build loop → picks task, implements | Agent works in worktree |
+| "Update IMPLEMENTATION_PLAN.md with findings" | `orange task create` for discovered work |
+| "Keep plan current with learnings" | Update task status, create sub-tasks if needed |
+
+The task DB *is* the implementation plan — queryable, with dependency tracking.
+
+Agent behavior (add to orchestrator skill):
+- Create tasks for discovered work
+- Update own task status throughout operation
+- Break down into sub-tasks when stuck
+
 ## Open Questions
 
 - Schema: `blocked_by TEXT` column (JSON array) or separate table?
