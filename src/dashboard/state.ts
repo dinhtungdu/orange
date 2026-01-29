@@ -708,23 +708,33 @@ export class DashboardState {
 
   private async captureOutputs(): Promise<void> {
     const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
-    for (const task of this.data.tasks) {
-      if (task.tmux_session && activeStatuses.includes(task.status)) {
-        const exists = await this.deps.tmux.sessionExists(task.tmux_session);
+    const activeTasks = this.data.tasks.filter(
+      (t) => t.tmux_session && activeStatuses.includes(t.status)
+    );
+
+    if (activeTasks.length === 0) return;
+
+    // Single tmux call to get all sessions
+    const liveSessions = new Set(await this.deps.tmux.listSessions());
+
+    // Check dead sessions and capture outputs in parallel
+    await Promise.all(
+      activeTasks.map(async (task) => {
+        const exists = liveSessions.has(task.tmux_session!);
         if (!exists) {
           this.data.deadSessions.add(task.id);
         } else {
           this.data.deadSessions.delete(task.id);
           if (task.status === "working") {
-            const output = await this.deps.tmux.capturePaneSafe(task.tmux_session, 5);
+            const output = await this.deps.tmux.capturePaneSafe(task.tmux_session!, 5);
             if (output !== null) {
               const lastLine = output.trim().split("\n").pop() ?? "";
               this.data.lastOutput.set(task.id, lastLine);
             }
           }
         }
-      }
-    }
+      })
+    );
   }
 
   private getOrangeCommand(args: string[]): string[] {

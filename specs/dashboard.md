@@ -137,8 +137,23 @@ Transparent background — works with user's terminal background/wallpaper.
 
 Status colors defined in `state.ts` (`STATUS_COLOR`).
 
-## Polling
+## Polling & Updates
 
-- File watcher on `~/orange/tasks/` for TASK.md changes (debounced)
-- Periodic session health check (detects dead sessions)
+**File watcher** (chokidar, 100ms debounce):
+- Watches `~/orange/tasks/` for `TASK.md` and `.orange-outcome` changes
+- Triggers immediate refresh on file change
+
+**Outcome detection** (harness-agnostic):
+- On refresh, checks `.orange-outcome` files for `working` tasks
+- If outcome is `passed` or `reviewing` → status becomes `reviewing`
+- If outcome is `stuck` → status becomes `stuck`
+- Works with any harness (Claude Code, pi, Cursor, etc.)
+
+**Health check** (30s interval):
+- Single `tmux list-sessions` call (not N `has-session` calls)
+- Parallel capture for working tasks
+- Marks dead sessions for respawn UI
+
+**Other refreshes:**
+- PR status polling (30s interval)
 - Diff stats refreshed on each task reload (async, non-blocking)
