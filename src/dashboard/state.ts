@@ -306,12 +306,6 @@ export class DashboardState {
       case "d":
         this.deleteTask();
         break;
-      case "r":
-        this.respawnTask();
-        break;
-      case "s":
-        this.spawnTask();
-        break;
       case "a":
         this.approveTask();
         break;
@@ -666,23 +660,46 @@ export class DashboardState {
 
   private async attachToTask(): Promise<void> {
     const task = this.data.tasks[this.data.cursor];
-    if (!task) return;
-    if (!task.tmux_session) {
-      this.data.error = "No session. Press r to run agent.";
-      this.emit();
+    if (!task || this.data.pendingOps.has(task.id)) return;
+
+    const isDead = this.data.deadSessions.has(task.id);
+
+    // Done tasks: no-op
+    if (task.status === "done") {
       return;
     }
 
+    // Pending: spawn
+    if (task.status === "pending") {
+      this.spawnTask();
+      return;
+    }
+
+    // Cancelled/failed: reactivate via respawn
+    if (task.status === "cancelled" || task.status === "failed") {
+      this.respawnTask();
+      return;
+    }
+
+    // Dead session or no session: respawn
+    if (isDead || !task.tmux_session) {
+      this.respawnTask();
+      return;
+    }
+
+    // Check session still exists
+    const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
+    if (!sessionExists) {
+      // Mark as dead and respawn
+      this.data.deadSessions.add(task.id);
+      this.respawnTask();
+      return;
+    }
+
+    // Attach to live session
     const tmuxAvailable = await this.deps.tmux.isAvailable();
     if (!tmuxAvailable) {
       this.data.error = "tmux is not installed or not in PATH";
-      this.emit();
-      return;
-    }
-
-    const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
-    if (!sessionExists) {
-      this.data.error = "Session no longer exists.";
       this.emit();
       return;
     }
@@ -1030,34 +1047,30 @@ export class DashboardState {
     const isDead = this.data.deadSessions.has(task.id);
     const completedStatuses: TaskStatus[] = ["done", "failed", "cancelled"];
 
-    const hasWorkspace = !!task.workspace;
-    const canAttach = hasWorkspace && !isDead;
+    const hasLiveSession = task.tmux_session && !isDead;
 
     let keys = " j/k:nav";
     if (task.status === "pending") {
-      keys += "  s:spawn  x:cancel";
+      keys += "  Enter:spawn  x:cancel";
     } else if (task.status === "done") {
       keys += "  d:del";
     } else if (task.status === "cancelled" || task.status === "failed") {
-      keys += "  r:run  d:del";
-    } else if (isDead) {
-      keys += "  r:run  x:cancel";
+      keys += "  Enter:reactivate  d:del";
+    } else if (isDead || !hasLiveSession) {
+      keys += "  Enter:respawn  x:cancel";
     } else if (task.status === "reviewed") {
-      keys += canAttach ? "  Enter:attach" : "";
-      keys += "  u:unapprove";
+      keys += "  Enter:attach  u:unapprove";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else if (task.status === "stuck") {
-      keys += canAttach ? "  Enter:attach" : "";
-      keys += "  r:run  x:cancel";
+      keys += "  Enter:attach  x:cancel";
     } else if (task.status === "reviewing") {
-      keys += canAttach ? "  Enter:attach" : "  r:run";
+      keys += "  Enter:attach";
       keys += task.pr_url ? "  p:open PR" : "  a:approve";
       keys += "  x:cancel";
     } else {
       // working
-      keys += canAttach ? "  Enter:attach" : "";
-      keys += "  x:cancel";
+      keys += "  Enter:attach  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;
     return keys;

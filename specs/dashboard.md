@@ -52,18 +52,15 @@ Footer shows relevant actions based on selected task's state:
 | Task State | Available Keys |
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
-| Pending | j/k:nav  s:spawn  x:cancel  c:create  f:filter  q:quit |
+| Pending | j/k:nav  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (no PR, no workspace) | j/k:nav  r:run  a:approve  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (with PR, no workspace) | j/k:nav  r:run  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewed (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewed (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Stuck | j/k:nav  Enter:attach  r:run  x:cancel  c:create  f:filter  q:quit |
-| Dead session | j/k:nav  r:run  x:cancel  c:create  f:filter  q:quit |
-| Cancelled/Failed (no workspace) | j/k:nav  r:run  d:del  c:create  f:filter  q:quit |
-| Cancelled/Failed (with workspace) | j/k:nav  r:run  d:del  c:create  f:filter  q:quit |
+| Stuck | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Dead/no session | j/k:nav  Enter:respawn  x:cancel  c:create  f:filter  q:quit |
+| Cancelled/Failed | j/k:nav  Enter:reactivate  d:del  c:create  f:filter  q:quit |
 | Done | j/k:nav  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
@@ -72,22 +69,23 @@ Footer shows relevant actions based on selected task's state:
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
 | c | Create new task | Always (project-scoped only) |
-| Enter | Switch to tmux session | Live sessions |
-| s | Spawn agent | Pending tasks |
+| Enter | Work on task | Context-dependent (see below) |
 | a | Approve task | Reviewing tasks (no PR) |
 | u | Unapprove task | Reviewed tasks |
-| r | Run/respawn agent | Stuck, dead, no workspace, or cancelled/failed tasks |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
 | m | Merge task (local) | Reviewed tasks (no PR) |
 | p | Create PR / Open PR in browser | Reviewed (no PR) creates, any with PR opens |
 | x | Cancel task (shows confirmation) | Active tasks |
-| d | Delete task folder (shows confirmation) | Completed tasks only |
+| d | Delete task folder (shows confirmation) | Cancelled, failed, or done tasks |
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
 
-**Attach behavior:**
-- Inside tmux: uses `switch-client`
-- Outside tmux: uses `attach`
+**Enter behavior:**
+- Pending → spawn agent
+- Has live session → attach
+- Dead/no session → respawn agent
+- Cancelled/failed → reactivate (spawn agent)
+- Done → no-op
 
 ## Create Task
 
