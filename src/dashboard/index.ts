@@ -520,6 +520,11 @@ export async function runDashboard(
     dashboard.update();
   });
 
+  // Re-render on terminal resize
+  renderer.on("resize", () => {
+    dashboard.update();
+  });
+
   // Initialize and do first render
   await state.init(options);
   dashboard.update();
