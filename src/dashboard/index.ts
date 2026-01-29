@@ -18,6 +18,7 @@ import {
   TextRenderable,
   t,
   fg,
+  bold,
   type CliRenderer,
   type KeyEvent,
   type PasteEvent,
@@ -68,7 +69,7 @@ function createTableRow(
 
   // Selection indicator + task column: flex-grows to fill remaining space
   const taskContent = opts.selected
-    ? t`${fg("#00DDFF")("❯")} ${fg(opts.taskColor)(opts.task)}`
+    ? t`${fg("#00DDFF")("❯")} ${bold(fg(opts.taskColor)(opts.task))}`
     : t`  ${fg(opts.taskColor)(opts.task)}`;
   const taskCell = new TextRenderable(renderer, {
     id: `${id}-task`,
