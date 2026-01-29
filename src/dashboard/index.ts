@@ -16,6 +16,8 @@ import {
   createCliRenderer,
   BoxRenderable,
   TextRenderable,
+  t,
+  fg,
   type CliRenderer,
   type KeyEvent,
   type PasteEvent,
@@ -65,11 +67,12 @@ function createTableRow(
   });
 
   // Selection indicator + task column: flex-grows to fill remaining space
-  const selectionPrefix = opts.selected ? "❯ " : "  ";
+  const taskContent = opts.selected
+    ? t`${fg("#00DDFF")("❯")} ${fg(opts.taskColor)(opts.task)}`
+    : t`  ${fg(opts.taskColor)(opts.task)}`;
   const taskCell = new TextRenderable(renderer, {
     id: `${id}-task`,
-    content: `${selectionPrefix}${opts.task}`,
-    fg: opts.taskColor,
+    content: taskContent,
     flexGrow: 1,
     flexShrink: 1,
   });
