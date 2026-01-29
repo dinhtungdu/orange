@@ -666,7 +666,12 @@ export class DashboardState {
 
   private async attachToTask(): Promise<void> {
     const task = this.data.tasks[this.data.cursor];
-    if (!task?.tmux_session) return;
+    if (!task) return;
+    if (!task.tmux_session) {
+      this.data.error = "No session. Press r to run agent.";
+      this.emit();
+      return;
+    }
 
     const tmuxAvailable = await this.deps.tmux.isAvailable();
     if (!tmuxAvailable) {
