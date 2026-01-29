@@ -58,11 +58,11 @@ export const CHECKS_ICON: Record<string, string> = {
 export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
   working: "#5599FF",
-  reviewing: "#FFFF00",
-  reviewed: "#44FF44",
-  stuck: "#FF4444",
-  done: "#44FF44",
-  failed: "#FF4444",
+  reviewing: "#D4A000",
+  reviewed: "#22BB22",
+  stuck: "#DD4444",
+  done: "#22BB22",
+  failed: "#DD4444",
   cancelled: "#888888",
 };
 
