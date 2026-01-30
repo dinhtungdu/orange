@@ -826,30 +826,17 @@ export class DashboardState {
       return;
     }
 
-    // Working task with dead session: respawn
-    if (isDead) {
+    // No session or dead session: respawn
+    if (isDead || !task.tmux_session) {
       this.respawnTask();
-      return;
-    }
-
-    // No session to attach to (reviewing/reviewed with closed session)
-    if (!task.tmux_session) {
-      this.data.error = "No session to attach.";
-      this.emit();
       return;
     }
 
     // Check session still exists
     const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
     if (!sessionExists) {
-      // Mark as dead for working tasks, show error for others
       this.data.deadSessions.add(task.id);
-      if (task.status === "working") {
-        this.respawnTask();
-      } else {
-        this.data.error = "Session closed.";
-        this.emit();
-      }
+      this.respawnTask();
       return;
     }
 
