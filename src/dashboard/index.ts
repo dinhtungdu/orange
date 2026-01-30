@@ -38,11 +38,12 @@ export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
 
 // Column widths (fixed)
-const COL_STATUS = 16;
+const COL_STATUS = 12;
+const COL_PR = 14;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
-const FIXED_COLS = COL_STATUS + COL_COMMITS + COL_CHANGES + COL_ACTIVITY;
+const FIXED_COLS = COL_STATUS + COL_PR + COL_COMMITS + COL_CHANGES + COL_ACTIVITY;
 
 /** Create a flex row (horizontal box) with table cells. */
 function createTableRow(
@@ -53,6 +54,8 @@ function createTableRow(
     taskColor: string;
     status: string;
     statusColor: string;
+    pr: string;
+    prColor: string;
     commits: string;
     changes: string;
     changesAdded: string;
@@ -85,6 +88,14 @@ function createTableRow(
     content: opts.status,
     fg: opts.statusColor,
     width: COL_STATUS,
+  });
+
+  // PR column: fixed width
+  const prCell = new TextRenderable(renderer, {
+    id: `${id}-pr`,
+    content: opts.pr,
+    fg: opts.prColor,
+    width: COL_PR,
   });
 
   // Commits column: fixed width
@@ -127,6 +138,7 @@ function createTableRow(
 
   row.add(taskCell);
   row.add(statusCell);
+  row.add(prCell);
   row.add(commitsCell);
   row.add(changesCell);
   row.add(activityCell);
@@ -141,6 +153,8 @@ function createHeaderRow(renderer: CliRenderer): BoxRenderable {
     taskColor: "#666666",
     status: "Status",
     statusColor: "#666666",
+    pr: "PR",
+    prColor: "#666666",
     commits: "Commits",
     changes: "Changes",
     changesAdded: "",
@@ -380,25 +394,32 @@ function buildDashboard(
         ? task.branch
         : `${task.project}/${task.branch}`;
 
-      // Status column: task stage or PR info
-      let statusCol: string = task.status;
+      // Status column: always task stage
+      let statusCol: string = pending ? "processing…" : task.status;
+
+      // PR column: PR info when available
+      let prCol = "";
+      let prColor = "#888888";
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
         const prStatus = s.prStatuses.get(task.id);
         if (prNum && prStatus) {
           const checksIcon = prStatus.checks ? CHECKS_ICON[prStatus.checks] : "";
           if (prStatus.state === "MERGED") {
-            statusCol = `#${prNum} merged`;
+            prCol = `#${prNum} merged`;
+            prColor = "#22BB22";
           } else if (prStatus.state === "CLOSED") {
-            statusCol = `#${prNum} closed`;
+            prCol = `#${prNum} closed`;
+            prColor = "#888888";
           } else {
-            statusCol = checksIcon ? `#${prNum} open ${checksIcon}` : `#${prNum} open`;
+            prCol = checksIcon ? `#${prNum} open ${checksIcon}` : `#${prNum} open`;
+            prColor = "#5599FF";
           }
         } else if (prNum) {
-          statusCol += ` #${prNum}`;
+          prCol = `#${prNum}`;
+          prColor = "#888888";
         }
       }
-      if (pending) statusCol = "processing…";
 
       const stats = s.diffStats.get(task.id);
       const commitsCol = stats && stats.commits > 0 ? String(stats.commits) : "";
@@ -418,6 +439,8 @@ function buildDashboard(
         taskColor: sessionColor,
         status: statusCol,
         statusColor: STATUS_COLOR[task.status],
+        pr: prCol,
+        prColor,
         commits: commitsCol,
         changes: "",
         changesAdded,

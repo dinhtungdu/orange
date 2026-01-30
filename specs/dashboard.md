@@ -43,20 +43,21 @@ When a task has a PR, the Status column shows PR info instead (e.g., `#123 open 
 
 ```
  Orange Dashboard (all) [active]
- Task                          Status       Commits  Changes        Activity
-──────────────────────────────────────────────────────────────────────────────
- ● coffee/login-fix            working      3        +144 -12        2m ago
+ Task                          Status      PR             Commits  Changes   Activity
+───────────────────────────────────────────────────────────────────────────────────────
+ ● coffee/login-fix            working                    3        +144 -12  2m ago
  └ Fix OAuth redirect loop on mobile
- ✗ coffee/crashed-task         working                              10m ago
- ○ coffee/password-reset       #123 open ✓  7        +89 -34        15m ago
- ○ orange/dark-mode            done                                  1h ago
-──────────────────────────────────────────────────────────────────────────────
+ ✗ coffee/crashed-task         working                                       10m ago
+ ○ coffee/password-reset       reviewing   #123 open ✓   7        +89 -34   15m ago
+ ○ orange/dark-mode            done        #456 merged                       1h ago
+───────────────────────────────────────────────────────────────────────────────────────
  j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit
 ```
 
 **Columns:**
 - Task: session icon + project/branch (or just branch if project-scoped)
-- Status: task status OR PR info (e.g., `#123 open ✓`, `#456 merged`)
+- Status: task stage (pending/working/reviewing/reviewed/stuck/done/failed/cancelled)
+- PR: PR number + state + checks (blank if no PR)
 - Commits: number of commits ahead of default branch (blank if none)
 - Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
 - Activity: relative time since last update (2m ago, 3h ago)

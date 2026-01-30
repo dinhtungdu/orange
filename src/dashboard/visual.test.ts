@@ -38,6 +38,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
 
 // Column widths (must match index.ts)
 const COL_STATUS = 12;
+const COL_PR = 14;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
@@ -73,11 +74,13 @@ function buildTestDashboard(
   });
   const hTask = new TextRenderable(renderer, { id: "h-task", content: "Task", fg: "#666666", flexGrow: 1 });
   const hStatus = new TextRenderable(renderer, { id: "h-status", content: "Status", fg: "#666666", width: COL_STATUS });
+  const hPR = new TextRenderable(renderer, { id: "h-pr", content: "PR", fg: "#666666", width: COL_PR });
   const hCommits = new TextRenderable(renderer, { id: "h-commits", content: "Commits", fg: "#666666", width: COL_COMMITS });
   const hChanges = new TextRenderable(renderer, { id: "h-changes", content: "Changes", fg: "#666666", width: COL_CHANGES });
   const hActivity = new TextRenderable(renderer, { id: "h-activity", content: "Activity", fg: "#666666", width: COL_ACTIVITY });
   colHeaderRow.add(hTask);
   colHeaderRow.add(hStatus);
+  colHeaderRow.add(hPR);
   colHeaderRow.add(hCommits);
   colHeaderRow.add(hChanges);
   colHeaderRow.add(hActivity);
@@ -176,6 +179,7 @@ function buildTestDashboard(
 
       tableRow.add(new TextRenderable(renderer, { id: `t-task-${i}`, content: `${sessionIcon} ${taskName}`, fg: sessionColor, flexGrow: 1, flexShrink: 1 }));
       tableRow.add(new TextRenderable(renderer, { id: `t-status-${i}`, content: statusCol, fg: STATUS_COLOR[task.status], width: COL_STATUS }));
+      tableRow.add(new TextRenderable(renderer, { id: `t-pr-${i}`, content: "", fg: "#888888", width: COL_PR }));
       tableRow.add(new TextRenderable(renderer, { id: `t-commits-${i}`, content: "", fg: "#CCCCCC", width: COL_COMMITS }));
       tableRow.add(new TextRenderable(renderer, { id: `t-changes-${i}`, content: "", fg: "#CCCCCC", width: COL_CHANGES }));
       tableRow.add(new TextRenderable(renderer, { id: `t-activity-${i}`, content: activity, fg: "#888888", width: COL_ACTIVITY }));
@@ -304,7 +308,8 @@ describe("Dashboard Visual", () => {
   test("columns stay aligned across different terminal widths", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "feature-branch", status: "working" }));
 
-    for (const width of [60, 80, 120, 160]) {
+    // Minimum 80 width to fit all columns (Task + Status + PR + Commits + Changes + Activity)
+    for (const width of [80, 120, 160]) {
       const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
         width,
         height: 24,
@@ -322,6 +327,7 @@ describe("Dashboard Visual", () => {
       // Header line should have all columns on one line
       const headerLine = lines.find(l => l.includes("Task") && l.includes("Status"));
       expect(headerLine).toBeDefined();
+      expect(headerLine).toContain("PR");
       expect(headerLine).toContain("Commits");
       expect(headerLine).toContain("Activity");
 
