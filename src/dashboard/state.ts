@@ -700,8 +700,9 @@ export class DashboardState {
           const status = await this.deps.github.getPRStatus(project.path, task.branch);
           this.data.prStatuses.set(task.id, status);
 
-          // Auto-cleanup when PR is merged
-          if (status.state === "MERGED" && task.status === "reviewed") {
+          // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
+          const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+          if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
             mergedTasks.push(task);
           }
         } catch {
