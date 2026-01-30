@@ -834,7 +834,7 @@ export class DashboardState {
 
     // No session to attach to (reviewing/reviewed with closed session)
     if (!task.tmux_session) {
-      this.data.error = "No session to attach. Use 'r' to run agent if needed.";
+      this.data.error = "No session to attach.";
       this.emit();
       return;
     }
@@ -847,7 +847,7 @@ export class DashboardState {
       if (task.status === "working") {
         this.respawnTask();
       } else {
-        this.data.error = "Session closed. Use 'r' to run agent if needed.";
+        this.data.error = "Session closed.";
         this.emit();
       }
       return;
@@ -1068,7 +1068,7 @@ export class DashboardState {
     // Allow: working with dead session, stuck, cancelled/failed, or reviewing without workspace
     const canRespawn = (isWorking && sessionDead) || isStuck || isCancelledOrFailed || (isReviewing && noWorkspace);
     if (!canRespawn) {
-      this.data.error = "Cannot respawn this task. Use 'r' to run agent interactively.";
+      this.data.error = "Cannot respawn this task.";
       this.emit();
       return;
     }
