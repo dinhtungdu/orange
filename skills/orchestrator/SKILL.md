@@ -76,11 +76,15 @@ When a task is created without a description:
 1. Ask user what they want to work on
 2. Once understood, update using CLI:
    ```bash
-   # Recommended: let CLI handle everything
+   # New branch name (rename mode)
    orange task update --branch add-user-auth --description "Add user authentication"
+   
+   # Existing branch name (switch mode) - checks out branch, deletes old
+   orange task update --branch existing-feature --description "Continue existing work"
    ```
    This atomically:
-   - Renames git branch
+   - Renames or switches git branch
+   - Deletes orphan branch if switching
    - Renames tmux session
    - Updates TASK.md
 3. Proceed with normal implementation workflow

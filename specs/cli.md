@@ -22,7 +22,8 @@ orange task attach <task_id>
 orange task respawn <task_id>
 orange task update [task_id] [--branch [name]] [--description <text>]
   # task_id: optional if running inside workspace (auto-detected)
-  # --branch: rename to name, or use current git branch if name omitted
+  # --branch: if name exists → checkout + delete old; else → rename current
+  # --branch (no value): sync task to current git branch
   # --description: update TASK.md body
 orange task complete <task_id>      # Called by hook → reviewing
 orange task approve <task_id>       # Human approves → reviewed, pushes + creates PR

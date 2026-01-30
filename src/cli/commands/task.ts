@@ -566,19 +566,29 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     newBranch = branchOption;
   }
 
-  // Handle branch rename
+  // Handle branch change
   if (newBranch && newBranch !== oldBranch) {
-    // Check if new branch already exists
     if (workspacePath) {
       const branchExists = await deps.git.branchExists(workspacePath, newBranch);
+      
       if (branchExists) {
-        console.error(`Branch '${newBranch}' already exists`);
-        process.exit(1);
+        // Switch mode: checkout existing branch + delete old
+        log.info("Switching to existing branch", { from: oldBranch, to: newBranch });
+        await deps.git.checkout(workspacePath, newBranch);
+        
+        // Delete old branch (orphan cleanup)
+        try {
+          await deps.git.deleteBranch(workspacePath, oldBranch);
+          log.info("Deleted orphan branch", { branch: oldBranch });
+        } catch (err) {
+          // May fail if branch has unmerged commits, log but continue
+          log.warn("Could not delete old branch", { branch: oldBranch, error: String(err) });
+        }
+      } else {
+        // Rename mode: rename current branch
+        log.info("Renaming branch", { from: oldBranch, to: newBranch });
+        await deps.git.renameBranch(workspacePath, oldBranch, newBranch);
       }
-
-      // Rename git branch
-      log.info("Renaming branch", { from: oldBranch, to: newBranch });
-      await deps.git.renameBranch(workspacePath, oldBranch, newBranch);
     }
 
     // Rename tmux session if exists
