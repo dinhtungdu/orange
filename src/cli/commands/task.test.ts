@@ -995,6 +995,143 @@ describe("task delete command", () => {
   });
 });
 
+describe("task update command", () => {
+  let tempDir: string;
+  let deps: Deps;
+  let mockGit: MockGit;
+  let mockTmux: MockTmux;
+  let consoleLogs: string[];
+  let consoleErrors: string[];
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-test-"));
+    mockGit = new MockGit();
+    mockTmux = new MockTmux();
+
+    deps = {
+      tmux: mockTmux,
+      git: mockGit,
+      github: new MockGitHub(),
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      dataDir: tempDir,
+      logger: new NullLogger(),
+    };
+
+    consoleLogs = [];
+    consoleErrors = [];
+    originalLog = console.log;
+    originalError = console.error;
+    originalExit = process.exit;
+
+    console.log = (...args) => consoleLogs.push(args.join(" "));
+    console.error = (...args) => consoleErrors.push(args.join(" "));
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as never;
+
+    // Setup project
+    const projectPath = join(tempDir, "testproj");
+    mockGit.initRepo(projectPath, "main");
+    await saveProjects(deps, [
+      { name: "testproj", path: projectPath, default_branch: "main", pool_size: 2 },
+    ]);
+    await initWorkspacePool(deps, { name: "testproj", path: projectPath, default_branch: "main", pool_size: 2 });
+  });
+
+  afterEach(() => {
+    console.log = originalLog;
+    console.error = originalError;
+    process.exit = originalExit;
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("updates task description", async () => {
+    // Create a task
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "test-branch", "original description"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "test-branch");
+
+    // Update description
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "update", taskId, "--description", "updated description"]),
+      deps
+    );
+
+    const task = await loadTask(deps, "testproj", taskId);
+    expect(task?.description).toBe("updated description");
+    expect(consoleLogs.some(l => l.includes("description updated"))).toBe(true);
+  });
+
+  test("renames branch when new name does not exist", async () => {
+    // Create a task with a workspace
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "old-branch", "test"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "old-branch");
+
+    // Update branch
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "update", taskId, "--branch", "new-branch"]),
+      deps
+    );
+
+    const task = await loadTask(deps, "testproj", taskId);
+    expect(task?.branch).toBe("new-branch");
+    expect(consoleLogs.some(l => l.includes("old-branch") && l.includes("new-branch"))).toBe(true);
+  });
+
+  test("switches to existing branch and deletes old", async () => {
+    // Create a task
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj", "auto-branch", "test"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "auto-branch");
+    const task = await loadTask(deps, "testproj", taskId);
+    const workspacePath = join(deps.dataDir, "workspaces", task!.workspace!);
+
+    // Create an existing branch in the workspace
+    mockGit.branches.get(workspacePath)?.add("existing-branch");
+
+    // Update to existing branch
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "update", taskId, "--branch", "existing-branch"]),
+      deps
+    );
+
+    const updatedTask = await loadTask(deps, "testproj", taskId);
+    expect(updatedTask?.branch).toBe("existing-branch");
+  });
+
+  test("errors when no options provided", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "test-branch", "test"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "test-branch");
+
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "update", taskId]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("--branch or --description");
+  });
+
+  test("errors when task not found", async () => {
+    await expect(
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "update", "nonexistent", "--description", "test"]), deps)
+    ).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrors[0]).toContain("not found");
+  });
+});
+
 describe("MockTmux availability", () => {
   let tempDir: string;
   let deps: Deps;
