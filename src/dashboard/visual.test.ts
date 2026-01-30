@@ -144,7 +144,8 @@ function buildTestDashboard(
     for (let i = 0; i < s.tasks.length; i++) {
       const task = s.tasks[i];
       const selected = i === s.cursor;
-      const isDead = s.deadSessions.has(task.id);
+      // Session dead only matters for "working" tasks - others completed naturally
+      const isDead = s.deadSessions.has(task.id) && task.status === "working";
       const displayStatus = isDead ? "failed" as const : task.status;
       const icon = STATUS_ICON[displayStatus];
       const color = isDead ? STATUS_COLOR.failed : STATUS_COLOR[task.status];

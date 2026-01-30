@@ -786,7 +786,8 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    const isDead = this.data.deadSessions.has(task.id);
+    // Session dead only matters for "working" tasks
+    const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
 
     // Done tasks: no-op
     if (task.status === "done") {
@@ -805,18 +806,30 @@ export class DashboardState {
       return;
     }
 
-    // Dead session or no session: respawn
-    if (isDead || !task.tmux_session) {
+    // Working task with dead session: respawn
+    if (isDead) {
       this.respawnTask();
+      return;
+    }
+
+    // No session to attach to (reviewing/reviewed with closed session)
+    if (!task.tmux_session) {
+      this.data.error = "No session to attach. Use 'r' to run agent if needed.";
+      this.emit();
       return;
     }
 
     // Check session still exists
     const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session);
     if (!sessionExists) {
-      // Mark as dead and respawn
+      // Mark as dead for working tasks, show error for others
       this.data.deadSessions.add(task.id);
-      this.respawnTask();
+      if (task.status === "working") {
+        this.respawnTask();
+      } else {
+        this.data.error = "Session closed. Use 'r' to run agent if needed.";
+        this.emit();
+      }
       return;
     }
 
@@ -1024,15 +1037,18 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    const isDead = this.data.deadSessions.has(task.id);
+    // Raw dead session check - for respawn, any dead session is valid
+    const sessionDead = this.data.deadSessions.has(task.id);
     const noWorkspace = !task.workspace;
     const isCancelledOrFailed = task.status === "cancelled" || task.status === "failed";
     const isStuck = task.status === "stuck";
+    const isWorking = task.status === "working";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: dead, stuck, cancelled/failed, or reviewing without workspace
-    if (!isDead && !isStuck && !isCancelledOrFailed && !(isReviewing && noWorkspace)) {
-      this.data.error = "Cannot run agent for this task.";
+    // Allow: working with dead session, stuck, cancelled/failed, or reviewing without workspace
+    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelledOrFailed || (isReviewing && noWorkspace);
+    if (!canRespawn) {
+      this.data.error = "Cannot respawn this task. Use 'r' to run agent interactively.";
       this.emit();
       return;
     }
@@ -1179,9 +1195,8 @@ export class DashboardState {
 
     if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
-    const isDead = this.data.deadSessions.has(task.id);
-    const completedStatuses: TaskStatus[] = ["done", "failed", "cancelled"];
-
+    // Session dead only matters for "working" tasks - reviewing/reviewed tasks finished naturally
+    const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
     const hasLiveSession = task.tmux_session && !isDead;
 
     let keys = " j/k:nav";
@@ -1191,7 +1206,8 @@ export class DashboardState {
       keys += "  d:del";
     } else if (task.status === "cancelled" || task.status === "failed") {
       keys += "  Enter:reactivate  d:del";
-    } else if (isDead || !hasLiveSession) {
+    } else if (isDead) {
+      // Working task with dead session - needs respawn
       keys += "  Enter:respawn  x:cancel";
     } else if (task.status === "reviewed") {
       keys += "  Enter:attach  u:unapprove";
