@@ -18,7 +18,7 @@ import { getAllGitExcludes } from "./harness.js";
 /**
  * Get the path to the workspaces directory.
  */
-function getWorkspacesDir(deps: Deps): string {
+export function getWorkspacesDir(deps: Deps): string {
   return join(deps.dataDir, "workspaces");
 }
 
