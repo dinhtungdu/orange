@@ -359,16 +359,16 @@ describe("Dashboard State", () => {
     expect(state.data.createMode.branch).toBe("fix/bug-1_test.ts");
   });
 
-  test("enter with empty fields shows error", async () => {
+  test("enter with empty fields creates task with defaults", async () => {
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
     await state.loadTasks();
 
     state.handleInput("c");
     state.handleInput("enter");
-    expect(state.data.error).toContain("required");
-    // Still in create mode
-    expect(state.isCreateMode()).toBe(true);
+    // Should not show validation error - empty fields are allowed
+    // Note: submitCreateTask is async, so we just verify no immediate validation error
+    expect(state.data.error).toBeNull();
   });
 
   test("create mode disables normal navigation keys", async () => {

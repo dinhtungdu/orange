@@ -61,6 +61,25 @@ Optional implementation context (separated by `---`).
 Piped via `--context -` on task create.
 ```
 
+### Interactive Session (Empty Description)
+
+When created without a description, TASK.md body is empty:
+
+```markdown
+---
+id: abc123
+project: orange
+branch: abc123
+...
+---
+
+```
+
+This signals an **interactive session**:
+- Agent spawns with no initial prompt
+- User describes task interactively
+- Agent should update TASK.md with branch name and description
+
 ## Harness
 
 The `harness` field specifies which coding agent runs the task (`pi`, `opencode`, `claude`, `codex`). See [harness.md](./harness.md) for details.

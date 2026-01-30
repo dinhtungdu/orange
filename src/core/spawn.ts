@@ -191,9 +191,10 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Create tmux session
     const tmuxSession = `${task.project}/${task.branch}`;
     const prompt = buildAgentPrompt(task);
-    const command = harnessConfig.spawnCommand(prompt);
+    // Empty prompt = interactive session, just spawn harness without args
+    const command = prompt ? harnessConfig.spawnCommand(prompt) : harnessConfig.binary;
 
-    log.debug("Creating tmux session", { session: tmuxSession });
+    log.debug("Creating tmux session", { session: tmuxSession, interactive: !prompt });
     await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
     // Update task

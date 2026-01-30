@@ -469,16 +469,18 @@ export class DashboardState {
 
   private async submitCreateTask(): Promise<void> {
     const cm = this.data.createMode;
-    const branch = cm.branch.trim();
+    const inputBranch = cm.branch.trim();
     const description = cm.description.trim();
     const harness = cm.harness;
     const status = cm.status;
 
-    if (!branch || !description) {
-      this.data.error = "Both branch and description are required.";
-      this.emit();
-      return;
-    }
+    // Generate task ID first (needed if branch is empty)
+    const { customAlphabet } = await import("nanoid");
+    const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
+    const taskId = nanoid();
+
+    // Branch defaults to task ID if empty
+    const branch = inputBranch || taskId;
 
     const projectName = this.data.projectFilter!;
     const projects = await loadProjects(this.deps);
@@ -502,6 +504,7 @@ export class DashboardState {
 
     try {
       const { task } = await createTaskRecord(this.deps, {
+        id: taskId,
         project,
         branch,
         description,

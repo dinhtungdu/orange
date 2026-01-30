@@ -326,9 +326,11 @@ function buildDashboard(
       const descHighlight = cm.focusedField === "description" ? "#00DDFF" : "#888888";
       const harnessHighlight = cm.focusedField === "harness" ? "#00DDFF" : "#888888";
       const statusHighlight = cm.focusedField === "status" ? "#00DDFF" : "#888888";
-      createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]`;
+      const branchHint = cm.branch ? "" : " (auto)";
+      createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]${branchHint}`;
       createBranchLabel.fg = branchHighlight;
-      createDescLabel.content = `Description: [${cm.description}${descCursor}]`;
+      const descHint = cm.description ? "" : " (optional)";
+      createDescLabel.content = `Description: [${cm.description}${descCursor}]${descHint}`;
       createDescLabel.fg = descHighlight;
       // Harness field: show as toggleable with indicator
       const harnessDisplay = `${cm.harness} ◀`;

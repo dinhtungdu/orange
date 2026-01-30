@@ -13,7 +13,9 @@ orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create <branch> <description> [--harness <name>] [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
+orange task create [branch] [description] [--harness <name>] [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
+  # branch: optional, auto-generates from task ID if empty
+  # description: optional, empty = interactive session (no prompt)
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>

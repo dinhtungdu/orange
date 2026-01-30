@@ -127,12 +127,15 @@ export async function runTaskCommand(
 async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
-  if (parsed.args.length < 2) {
-    console.error("Usage: orange task create <branch> <description> [--harness <name>] [--status pending|reviewing]");
-    process.exit(1);
-  }
+  // Branch and description are optional
+  // If branch not provided, use auto-generated task ID
+  // If description not provided, spawn interactive session
+  const { customAlphabet } = await import("nanoid");
+  const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
+  const taskId = nanoid();
 
-  const [branch, ...descParts] = parsed.args;
+  const [inputBranch, ...descParts] = parsed.args;
+  const branch = inputBranch || taskId;
   const description = descParts.join(" ");
 
   // Parse --status flag (default: pending)
@@ -179,7 +182,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   let task: Task;
   try {
-    const result = await createTaskRecord(deps, { project, branch, description, context, status, harness: harnessArg });
+    const result = await createTaskRecord(deps, { id: taskId, project, branch, description, context, status, harness: harnessArg });
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });
@@ -445,9 +448,10 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const { HARNESSES } = await import("../../core/harness.js");
   const prompt = buildRespawnPrompt(task);
   const harnessConfig = HARNESSES[task.harness];
-  const command = harnessConfig.respawnCommand(prompt);
+  // Empty prompt = interactive session, just spawn harness without args
+  const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
 
-  log.info("Respawning task", { taskId, session: tmuxSession });
+  log.info("Respawning task", { taskId, session: tmuxSession, interactive: !prompt });
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
   // Update task

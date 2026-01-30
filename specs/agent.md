@@ -24,6 +24,18 @@ The prompt includes:
 - Must write outcome to `.orange-outcome` before stopping
 - Must not push (orchestrator handles merge)
 
+### Interactive Session (No Description)
+
+When task has no description (empty TASK.md body):
+- Agent spawns with **no prompt** (interactive mode)
+- Harness opens directly: `pi` instead of `pi "prompt"`
+- User describes task conversationally
+- Agent should update TASK.md:
+  1. Rename branch: `git branch -m <taskId> <meaningful-name>`
+  2. Update `branch:` in frontmatter
+  3. Add description to body
+- Then proceed with normal workflow
+
 ## 3. Respawn Prompt
 
 For dead sessions reusing existing workspace:

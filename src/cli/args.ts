@@ -194,8 +194,10 @@ Project Management:
   orange project remove <name>        Remove a project
 
 Task Management (project inferred from cwd):
-  orange task create <branch> <description>
-                                      Create a new task
+  orange task create [branch] [description]
+                                      Create a new task (both optional)
+                                      Empty branch: auto-generates from task ID
+                                      Empty description: interactive session
   orange task list [options]          List tasks
     --status <status>                 Filter by status
     --all                             Show all projects' tasks

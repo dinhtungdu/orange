@@ -28,8 +28,14 @@ const WORKFLOW = `
 
 /**
  * Build the agent prompt for initial spawn.
+ * Returns empty string if no description (interactive session).
  */
 export function buildAgentPrompt(task: Task): string {
+  // No description = interactive session, no prompt
+  if (!task.description.trim()) {
+    return "";
+  }
+
   return `# Task: ${task.description}
 
 Project: ${task.project}
@@ -45,8 +51,14 @@ Write to .orange-outcome:
 
 /**
  * Build the respawn prompt for resuming a dead session.
+ * Returns empty string if no description (interactive session).
  */
 export function buildRespawnPrompt(task: Task): string {
+  // No description = interactive session, no prompt
+  if (!task.description.trim()) {
+    return "";
+  }
+
   return `# Resuming Task: ${task.description}
 
 Project: ${task.project}

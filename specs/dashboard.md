@@ -117,8 +117,8 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
    ```
    ──────────────────────────────────────────────────────────────────────────────
     Create Task
-    Branch:      [feature-login____________]
-    Description: [Fix the OAuth redirect___]
+    Branch:      [█] (auto)
+    Description: [ ] (optional)
     Harness:     [pi ◀]
     Status:      [pending ◀]
     Enter:submit  Escape:cancel
@@ -131,14 +131,27 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
 
 ### Behavior
 
-- Branch and description are required (submit is no-op if either is empty)
-- Harness defaults to first installed (pi → opencode → claude → codex); only shows installed harnesses
+- **All fields are optional** — press `c` then `Enter` to create immediately
+- Empty branch: auto-generates from task ID (e.g., `abc123`)
+- Empty description: spawns interactive session (agent opens with no prompt)
+- Harness defaults to first installed (pi → opencode → claude → codex)
 - Status defaults to `pending`; set to `reviewing` for existing work (skips agent spawn)
 - Errors if an orange task already exists for the branch
 - Auto-spawns agent after creation only for `pending` status
 - On success: shows "Created project/branch [status]" message, task appears in list
 - On error: shows error message, stays in task list mode
 - While in create mode, task list navigation keys (j/k/etc.) are disabled
+
+### Interactive Session
+
+When a task has no description:
+1. Agent spawns in interactive mode (no initial prompt)
+2. User describes what they want to work on
+3. Agent should update TASK.md:
+   - Rename branch: `git branch -m <taskId> <meaningful-name>`
+   - Update `branch:` field in frontmatter
+   - Add description to body
+4. Then proceed with implementation
 
 ## Session Detection
 

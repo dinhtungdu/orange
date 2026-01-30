@@ -172,11 +172,13 @@ describe("task create command", () => {
     expect(consoleErrors[0]).toContain("not found");
   });
 
-  test("errors when missing arguments", async () => {
-    const parsed = parseArgs(["bun", "script.ts", "task", "create", "testproj"]);
+  test("creates task with no arguments using defaults", async () => {
+    const parsed = parseArgs(["bun", "script.ts", "task", "create", "--project", "testproj"]);
 
-    await expect(runTaskCommand(parsed, deps)).rejects.toThrow("process.exit(1)");
-    expect(consoleErrors[0]).toContain("Usage:");
+    await runTaskCommand(parsed, deps);
+
+    // Should create task with auto-generated branch (task ID) and empty description
+    expect(consoleLogs[0]).toMatch(/Created task \w+ \(testproj\/\w+\)/);
   });
 
   test("creates task with --status=reviewing and skips spawn", async () => {

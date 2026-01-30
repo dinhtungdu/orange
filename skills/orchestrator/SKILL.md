@@ -21,7 +21,7 @@ All commands operate on the current project (inferred from your working director
 
 ```bash
 # Task management
-orange task create --harness claude <branch> <description>
+orange task create [branch] [description] [--harness claude] [--context -]
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task log <task_id>                # View conversation history
@@ -34,6 +34,20 @@ orange workspace init    # Pre-create worktrees (optional, lazy init on spawn)
 orange workspace list [--all]    # Show pool status
 orange workspace gc              # Release orphaned workspaces (bound to deleted tasks)
 ```
+
+### Quick Task (No Arguments)
+
+Create a task with no branch or description:
+
+```bash
+orange task create
+# Output: Created task abc123 (myproject/abc123) [pending] [pi]
+# Agent spawns in interactive mode, waiting for user input
+```
+
+This is useful when:
+- User wants to start working without defining task upfront
+- Exploratory work where requirements emerge during conversation
 
 ## Workflow
 
@@ -50,6 +64,24 @@ orange workspace gc              # Release orphaned workspaces (bound to deleted
 - Tasks should be **atomic** - one clear objective per task
 - Branch names should be **descriptive** - e.g., `add-user-auth`, `fix-login-bug`
 - Descriptions should be **clear** - enough context for the agent to work autonomously
+
+## Interactive Sessions (No Description)
+
+When a task is created without a description:
+- TASK.md body is empty
+- Agent spawns with no initial prompt (interactive mode)
+- User describes what they want conversationally
+
+**Agent responsibility for interactive sessions:**
+1. Ask user what they want to work on
+2. Once understood, update TASK.md:
+   ```bash
+   # Rename branch from task ID to meaningful name
+   git branch -m abc123 add-user-auth
+   ```
+3. Edit TASK.md frontmatter to update `branch:` field
+4. Add description to TASK.md body
+5. Proceed with normal implementation workflow
 
 ## Reusing Existing Branches
 

@@ -19,6 +19,8 @@ export interface CreateTaskOptions {
   status?: "pending" | "reviewing";
   /** Harness to use. If omitted, auto-detects first installed. */
   harness?: Harness | string;
+  /** Task ID. If omitted, auto-generates. */
+  id?: string;
 }
 
 export interface CreateTaskResult {
@@ -53,10 +55,9 @@ export async function createTaskRecord(
   await deps.git.fetch(project.path);
 
   const now = deps.clock.now();
-  // Use alphanumeric-only alphabet to avoid IDs starting with '-'
-  // which breaks CLI arg parsing
-  const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
-  const id = nanoid();
+  // Use provided ID or generate one
+  // Alphanumeric-only alphabet to avoid IDs starting with '-' which breaks CLI arg parsing
+  const id = options.id || customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21)();
 
   log.info("Creating task", { taskId: id, project: project.name, branch, description, harness });
 
