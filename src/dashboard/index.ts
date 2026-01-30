@@ -227,6 +227,11 @@ function buildDashboard(
     content: "",
     fg: "#FFFFFF",
   });
+  const createHarnessLabel = new TextRenderable(renderer, {
+    id: "create-harness",
+    content: "",
+    fg: "#FFFFFF",
+  });
   const createStatusLabel = new TextRenderable(renderer, {
     id: "create-status",
     content: "",
@@ -235,6 +240,7 @@ function buildDashboard(
   createForm.add(createTitle);
   createForm.add(createBranchLabel);
   createForm.add(createDescLabel);
+  createForm.add(createHarnessLabel);
   createForm.add(createStatusLabel);
 
   // --- Footer ---
@@ -303,11 +309,16 @@ function buildDashboard(
       const descCursor = cm.focusedField === "description" ? "█" : "";
       const branchHighlight = cm.focusedField === "branch" ? "#00DDFF" : "#888888";
       const descHighlight = cm.focusedField === "description" ? "#00DDFF" : "#888888";
+      const harnessHighlight = cm.focusedField === "harness" ? "#00DDFF" : "#888888";
       const statusHighlight = cm.focusedField === "status" ? "#00DDFF" : "#888888";
       createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]`;
       createBranchLabel.fg = branchHighlight;
       createDescLabel.content = `Description: [${cm.description}${descCursor}]`;
       createDescLabel.fg = descHighlight;
+      // Harness field: show as toggleable with indicator
+      const harnessDisplay = `${cm.harness} ◀`;
+      createHarnessLabel.content = `Harness:     [${harnessDisplay}]`;
+      createHarnessLabel.fg = harnessHighlight;
       // Status field: show as toggleable with indicator
       const statusDisplay = cm.status === "pending" ? "pending ◀" : "reviewing ◀";
       createStatusLabel.content = `Status:      [${statusDisplay}]`;
