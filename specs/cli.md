@@ -20,9 +20,9 @@ orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
 orange task respawn <task_id>
-orange task update [task_id] [--branch <name>] [--description <text>]
+orange task update [task_id] [--branch [name]] [--description <text>]
   # task_id: optional if running inside workspace (auto-detected)
-  # --branch: rename git branch + tmux session (fails if branch exists)
+  # --branch: rename to name, or use current git branch if name omitted
   # --description: update TASK.md body
 orange task complete <task_id>      # Called by hook → reviewing
 orange task approve <task_id>       # Human approves → reviewed, pushes + creates PR

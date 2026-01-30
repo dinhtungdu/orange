@@ -508,10 +508,10 @@ async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
 async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
-  const newBranch = parsed.options.branch as string | undefined;
+  let branchOption = parsed.options.branch;
   const newDescription = parsed.options.description as string | undefined;
 
-  if (!newBranch && !newDescription) {
+  if (!branchOption && !newDescription) {
     console.error("At least one of --branch or --description is required");
     process.exit(1);
   }
@@ -521,7 +521,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (!taskId) {
     taskId = await getTaskIdFromWorkspace(deps) ?? "";
     if (!taskId) {
-      console.error("Usage: orange task update [task_id] --branch <name> --description <text>");
+      console.error("Usage: orange task update [task_id] --branch [name] --description <text>");
       console.error("Task ID required when not running inside a workspace");
       process.exit(1);
     }
@@ -550,6 +550,20 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (task.workspace) {
     const { getWorkspacePath } = await import("../../core/workspace.js");
     workspacePath = getWorkspacePath(deps, task.workspace);
+  }
+
+  // If --branch without value, use current git branch
+  let newBranch: string | undefined;
+  if (branchOption === true) {
+    // --branch flag without value: use current git branch
+    if (!workspacePath) {
+      console.error("Cannot detect branch: task has no workspace");
+      process.exit(1);
+    }
+    newBranch = await deps.git.currentBranch(workspacePath);
+    log.info("Using current git branch", { branch: newBranch });
+  } else if (typeof branchOption === "string") {
+    newBranch = branchOption;
   }
 
   // Handle branch rename

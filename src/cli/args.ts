@@ -206,7 +206,7 @@ Task Management (project inferred from cwd):
   orange task attach <task_id>        Attach to task's tmux session
   orange task respawn <task_id>       Restart dead session
   orange task update [task_id] [options] Update task branch/description
-    --branch <name>                   Rename branch (fails if exists)
+    --branch [name]                   Rename to name, or current git branch if omitted
     --description <text>              Update description
                                       Task ID auto-detected if inside workspace
   orange task complete <task_id>      Mark task complete (hook)
