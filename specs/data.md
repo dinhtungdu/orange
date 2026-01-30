@@ -63,22 +63,22 @@ Piped via `--context -` on task create.
 
 ### Interactive Session (Empty Description)
 
-When created without a description, TASK.md body is empty:
+When created without a description, TASK.md body is empty. Agent spawns with no initial prompt. Agent reads AGENTS.md instruction to discuss with user, then update TASK.md body.
+
+### Auto-Generated Branch Names
+
+When created without a branch name, branch defaults to `orange-tasks/<id>`:
 
 ```markdown
 ---
 id: abc123
 project: orange
-branch: abc123
+branch: orange-tasks/abc123
 ...
 ---
-
 ```
 
-This signals an **interactive session**:
-- Agent spawns with no initial prompt
-- User describes task interactively
-- Agent should update TASK.md with branch name and description
+Agent reads AGENTS.md instruction to rename branch based on description, then runs `orange task update --branch` to sync.
 
 ## Harness
 

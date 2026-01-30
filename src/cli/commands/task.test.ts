@@ -177,8 +177,8 @@ describe("task create command", () => {
 
     await runTaskCommand(parsed, deps);
 
-    // Should create task with auto-generated branch (task ID) and empty description
-    expect(consoleLogs[0]).toMatch(/Created task \w+ \(testproj\/\w+\)/);
+    // Should create task with auto-generated branch (orange-tasks/<id>) and empty description
+    expect(consoleLogs[0]).toMatch(/Created task \w+ \(testproj\/orange-tasks\/\w+\)/);
   });
 
   test("creates task with --status=reviewing and skips spawn", async () => {

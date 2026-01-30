@@ -139,7 +139,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const taskId = nanoid();
 
   const [inputBranch, ...descParts] = parsed.args;
-  const branch = inputBranch || taskId;
+  const branch = inputBranch || `orange-tasks/${taskId}`;
   const description = descParts.join(" ");
 
   // Parse --status flag (default: pending)

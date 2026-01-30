@@ -29,12 +29,14 @@ The prompt includes:
 When task has no description (empty TASK.md body):
 - Agent spawns with **no prompt** (interactive mode)
 - Harness opens directly: `pi` instead of `pi "prompt"`
-- User describes task conversationally
-- Agent should update TASK.md:
-  1. Rename branch: `git branch -m <taskId> <meaningful-name>`
-  2. Update `branch:` in frontmatter
-  3. Add description to body
+- Agent reads AGENTS.md instruction to discuss with user, then update TASK.md body
 - Then proceed with normal workflow
+
+### Auto-Generated Branch Names
+
+When no branch name provided, defaults to `orange-tasks/<id>`. Agent reads AGENTS.md instruction to rename based on task description:
+1. `git branch -m orange-tasks/<id> <meaningful-name>`
+2. `orange task update --branch`
 
 ## 3. Respawn Prompt
 

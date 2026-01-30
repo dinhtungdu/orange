@@ -247,6 +247,7 @@ export interface PoolState {
  */
 export type HistoryEventType =
   | "task.created"
+  | "task.updated"
   | "agent.spawned"
   | "message"
   | "review.started"
@@ -277,6 +278,17 @@ export interface TaskCreatedEvent extends HistoryEventBase {
   project: string;
   branch: string;
   description: string;
+}
+
+/**
+ * Task updated event.
+ */
+export interface TaskUpdatedEvent extends HistoryEventBase {
+  type: "task.updated";
+  changes: {
+    branch?: { from: string; to: string };
+    description?: boolean;
+  };
 }
 
 /**
@@ -369,6 +381,7 @@ export interface PRMergedEvent extends HistoryEventBase {
  */
 export type HistoryEvent =
   | TaskCreatedEvent
+  | TaskUpdatedEvent
   | AgentSpawnedEvent
   | MessageEvent
   | ReviewStartedEvent
