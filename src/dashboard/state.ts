@@ -49,6 +49,20 @@ export const STATUS_ICON: Record<TaskStatus, string> = {
   cancelled: "⊘",
 };
 
+/** Session state icons. */
+export const SESSION_ICON = {
+  alive: "●",
+  dead: "✗",
+  none: "○",
+} as const;
+
+/** Session state colors. */
+export const SESSION_COLOR = {
+  alive: "#55CC55",
+  dead: "#FF5555",
+  none: "#666666",
+} as const;
+
 /** CI checks icons. */
 export const CHECKS_ICON: Record<string, string> = {
   pass: "✓",

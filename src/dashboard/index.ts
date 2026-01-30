@@ -28,6 +28,8 @@ import {
   DashboardState,
   STATUS_ICON,
   STATUS_COLOR,
+  SESSION_ICON,
+  SESSION_COLOR,
   CHECKS_ICON,
   type DashboardOptions,
 } from "./state.js";
@@ -361,18 +363,26 @@ function buildDashboard(
       const task = s.tasks[i];
       const selected = i === s.cursor;
       const pending = s.pendingOps.has(task.id);
-      // Session dead only matters for "working" tasks - others completed naturally
-      const isDead = s.deadSessions.has(task.id) && task.status === "working";
-      const displayStatus: TaskStatus = isDead ? "failed" : task.status;
-      const icon = STATUS_ICON[displayStatus];
-      const color = isDead ? STATUS_COLOR.failed : STATUS_COLOR[task.status];
+
+      // Session state: alive, dead, or none
+      const hasSession = !!task.tmux_session;
+      const sessionDead = s.deadSessions.has(task.id);
+      const sessionState = hasSession
+        ? sessionDead
+          ? "dead"
+          : "alive"
+        : "none";
+      const sessionIcon = SESSION_ICON[sessionState];
+      const sessionColor = SESSION_COLOR[sessionState];
+
       const activity = state.formatRelativeTime(task.updated_at);
 
       const taskName = s.projectFilter
         ? task.branch
         : `${task.project}/${task.branch}`;
 
-      let statusCol: string = isDead ? "dead" : task.status;
+      // Status column: task stage or PR info
+      let statusCol: string = task.status;
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
         const prStatus = s.prStatuses.get(task.id);
@@ -405,10 +415,10 @@ function buildDashboard(
 
       // Table row with flex columns
       const tableRow = createTableRow(renderer, `task-cells-${i}`, {
-        task: `${icon} ${taskName}`,
-        taskColor: color,
+        task: `${sessionIcon} ${taskName}`,
+        taskColor: sessionColor,
         status: statusCol,
-        statusColor: color,
+        statusColor: STATUS_COLOR[task.status],
         commits: commitsCol,
         changes: "",
         changesAdded,

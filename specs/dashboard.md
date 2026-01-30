@@ -7,6 +7,38 @@ Shows tasks from TASK.md files (including done/failed).
 1. **Project-scoped** (default when in a project directory)
 2. **Global** (when not in project, or with `--all`)
 
+## Two Types of Status
+
+The dashboard tracks two independent concepts:
+
+1. **Session Status** (icon before task name): Is the agent running?
+2. **Task Status** (Status column): Where is the task in the workflow?
+
+### Session Status (Icon)
+
+| Icon | State | Meaning |
+|------|-------|---------|
+| ● | active | tmux session alive, agent running |
+| ✗ | crashed | tmux session died unexpectedly |
+| ○ | inactive | no session (pending, finished, or cancelled) |
+
+Colors: ● green, ✗ red, ○ gray
+
+### Task Status (Column)
+
+| Status | Meaning |
+|--------|---------|
+| pending | waiting to spawn |
+| working | agent assigned and should be running |
+| reviewing | agent done, awaiting human review |
+| reviewed | human approved, ready to merge |
+| stuck | agent needs help |
+| done | merged/completed |
+| failed | errored |
+| cancelled | user cancelled |
+
+When a task has a PR, the Status column shows PR info instead (e.g., `#123 open ✓`).
+
 ## Layout
 
 ```
@@ -15,35 +47,21 @@ Shows tasks from TASK.md files (including done/failed).
 ──────────────────────────────────────────────────────────────────────────────
  ● coffee/login-fix            working      3        +144 -12        2m ago
  └ Fix OAuth redirect loop on mobile
- ✗ coffee/crashed-task         dead                                 10m ago
- ◉ coffee/password-reset       reviewing  7        +89 -34        15m ago
- ✓ orange/dark-mode            done                                  1h ago
+ ✗ coffee/crashed-task         working                              10m ago
+ ○ coffee/password-reset       #123 open ✓  7        +89 -34        15m ago
+ ○ orange/dark-mode            done                                  1h ago
 ──────────────────────────────────────────────────────────────────────────────
  j/k:nav  Enter:attach  m:merge  x:cancel  f:filter  q:quit
 ```
 
 **Columns:**
-- Task: status icon + project/branch (or just branch if project-scoped)
-- Status: working/reviewing/reviewed/stuck/done/failed/cancelled/pending/dead
+- Task: session icon + project/branch (or just branch if project-scoped)
+- Status: task status OR PR info (e.g., `#123 open ✓`, `#456 merged`)
 - Commits: number of commits ahead of default branch (blank if none)
 - Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
 - Activity: relative time since last update (2m ago, 3h ago)
 
 **Selected row** shows description underneath.
-
-**Dead sessions:** Tasks with active status but no live tmux session show as "dead" with ✗ icon.
-
-## Status Icons
-
-| Icon | Status |
-|------|--------|
-| ● | working — agent active |
-| ◉ | reviewing — awaiting human review |
-| ◈ | reviewed — human approved |
-| ⚠ | stuck — agent needs help |
-| ○ | pending — waiting to spawn |
-| ✓ | done — merged |
-| ✗ | failed/dead — cancelled/errored/session died |
 
 ## Context-Aware Keybindings
 
@@ -121,9 +139,13 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
 - On error: shows error message, stays in task list mode
 - While in create mode, task list navigation keys (j/k/etc.) are disabled
 
-## Dead Session Detection
+## Session Detection
 
-Checked immediately on startup, then periodically. If session died, task shows as "dead" with ✗ icon. Available actions: respawn or cancel.
+Checked immediately on startup, then periodically (30s). Compares `tmux list-sessions` against tasks with `tmux_session` set.
+
+- Session exists → ● (active)
+- Session gone + task is `working` → ✗ (crashed)
+- No session expected → ○ (inactive)
 
 ## Theme
 

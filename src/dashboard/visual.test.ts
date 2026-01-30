@@ -18,7 +18,7 @@ import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
 import { saveTask, saveProjects } from "../core/state.js";
-import { DashboardState, STATUS_ICON, STATUS_COLOR } from "./state.js";
+import { DashboardState, STATUS_ICON, STATUS_COLOR, SESSION_ICON, SESSION_COLOR } from "./state.js";
 
 const createTask = (overrides: Partial<Task> = {}): Task => ({
   id: "test123",
@@ -144,14 +144,21 @@ function buildTestDashboard(
     for (let i = 0; i < s.tasks.length; i++) {
       const task = s.tasks[i];
       const selected = i === s.cursor;
-      // Session dead only matters for "working" tasks - others completed naturally
-      const isDead = s.deadSessions.has(task.id) && task.status === "working";
-      const displayStatus = isDead ? "failed" as const : task.status;
-      const icon = STATUS_ICON[displayStatus];
-      const color = isDead ? STATUS_COLOR.failed : STATUS_COLOR[task.status];
+
+      // Session state: alive, dead (working + no session), or none
+      const hasSession = !!task.tmux_session;
+      const sessionDead = s.deadSessions.has(task.id);
+      const sessionState = hasSession
+        ? sessionDead
+          ? "dead"
+          : "alive"
+        : "none";
+      const sessionIcon = SESSION_ICON[sessionState];
+      const sessionColor = SESSION_COLOR[sessionState];
+
       const activity = state.formatRelativeTime(task.updated_at);
       const taskName = s.projectFilter ? task.branch : `${task.project}/${task.branch}`;
-      const statusCol = isDead ? "dead" : task.status;
+      const statusCol = task.status;
 
       const rowContainer = new BoxRenderable(renderer, {
         id: `task-row-${i}`,
@@ -167,8 +174,8 @@ function buildTestDashboard(
         backgroundColor: selected ? "#333366" : "transparent",
       });
 
-      tableRow.add(new TextRenderable(renderer, { id: `t-task-${i}`, content: `${icon} ${taskName}`, fg: color, flexGrow: 1, flexShrink: 1 }));
-      tableRow.add(new TextRenderable(renderer, { id: `t-status-${i}`, content: statusCol, fg: color, width: COL_STATUS }));
+      tableRow.add(new TextRenderable(renderer, { id: `t-task-${i}`, content: `${sessionIcon} ${taskName}`, fg: sessionColor, flexGrow: 1, flexShrink: 1 }));
+      tableRow.add(new TextRenderable(renderer, { id: `t-status-${i}`, content: statusCol, fg: STATUS_COLOR[task.status], width: COL_STATUS }));
       tableRow.add(new TextRenderable(renderer, { id: `t-commits-${i}`, content: "", fg: "#CCCCCC", width: COL_COMMITS }));
       tableRow.add(new TextRenderable(renderer, { id: `t-changes-${i}`, content: "", fg: "#CCCCCC", width: COL_CHANGES }));
       tableRow.add(new TextRenderable(renderer, { id: `t-activity-${i}`, content: activity, fg: "#888888", width: COL_ACTIVITY }));
@@ -245,9 +252,13 @@ describe("Dashboard Visual", () => {
 
   test("renders task list with proper column alignment", async () => {
     // Use different timestamps for deterministic ordering (newest first)
-    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", description: "Fix OAuth redirect loop", created_at: "2024-01-15T12:00:00.000Z" }));
+    // Working task has an active session
+    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", tmux_session: "testproj/login-fix", description: "Fix OAuth redirect loop", created_at: "2024-01-15T12:00:00.000Z" }));
     await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", description: "Add dark theme", created_at: "2024-01-15T11:00:00.000Z" }));
     await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", description: "Password reset flow", created_at: "2024-01-15T10:00:00.000Z" }));
+
+    // Mock tmux to return the working task's session as alive
+    (deps.tmux as MockTmux).sessions.set("testproj/login-fix", { cwd: "/tmp", command: "", output: [] });
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,
@@ -267,10 +278,9 @@ describe("Dashboard Visual", () => {
     expect(frame).toContain("dark-mode");
     expect(frame).toContain("password-reset");
 
-    // Check status icons
-    expect(frame).toContain("●"); // working
-    expect(frame).toContain("✓"); // done
-    expect(frame).toContain("◉"); // reviewing
+    // Check session icons (● = alive, ○ = no session)
+    expect(frame).toContain("●"); // working with active session
+    expect(frame).toContain("○"); // done/reviewing have no session
 
     // Check statuses
     expect(frame).toContain("working");
