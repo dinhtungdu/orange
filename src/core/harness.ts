@@ -66,8 +66,8 @@ function shellEscape(str: string): string {
 export const HARNESSES: Record<Harness, HarnessConfig> = {
   pi: {
     binary: "pi",
-    spawnCommand: (prompt) => `pi -p "${shellEscape(prompt)}"`,
-    respawnCommand: (prompt) => `pi -p "${shellEscape(prompt)}"`,
+    spawnCommand: (prompt) => `pi "${shellEscape(prompt)}"`,
+    respawnCommand: (prompt) => `pi "${shellEscape(prompt)}"`,
     gitExcludes: [".pi/"],
     skillsDir: join(homedir(), ".pi/agent/skills"),
   },
