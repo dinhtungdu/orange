@@ -103,6 +103,8 @@ export interface TmuxExecutor {
   splitWindow(session: string, command: string): Promise<void>;
   /** Attach to session if exists, create and attach if not (tmux new-session -A) */
   attachOrCreate(name: string, cwd: string): Promise<void>;
+  /** Rename a session */
+  renameSession(oldName: string, newName: string): Promise<void>;
 }
 
 /**
@@ -128,6 +130,8 @@ export interface GitExecutor {
   merge(cwd: string, branch: string, strategy?: "ff" | "merge"): Promise<void>;
   /** Get current branch name */
   currentBranch(cwd: string): Promise<string>;
+  /** Rename a branch */
+  renameBranch(cwd: string, oldName: string, newName: string): Promise<void>;
   /** Clean untracked files */
   clean(cwd: string): Promise<void>;
   /** Add worktree */

@@ -186,6 +186,19 @@ export class RealTmux implements TmuxExecutor {
       await proc.exited;
     }
   }
+
+  async renameSession(oldName: string, newName: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "rename-session",
+      "-t",
+      oldName,
+      newName,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to rename tmux session '${oldName}': ${stderr}`);
+    }
+  }
 }
 
 /**
@@ -272,6 +285,15 @@ export class MockTmux implements TmuxExecutor {
       this.sessions.set(name, { cwd, command: "", output: [] });
     }
     // In mock, there's no actual attach - just simulate the session exists
+  }
+
+  async renameSession(oldName: string, newName: string): Promise<void> {
+    const session = this.sessions.get(oldName);
+    if (!session) {
+      throw new Error(`Session '${oldName}' not found`);
+    }
+    this.sessions.delete(oldName);
+    this.sessions.set(newName, session);
   }
 
   /**

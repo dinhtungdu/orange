@@ -122,6 +122,17 @@ export class RealGit implements GitExecutor {
     return stdout.trim();
   }
 
+  async renameBranch(cwd: string, oldName: string, newName: string): Promise<void> {
+    const { exitCode, stderr } = await exec(
+      "git",
+      ["branch", "-m", oldName, newName],
+      cwd
+    );
+    if (exitCode !== 0) {
+      throw new Error(`git branch -m failed: ${stderr}`);
+    }
+  }
+
   async clean(cwd: string): Promise<void> {
     const { exitCode, stderr } = await exec("git", ["clean", "-fd"], cwd);
     if (exitCode !== 0) {
@@ -287,6 +298,18 @@ export class MockGit implements GitExecutor {
       throw new Error(`No repository initialized at '${cwd}'`);
     }
     return branch;
+  }
+
+  async renameBranch(cwd: string, oldName: string, newName: string): Promise<void> {
+    const branches = this.branches.get(cwd);
+    if (branches) {
+      branches.delete(oldName);
+      branches.add(newName);
+    }
+    // Update current branch if it was renamed
+    if (this.currentBranches.get(cwd) === oldName) {
+      this.currentBranches.set(cwd, newName);
+    }
   }
 
   async clean(_cwd: string): Promise<void> {

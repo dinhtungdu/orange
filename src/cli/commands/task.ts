@@ -109,12 +109,16 @@ export async function runTaskCommand(
       await respawnTask(parsed, deps);
       break;
 
+    case "update":
+      await updateTask(parsed, deps);
+      break;
+
     default:
       console.error(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|spawn|attach|respawn|complete|approve|unapprove|stuck|merge|cancel|delete|create-pr>"
+        "Usage: orange task <create|list|spawn|attach|respawn|update|complete|approve|unapprove|stuck|merge|cancel|delete|create-pr>"
       );
       process.exit(1);
   }
@@ -469,6 +473,105 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
 
   console.log(`Respawned agent for task ${taskId} in ${tmuxSession}`);
+}
+
+/**
+ * Update task branch and/or description.
+ */
+async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task update <task_id> [--branch <name>] [--description <text>]");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+  const newBranch = parsed.options.branch as string | undefined;
+  const newDescription = parsed.options.description as string | undefined;
+
+  if (!newBranch && !newDescription) {
+    console.error("At least one of --branch or --description is required");
+    process.exit(1);
+  }
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Get project
+  const projects = await loadProjects(deps);
+  const project = projects.find((p) => p.name === task.project);
+  if (!project) {
+    console.error(`Project '${task.project}' not found`);
+    process.exit(1);
+  }
+
+  const oldBranch = task.branch;
+  let workspacePath: string | null = null;
+
+  // Get workspace path if task has one
+  if (task.workspace) {
+    const { getWorkspacePath } = await import("../../core/workspace.js");
+    workspacePath = getWorkspacePath(deps, task.workspace);
+  }
+
+  // Handle branch rename
+  if (newBranch && newBranch !== oldBranch) {
+    // Check if new branch already exists
+    if (workspacePath) {
+      const branchExists = await deps.git.branchExists(workspacePath, newBranch);
+      if (branchExists) {
+        console.error(`Branch '${newBranch}' already exists`);
+        process.exit(1);
+      }
+
+      // Rename git branch
+      log.info("Renaming branch", { from: oldBranch, to: newBranch });
+      await deps.git.renameBranch(workspacePath, oldBranch, newBranch);
+    }
+
+    // Rename tmux session if exists
+    if (task.tmux_session) {
+      const newSession = `${task.project}/${newBranch}`;
+      const sessionExists = await deps.tmux.sessionExists(task.tmux_session);
+      if (sessionExists) {
+        log.info("Renaming tmux session", { from: task.tmux_session, to: newSession });
+        await deps.tmux.renameSession(task.tmux_session, newSession);
+      }
+      task.tmux_session = newSession;
+    }
+
+    task.branch = newBranch;
+  }
+
+  // Update description
+  if (newDescription !== undefined) {
+    task.description = newDescription;
+  }
+
+  // Save task
+  task.updated_at = deps.clock.now();
+  await saveTask(deps, task);
+
+  // Log history
+  await appendHistory(deps, task.project, task.id, {
+    type: "task.updated",
+    timestamp: task.updated_at,
+    changes: {
+      ...(newBranch && newBranch !== oldBranch ? { branch: { from: oldBranch, to: newBranch } } : {}),
+      ...(newDescription !== undefined ? { description: true } : {}),
+    },
+  });
+
+  const changes: string[] = [];
+  if (newBranch && newBranch !== oldBranch) changes.push(`branch: ${oldBranch} → ${newBranch}`);
+  if (newDescription !== undefined) changes.push("description updated");
+  console.log(`Updated task ${taskId}: ${changes.join(", ")}`);
 }
 
 /**

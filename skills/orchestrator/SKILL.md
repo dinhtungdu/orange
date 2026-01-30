@@ -74,14 +74,15 @@ When a task is created without a description:
 
 **Agent responsibility for interactive sessions:**
 1. Ask user what they want to work on
-2. Once understood, update TASK.md:
+2. Once understood, update using CLI:
    ```bash
-   # Rename branch from task ID to meaningful name
-   git branch -m abc123 add-user-auth
+   orange task update <task_id> --branch add-user-auth --description "Add user authentication"
    ```
-3. Edit TASK.md frontmatter to update `branch:` field
-4. Add description to TASK.md body
-5. Proceed with normal implementation workflow
+   This atomically:
+   - Renames git branch
+   - Renames tmux session
+   - Updates TASK.md
+3. Proceed with normal implementation workflow
 
 ## Reusing Existing Branches
 
