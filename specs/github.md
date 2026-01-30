@@ -74,7 +74,7 @@ Cleanup is always: release workspace, kill tmux session, delete remote branch, s
 
 ### Dashboard PR Polling
 
-Dashboard polls PR statuses every 30s. When a PR is detected as merged for a `reviewed` task, it auto-triggers merge cleanup.
+Dashboard polls PR statuses every 30s. When a PR is detected as merged for any active task (`working`, `reviewing`, `reviewed`, `stuck`), it auto-triggers merge cleanup.
 
 ### Task Metadata
 
