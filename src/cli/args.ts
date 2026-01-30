@@ -205,9 +205,10 @@ Task Management (project inferred from cwd):
   orange task spawn <task_id>         Spawn agent for task
   orange task attach <task_id>        Attach to task's tmux session
   orange task respawn <task_id>       Restart dead session
-  orange task update <task_id> [options] Update task branch/description
+  orange task update [task_id] [options] Update task branch/description
     --branch <name>                   Rename branch (fails if exists)
     --description <text>              Update description
+                                      Task ID auto-detected if inside workspace
   orange task complete <task_id>      Mark task complete (hook)
   orange task approve <task_id>       Approve task (reviewing → reviewed)
   orange task unapprove <task_id>     Unapprove task (reviewed → reviewing)

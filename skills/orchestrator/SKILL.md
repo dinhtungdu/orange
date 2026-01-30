@@ -76,7 +76,8 @@ When a task is created without a description:
 1. Ask user what they want to work on
 2. Once understood, update using CLI:
    ```bash
-   orange task update <task_id> --branch add-user-auth --description "Add user authentication"
+   # Task ID auto-detected when running inside workspace
+   orange task update --branch add-user-auth --description "Add user authentication"
    ```
    This atomically:
    - Renames git branch

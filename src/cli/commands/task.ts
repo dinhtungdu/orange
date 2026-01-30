@@ -476,23 +476,55 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 }
 
 /**
+ * Get task ID from current workspace directory.
+ * Returns null if not inside a workspace.
+ */
+async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
+  const cwd = process.cwd();
+  const { getWorkspacesDir } = await import("../../core/workspace.js");
+  const workspacesDir = getWorkspacesDir(deps);
+
+  // Check if cwd is inside workspaces directory
+  if (!cwd.startsWith(workspacesDir)) {
+    return null;
+  }
+
+  // Extract workspace name from path
+  const relativePath = cwd.slice(workspacesDir.length + 1); // +1 for trailing slash
+  const workspaceName = relativePath.split("/")[0];
+  if (!workspaceName) {
+    return null;
+  }
+
+  // Find task with this workspace
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.workspace === workspaceName);
+  return task?.id ?? null;
+}
+
+/**
  * Update task branch and/or description.
  */
 async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange task update <task_id> [--branch <name>] [--description <text>]");
-    process.exit(1);
-  }
-
-  const taskId = parsed.args[0];
   const newBranch = parsed.options.branch as string | undefined;
   const newDescription = parsed.options.description as string | undefined;
 
   if (!newBranch && !newDescription) {
     console.error("At least one of --branch or --description is required");
     process.exit(1);
+  }
+
+  // Get task ID from args or detect from workspace
+  let taskId = parsed.args[0];
+  if (!taskId) {
+    taskId = await getTaskIdFromWorkspace(deps) ?? "";
+    if (!taskId) {
+      console.error("Usage: orange task update [task_id] --branch <name> --description <text>");
+      console.error("Task ID required when not running inside a workspace");
+      process.exit(1);
+    }
   }
 
   // Find task
