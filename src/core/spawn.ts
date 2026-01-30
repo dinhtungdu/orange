@@ -39,7 +39,7 @@ export async function getGitDir(workspacePath: string): Promise<string> {
 /**
  * Symlink TASK.md to worktree.
  */
-async function linkTaskFile(
+export async function linkTaskFile(
   deps: Deps,
   workspacePath: string,
   project: string,
@@ -57,6 +57,32 @@ async function linkTaskFile(
 
   // Create symlink
   await symlink(taskMdPath, symlinkPath);
+}
+
+/**
+ * Create .orange-outcome file and symlink to worktree.
+ */
+export async function linkOutcomeFile(
+  deps: Deps,
+  workspacePath: string,
+  project: string,
+  taskId: string
+): Promise<void> {
+  const outcomeSourcePath = getOutcomePath(deps, project, taskId);
+  const outcomeSymlinkPath = join(workspacePath, ".orange-outcome");
+
+  // Create/reset outcome file in task dir
+  await writeFile(outcomeSourcePath, JSON.stringify({ id: taskId }), "utf-8");
+
+  // Remove existing symlink if present
+  try {
+    await unlink(outcomeSymlinkPath);
+  } catch {
+    // Doesn't exist, fine
+  }
+
+  // Create symlink
+  await symlink(outcomeSourcePath, outcomeSymlinkPath);
 }
 
 
@@ -152,17 +178,8 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     log.debug("Linked task file to worktree", { workspacePath });
 
     // Create .orange-outcome in task dir and symlink to worktree
-    // Agent writes outcome here; dashboard watches task dir for changes
-    const outcomeSourcePath = getOutcomePath(deps, task.project, task.id);
-    const outcomeSymlinkPath = join(workspacePath, ".orange-outcome");
-    await writeFile(outcomeSourcePath, JSON.stringify({ id: task.id }), "utf-8");
-    try {
-      await unlink(outcomeSymlinkPath);
-    } catch {
-      // Doesn't exist, fine
-    }
-    await symlink(outcomeSourcePath, outcomeSymlinkPath);
-    log.debug("Created outcome file and symlink", { source: outcomeSourcePath, symlink: outcomeSymlinkPath });
+    await linkOutcomeFile(deps, workspacePath, task.project, task.id);
+    log.debug("Created outcome file and symlink", { workspacePath });
 
     // Run harness-specific workspace setup
     const harnessConfig = HARNESSES[task.harness];
