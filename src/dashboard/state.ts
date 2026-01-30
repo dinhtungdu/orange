@@ -37,41 +37,32 @@ function cleanErrorMessage(raw: string): string {
   return msg;
 }
 
-/** Status indicator icons. */
-export const STATUS_ICON: Record<TaskStatus, string> = {
-  pending: "○",
-  working: "●",
-  reviewing: "◉",
-  reviewed: "◈",
-  stuck: "⚠",
-  done: "✓",
-  failed: "✗",
-  cancelled: "⊘",
-};
+// =============================================================================
+// Session Status (icon before task name) - Is the agent running?
+// =============================================================================
+
+/** Session state: alive (running), dead (crashed), none (inactive) */
+export type SessionState = "alive" | "dead" | "none";
 
 /** Session state icons. */
-export const SESSION_ICON = {
-  alive: "●",
-  dead: "✗",
-  none: "○",
-} as const;
-
-/** Session state colors. */
-export const SESSION_COLOR = {
-  alive: "#55CC55",
-  dead: "#FF5555",
-  none: "#666666",
-} as const;
-
-/** CI checks icons. */
-export const CHECKS_ICON: Record<string, string> = {
-  pass: "✓",
-  fail: "✗",
-  pending: "⏳",
-  none: "",
+export const SESSION_ICON: Record<SessionState, string> = {
+  alive: "●",  // tmux session exists
+  dead: "✗",   // session died unexpectedly
+  none: "○",   // no session (pending, finished, cancelled)
 };
 
-/** Status colors (hex). */
+/** Session state colors. */
+export const SESSION_COLOR: Record<SessionState, string> = {
+  alive: "#55CC55",  // green
+  dead: "#FF5555",   // red
+  none: "#666666",   // gray
+};
+
+// =============================================================================
+// Task Status (Status column) - Where is the task in the workflow?
+// =============================================================================
+
+/** Task status colors (hex). */
 export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
   working: "#5599FF",
@@ -81,6 +72,18 @@ export const STATUS_COLOR: Record<TaskStatus, string> = {
   done: "#22BB22",
   failed: "#DD4444",
   cancelled: "#888888",
+};
+
+// =============================================================================
+// PR Status (shown in Status column when PR exists)
+// =============================================================================
+
+/** CI checks icons. */
+export const CHECKS_ICON: Record<string, string> = {
+  pass: "✓",
+  fail: "✗",
+  pending: "⏳",
+  none: "",
 };
 
 export type StatusFilter = "all" | "active" | "done";

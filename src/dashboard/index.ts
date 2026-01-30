@@ -26,7 +26,6 @@ import {
 import type { Deps, TaskStatus } from "../core/types.js";
 import {
   DashboardState,
-  STATUS_ICON,
   STATUS_COLOR,
   SESSION_ICON,
   SESSION_COLOR,

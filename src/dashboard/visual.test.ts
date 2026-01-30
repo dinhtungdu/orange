@@ -18,7 +18,7 @@ import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
 import { saveTask, saveProjects } from "../core/state.js";
-import { DashboardState, STATUS_ICON, STATUS_COLOR, SESSION_ICON, SESSION_COLOR } from "./state.js";
+import { DashboardState, STATUS_COLOR, SESSION_ICON, SESSION_COLOR } from "./state.js";
 
 const createTask = (overrides: Partial<Task> = {}): Task => ({
   id: "test123",
