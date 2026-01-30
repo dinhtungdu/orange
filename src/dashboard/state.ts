@@ -1052,8 +1052,8 @@ export class DashboardState {
     const isWorking = task.status === "working";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: working with dead session, stuck, cancelled/failed, or reviewing without workspace
-    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelledOrFailed || (isReviewing && noWorkspace);
+    // Allow: working with dead session, stuck, cancelled/failed, or reviewing without workspace/dead session
+    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelledOrFailed || (isReviewing && (noWorkspace || sessionDead));
     if (!canRespawn) {
       this.data.error = "Cannot respawn this task.";
       this.emit();
