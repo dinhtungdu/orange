@@ -259,7 +259,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Add new feature",
-      context: null,
+      body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       pr_url: null,
@@ -289,7 +289,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Task 1",
-      context: null,
+      body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
       pr_url: null,
@@ -303,7 +303,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: "test-repo--1",
       tmux_session: "test-repo/feature-2",
       description: "Task 2",
-      context: null,
+      body: "",
       created_at: "2024-01-02T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
       pr_url: null,
@@ -328,7 +328,7 @@ describe("Integration: Full Task Lifecycle", () => {
       workspace: null,
       tmux_session: null,
       description: "Another feature",
-      context: null,
+      body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       pr_url: null,
@@ -435,13 +435,13 @@ describe("Integration: Multiple Projects", () => {
     // Create tasks for different projects
     const task1 = {
       id: "t1", project: "repo1", branch: "feat1", harness: "claude" as const, status: "pending" as const,
-      workspace: null, tmux_session: null, description: "Repo 1 task", context: null,
+      workspace: null, tmux_session: null, description: "Repo 1 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       pr_url: null,
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", harness: "claude" as const, status: "working" as const,
-      workspace: null, tmux_session: null, description: "Repo 2 task", context: null,
+      workspace: null, tmux_session: null, description: "Repo 2 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       pr_url: null,
     };

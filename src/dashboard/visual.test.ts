@@ -29,7 +29,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   workspace: null,
   tmux_session: null,
   description: "Test task description",
-  context: null,
+  body: "",
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
   pr_url: null,

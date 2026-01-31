@@ -115,14 +115,13 @@ describe("buildPRBody", () => {
   });
 
   test("builds body with description only", async () => {
-    const body = await buildPRBody(tempDir, "Add dark mode", null);
+    const body = await buildPRBody(tempDir, "Add dark mode", "");
     expect(body).toContain("## Task");
     expect(body).toContain("Add dark mode");
-    expect(body).not.toContain("## Context");
   });
 
   test("builds body with description and context", async () => {
-    const body = await buildPRBody(tempDir, "Add dark mode", "Use CSS variables");
+    const body = await buildPRBody(tempDir, "Add dark mode", "## Context\n\nUse CSS variables");
     expect(body).toContain("## Task");
     expect(body).toContain("Add dark mode");
     expect(body).toContain("## Context");
@@ -136,7 +135,7 @@ describe("buildPRBody", () => {
       "## Checklist\n- [ ] Tests\n- [ ] Docs"
     );
 
-    const body = await buildPRBody(tempDir, "Add feature", null);
+    const body = await buildPRBody(tempDir, "Add feature", "");
     expect(body).toContain("Add feature");
     expect(body).toContain("## Checklist");
     expect(body).toContain("- [ ] Tests");
@@ -149,7 +148,7 @@ describe("buildPRBody", () => {
       "## Review\nPlease review"
     );
 
-    const body = await buildPRBody(tempDir, "Fix bug", null);
+    const body = await buildPRBody(tempDir, "Fix bug", "");
     expect(body).toContain("Fix bug");
     expect(body).toContain("## Review");
   });
@@ -160,15 +159,15 @@ describe("buildPRBody", () => {
       "## Notes\nRoot template"
     );
 
-    const body = await buildPRBody(tempDir, "Update", null);
+    const body = await buildPRBody(tempDir, "Update", "");
     expect(body).toContain("Root template");
   });
 
   test("works without PR template", async () => {
-    const body = await buildPRBody(tempDir, "Simple task", "Some context");
+    const body = await buildPRBody(tempDir, "Simple task", "## Context\n\nSome context");
     expect(body).toContain("Simple task");
     expect(body).toContain("Some context");
-    // No template separator
+    // No template separator when no template
     expect(body).not.toContain("---");
   });
 
@@ -183,7 +182,7 @@ describe("buildPRBody", () => {
       "Root template"
     );
 
-    const body = await buildPRBody(tempDir, "Task", null);
+    const body = await buildPRBody(tempDir, "Task", "");
     expect(body).toContain("GitHub template");
     expect(body).not.toContain("Root template");
   });

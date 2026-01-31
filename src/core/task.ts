@@ -14,6 +14,7 @@ export interface CreateTaskOptions {
   project: Project;
   branch: string;
   description: string;
+  /** Optional context to include in body as ## Context section */
   context?: string | null;
   /** Initial status. Defaults to "pending". Only "pending" or "reviewing" allowed. */
   status?: "pending" | "reviewing";
@@ -61,6 +62,9 @@ export async function createTaskRecord(
 
   log.info("Creating task", { taskId: id, project: project.name, branch, description, harness });
 
+  // Build body from context (if provided)
+  const body = context ? `## Context\n\n${context}` : "";
+
   const task: Task = {
     id,
     project: project.name,
@@ -70,7 +74,7 @@ export async function createTaskRecord(
     workspace: null,
     tmux_session: null,
     description,
-    context,
+    body,
     created_at: now,
     updated_at: now,
     pr_url: null,

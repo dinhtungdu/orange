@@ -51,13 +51,17 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 - `--harness` specifies which agent to use: `pi`, `opencode`, `claude`, `codex`
   - If omitted: fallback to first installed (pi → opencode → claude → codex)
   - Skills should pass `--harness <name>` to identify the orchestrator
-- `--context -` reads implementation context from stdin
+- `--context -` reads implementation context from stdin, stored as `## Context` in body
 - `--status` sets initial status: `pending` (default) or `reviewing`
   - `pending`: normal flow, spawns agent
   - `reviewing`: for existing work, skips agent spawn, goes to review queue
 - `--project` specifies project explicitly (otherwise inferred from cwd)
 - Errors if an orange task already exists for the branch
 - If the git branch exists (local or remote), the agent reuses it on spawn
+
+**TASK.md structure:**
+- `description` in frontmatter (CLI-controlled)
+- Body is free-form (agent-controlled: context, questions, notes)
 
 ## Task Respawn
 

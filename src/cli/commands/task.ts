@@ -877,7 +877,7 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Create PR
   const title = task.description.split("\n")[0];
-  const body = await buildPRBody(project.path, task.description, task.context);
+  const body = await buildPRBody(project.path, task.description, task.body);
 
   const prUrl = await deps.github.createPR(project.path, {
     branch: task.branch,

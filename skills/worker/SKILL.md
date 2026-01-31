@@ -9,11 +9,11 @@ You are a worker agent in the Orange orchestration system. Follow this workflow 
 
 ## 1. Read Task
 
-Read `TASK.md` in your worktree for:
-- Task description (body)
-- Implementation context (after `---` separator)
+Read `TASK.md` in your worktree:
+- `description` in frontmatter — what to do
+- Body — context, questions, notes (free-form, you control this)
 
-If TASK.md body is empty, you're in an **interactive session** — see below.
+If description is empty, you're in an **interactive session** — see below.
 
 ## 2. Evaluate Clarity
 
@@ -22,10 +22,12 @@ Before starting work, evaluate if the task is clear enough:
 **Clear task** → proceed to step 3
 
 **Vague task** → enter clarification:
-1. Add `## Questions` section to TASK.md body with specific questions
+1. Add `## Questions` section to TASK.md body
 2. Run `orange task update --status clarification`
 3. Wait for user to attach and discuss
-4. After discussion, update TASK.md body with refined requirements
+4. After discussion:
+   - Update `## Notes` in body with clarified requirements
+   - Optionally update description: `orange task update --description "refined description"`
 5. Run `orange task update --status working`
 6. Proceed to step 3
 
@@ -44,10 +46,10 @@ Triggers for clarification:
 
 **Scope changes mid-work**: If you discover the task is larger or different than expected:
 1. Stop current implementation
-2. Add findings to `## Questions` section in TASK.md
+2. Add findings to `## Questions` section in TASK.md body
 3. Run `orange task update --status clarification`
 4. Wait for user input
-5. After discussion, continue
+5. After discussion, update body and continue
 
 ## 4. Self-Review
 
@@ -85,6 +87,21 @@ If branch is `orange-tasks/<id>` (auto-generated):
    git branch -m orange-tasks/<id> <meaningful-name>
    orange task update --branch
    ```
+
+## Session Handoff
+
+If you need to stop mid-work (crash recovery, handoff), update `## Notes` in TASK.md body:
+
+```markdown
+## Notes
+
+COMPLETED: Implemented login form component
+IN PROGRESS: Adding validation
+NEXT: Connect to AuthService
+BLOCKER: None
+```
+
+This helps you or another agent resume work.
 
 ## Status Reference
 

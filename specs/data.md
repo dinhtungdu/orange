@@ -46,65 +46,55 @@ project: orange
 branch: dark-mode
 harness: pi
 status: working
+description: Implement dark mode for dashboard
 workspace: orange--1
 tmux_session: orange/dark-mode
 created_at: 2024-01-15T10:00:00Z
 updated_at: 2024-01-15T10:30:00Z
 ---
 
-Task description here.
+## Context
 
----
-
-Optional implementation context (separated by `---`).
-Piped via `--context -` on task create.
-```
-
-### Questions Section
-
-When agent needs clarification, it adds a `## Questions` section:
-
-```markdown
----
-status: clarification
-...
----
-
-Task description here.
+Implementation notes from orchestrator...
 
 ## Questions
 
 - [ ] Should this apply to all workspaces or just active ones?
-- [ ] How should we handle edge case X?
 
----
+## Notes
 
-Context...
+Agent working notes, discoveries, session handoff...
 ```
 
-After user answers (via session conversation), agent:
-1. Updates description with refined requirements
-2. Removes or checks off questions
-3. Sets status back to `working`
+**Structure:**
+- **Frontmatter**: Metadata including `description` (short, CLI-controlled)
+- **Body**: Free-form content (agent-controlled)
+
+**Body sections** (all optional):
+- `## Context` — Implementation context from `--context -`
+- `## Questions` — Agent's clarifying questions
+- `## Notes` — Working notes, session handoff
+
+### Session Handoff Format
+
+For autonomous agents, structured notes in body:
+
+```markdown
+## Notes
+
+COMPLETED: X
+IN PROGRESS: Y
+NEXT: Z
+BLOCKER: (if any)
+```
 
 ### Interactive Session (Empty Description)
 
-When created without a description, TASK.md body is empty. Agent spawns with no initial prompt. Agent reads AGENTS.md instruction to discuss with user, then update TASK.md body.
+When created without a description, `description` frontmatter is empty. Agent spawns with no initial prompt (interactive mode). Agent follows worker skill to discuss with user, then update via `orange task update --description`.
 
 ### Auto-Generated Branch Names
 
-When created without a branch name, branch defaults to `orange-tasks/<id>`:
-
-```markdown
----
-id: abc123
-project: orange
-branch: orange-tasks/abc123
-...
----
-```
-
-Agent reads AGENTS.md instruction to rename branch based on description, then runs `orange task update --branch` to sync.
+When created without a branch name, branch defaults to `orange-tasks/<id>`. Agent follows worker skill to rename branch based on task, then runs `orange task update --branch` to sync.
 
 ## Harness
 

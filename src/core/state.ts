@@ -62,6 +62,14 @@ export async function saveProjects(deps: Deps, projects: Project[]): Promise<voi
 
 /**
  * Load a task from TASK.md by task ID.
+ *
+ * Format:
+ * ---
+ * description: Short task description
+ * ...other frontmatter...
+ * ---
+ * 
+ * Free-form body (context, questions, notes)
  */
 export async function loadTask(
   deps: Deps,
@@ -70,15 +78,7 @@ export async function loadTask(
 ): Promise<Task | null> {
   try {
     const content = await readFile(getTaskPath(deps, project, taskId), "utf-8");
-    const { data, content: description } = matter(content);
-
-    // Parse description and context from body
-    // Format: description\n\n---\n\ncontext (if context exists)
-    const body = description.trim();
-    const separator = "\n\n---\n\n";
-    const sepIndex = body.indexOf(separator);
-    const desc = sepIndex >= 0 ? body.slice(0, sepIndex) : body;
-    const ctx = sepIndex >= 0 ? body.slice(sepIndex + separator.length) : null;
+    const { data, content: body } = matter(content);
 
     return {
       id: data.id as string,
@@ -88,8 +88,8 @@ export async function loadTask(
       status: data.status as Task["status"],
       workspace: (data.workspace as string) ?? null,
       tmux_session: (data.tmux_session as string) ?? null,
-      description: desc,
-      context: ctx,
+      description: (data.description as string) ?? "",
+      body: body.trim(),
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
       pr_url: (data.pr_url as string) ?? null,
@@ -101,6 +101,14 @@ export async function loadTask(
 
 /**
  * Save a task to TASK.md.
+ *
+ * Format:
+ * ---
+ * description: Short task description
+ * ...other frontmatter...
+ * ---
+ * 
+ * Free-form body (context, questions, notes)
  */
 export async function saveTask(deps: Deps, task: Task): Promise<void> {
   const taskDir = getTaskDir(deps, task.project, task.id);
@@ -112,6 +120,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     branch: task.branch,
     harness: task.harness,
     status: task.status,
+    description: task.description,
     workspace: task.workspace,
     tmux_session: task.tmux_session,
     created_at: task.created_at,
@@ -121,11 +130,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     frontmatter.pr_url = task.pr_url;
   }
 
-  // Combine description and context in body
-  const body = task.context
-    ? `${task.description}\n\n---\n\n${task.context}`
-    : task.description;
-  const content = matter.stringify(body, frontmatter);
+  const content = matter.stringify(task.body, frontmatter);
   await writeFile(getTaskPath(deps, task.project, task.id), content);
 }
 

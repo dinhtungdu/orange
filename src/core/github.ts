@@ -238,17 +238,17 @@ export class MockGitHub implements GitHubExecutor {
 }
 
 /**
- * Build PR body from task description, context, and optional PR template.
+ * Build PR body from task description, body content, and optional PR template.
  */
 export async function buildPRBody(
   projectPath: string,
   description: string,
-  context: string | null
+  taskBody: string
 ): Promise<string> {
   let body = `## Task\n\n${description}`;
 
-  if (context) {
-    body += `\n\n## Context\n\n${context}`;
+  if (taskBody.trim()) {
+    body += `\n\n${taskBody}`;
   }
 
   // Try to load PR template

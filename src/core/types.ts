@@ -52,10 +52,10 @@ export interface Task {
   workspace: string | null;
   /** tmux session name (e.g., "orange/dark-mode"), null if not spawned */
   tmux_session: string | null;
-  /** Human-readable task description */
+  /** Human-readable task description (short, in frontmatter) */
   description: string;
-  /** Optional implementation context/notes from orchestrator */
-  context: string | null;
+  /** Free-form body content (context, questions, notes — agent-controlled) */
+  body: string;
   /** ISO 8601 timestamp of task creation */
   created_at: string;
   /** ISO 8601 timestamp of last update */
