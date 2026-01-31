@@ -110,6 +110,7 @@ See [harness.md](./harness.md) for skills directories per harness.
 
 ## CWD Detection
 
-1. Find git root of current directory
-2. Look up path in `projects.json`
-3. If not found: auto-register (for `orange`) or error (for other commands)
+1. If inside `~/orange/workspaces/<project>--<n>`: map workspace → task → project
+2. Otherwise find git root of current directory
+3. Look up path in `projects.json`
+4. If not found: auto-register (for `orange`) or error (for other commands)

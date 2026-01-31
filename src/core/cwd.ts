@@ -8,10 +8,12 @@
  */
 
 import { execSync } from "node:child_process";
-import { resolve, basename, normalize } from "node:path";
+import { resolve, basename, normalize, sep } from "node:path";
 import { realpathSync } from "node:fs";
 import type { Deps, Project } from "./types.js";
 import { loadProjects, saveProjects } from "./state.js";
+import { listTasks } from "./db.js";
+import { getWorkspacesDir } from "./workspace.js";
 
 /**
  * Normalize a path, resolving symlinks (handles macOS /var -> /private/var).
@@ -34,6 +36,39 @@ export interface ProjectDetection {
   gitRoot: string | null;
   /** Error message if detection failed */
   error?: string;
+}
+
+/**
+ * Detect project when running inside a workspace directory.
+ * Maps workspace -> task -> project.
+ */
+async function detectProjectFromWorkspace(
+  deps: Deps,
+  cwd: string
+): Promise<Project | null> {
+  const normalizedCwd = normalizePath(cwd);
+  const normalizedWorkspacesDir = normalizePath(getWorkspacesDir(deps));
+  const prefix = normalizedWorkspacesDir.endsWith(sep)
+    ? normalizedWorkspacesDir
+    : `${normalizedWorkspacesDir}${sep}`;
+
+  if (!normalizedCwd.startsWith(prefix)) {
+    return null;
+  }
+
+  const workspaceName = normalizedCwd.slice(prefix.length).split(sep)[0];
+  if (!workspaceName) {
+    return null;
+  }
+
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.workspace === workspaceName);
+  if (!task) {
+    return null;
+  }
+
+  const projects = await loadProjects(deps);
+  return projects.find((p) => p.name === task.project) ?? null;
 }
 
 /**
@@ -93,6 +128,14 @@ export async function detectProject(
   deps: Deps,
   cwd: string = process.cwd()
 ): Promise<ProjectDetection> {
+  const workspaceProject = await detectProjectFromWorkspace(deps, cwd);
+  if (workspaceProject) {
+    return {
+      project: workspaceProject,
+      gitRoot: normalizePath(workspaceProject.path),
+    };
+  }
+
   const gitRoot = getGitRoot(cwd);
 
   if (!gitRoot) {

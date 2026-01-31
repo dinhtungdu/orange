@@ -27,8 +27,8 @@ import {
   findProjectByName,
 } from "./cwd.js";
 import { createTestDeps } from "./deps.js";
-import { saveProjects } from "./state.js";
-import type { Project } from "./types.js";
+import { saveProjects, saveTask } from "./state.js";
+import type { Project, Task } from "./types.js";
 
 describe("CWD detection", () => {
   let tempDir: string;
@@ -120,6 +120,46 @@ describe("CWD detection", () => {
       const result = await detectProject(deps, gitRepoDir);
 
       expect(result.project).not.toBeNull();
+      expect(result.project?.name).toBe("test-repo");
+      expect(result.gitRoot).toBe(normalizePath(gitRepoDir));
+    });
+
+    it("maps workspace path to project", async () => {
+      const deps = createTestDeps(tempDir);
+      const project: Project = {
+        name: "test-repo",
+        path: normalizePath(gitRepoDir),
+        default_branch: "main",
+        pool_size: 2,
+      };
+      await saveProjects(deps, [project]);
+
+      const task: Task = {
+        id: "task-1",
+        project: "test-repo",
+        branch: "feature",
+        harness: "claude",
+        status: "working",
+        workspace: "test-repo--1",
+        tmux_session: null,
+        description: "Test task",
+        context: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+        updated_at: "2024-01-01T00:00:00.000Z",
+        pr_url: null,
+      };
+      await saveTask(deps, task);
+
+      const workspaceSubdir = join(
+        deps.dataDir,
+        "workspaces",
+        "test-repo--1",
+        "src"
+      );
+      mkdirSync(workspaceSubdir, { recursive: true });
+
+      const result = await detectProject(deps, workspaceSubdir);
+
       expect(result.project?.name).toBe("test-repo");
       expect(result.gitRoot).toBe(normalizePath(gitRepoDir));
     });
