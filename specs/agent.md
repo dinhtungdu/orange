@@ -16,12 +16,15 @@ See [harness.md](./harness.md) for spawn commands per harness.
 
 ## 2. Agent Prompt
 
-The prompt includes:
+The spawn prompt is minimal:
 - Task description and branch name
-- Workflow: read TASK.md → evaluate clarity → read project rules (AGENTS.md/CLAUDE.md) → implement → test → self-review
-- Max 2 review attempts before marking stuck
-- Must update status via `orange task update --status <status>` before stopping
-- Must not push (orchestrator handles merge)
+- Reference to orange-worker skill for workflow instructions
+
+The orange-worker skill (installed via `orange install`) contains:
+- Clarity evaluation
+- Clarification flow
+- Self-review loop
+- Status update commands
 
 ### Clarity Evaluation
 

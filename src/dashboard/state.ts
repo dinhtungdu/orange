@@ -10,9 +10,7 @@ import { join } from "node:path";
 import type { Deps, Task, TaskStatus, PRStatus, Harness } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
-import { loadProjects, getOutcomePath, saveTask, appendHistory } from "../core/state.js";
-import { parseAgentOutcome } from "../core/agent.js";
-import { readFile } from "node:fs/promises";
+import { loadProjects, saveTask, appendHistory } from "../core/state.js";
 import { createTaskRecord } from "../core/task.js";
 import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
@@ -571,8 +569,6 @@ export class DashboardState {
       this.data.allTasks = await listTasks(this.deps, {
         project: this.data.projectFilter ?? undefined,
       });
-      // Check outcome files and update statuses (harness-agnostic)
-      await this.checkOutcomeFiles();
       this.applyStatusFilter();
       if (this.data.cursor >= this.data.tasks.length) {
         this.data.cursor = Math.max(0, this.data.tasks.length - 1);
@@ -582,65 +578,6 @@ export class DashboardState {
     } catch (err) {
       this.data.error =
         err instanceof Error ? err.message : "Failed to load tasks";
-    }
-  }
-
-  /**
-   * Check .orange-outcome files for working tasks and update status.
-   * This is harness-agnostic: any agent that writes to .orange-outcome
-   * will have its status updated automatically.
-   */
-  private async checkOutcomeFiles(): Promise<void> {
-    const workingTasks = this.data.allTasks.filter((t) => t.status === "working");
-
-    for (const task of workingTasks) {
-      try {
-        const outcomePath = getOutcomePath(this.deps, task.project, task.id);
-        const content = await readFile(outcomePath, "utf-8");
-        const outcome = parseAgentOutcome(content);
-
-        if (!outcome || outcome.id !== task.id) continue;
-
-        // Update status based on outcome
-        if (outcome.outcome === "passed" || outcome.outcome === "reviewing") {
-          const now = this.deps.clock.now();
-          const previousStatus = task.status;
-          task.status = "reviewing";
-          task.updated_at = now;
-          await saveTask(this.deps, task);
-          await appendHistory(this.deps, task.project, task.id, {
-            type: "agent.stopped",
-            timestamp: now,
-            outcome: "passed",
-          });
-          await appendHistory(this.deps, task.project, task.id, {
-            type: "status.changed",
-            timestamp: now,
-            from: previousStatus,
-            to: "reviewing",
-          });
-        } else if (outcome.outcome === "stuck") {
-          const now = this.deps.clock.now();
-          const previousStatus = task.status;
-          task.status = "stuck";
-          task.updated_at = now;
-          await saveTask(this.deps, task);
-          await appendHistory(this.deps, task.project, task.id, {
-            type: "agent.stopped",
-            timestamp: now,
-            outcome: "stuck",
-            reason: outcome.reason,
-          });
-          await appendHistory(this.deps, task.project, task.id, {
-            type: "status.changed",
-            timestamp: now,
-            from: previousStatus,
-            to: "stuck",
-          });
-        }
-      } catch {
-        // File doesn't exist or can't be read - agent still working
-      }
     }
   }
 

@@ -54,16 +54,21 @@ opencode.json
 
 ## Skills Installation
 
-Orange skill installed to harness-specific directory:
+Orange installs two skills to harness-specific directories:
+
+| Skill | Purpose |
+|-------|---------|
+| `orange-orchestrator` | For orchestrator agents creating/managing tasks |
+| `orange-worker` | For worker agents executing tasks |
 
 | Harness | Skills Directory |
 |---------|-----------------|
-| claude | `~/.claude/skills/orange-orchestrator/` |
-| pi | `~/.pi/agent/skills/orange-orchestrator/` |
-| codex | `~/.codex/skills/orange-orchestrator/` |
-| opencode | `~/.config/opencode/skills/orange-orchestrator/` |
+| claude | `~/.claude/skills/` |
+| pi | `~/.pi/agent/skills/` |
+| codex | `~/.codex/skills/` |
+| opencode | `~/.config/opencode/skills/` |
 
-The skill template includes `--harness <name>` in commands so spawned agents pass their identity to orange.
+The orchestrator skill template includes `--harness <name>` in commands so spawned agents pass their identity to orange.
 
 ## Agent Skills Standard
 

@@ -443,9 +443,8 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const workspacePath = join(deps.dataDir, "workspaces", workspace);
 
   // Ensure symlinks exist (may be missing if workspace reused or created before symlink logic)
-  const { linkTaskFile, linkOutcomeFile } = await import("../../core/spawn.js");
+  const { linkTaskFile } = await import("../../core/spawn.js");
   await linkTaskFile(deps, workspacePath, task.project, task.id);
-  await linkOutcomeFile(deps, workspacePath, task.project, task.id);
 
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;

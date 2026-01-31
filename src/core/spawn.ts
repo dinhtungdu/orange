@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { writeFile, symlink, readFile, unlink, stat } from "node:fs/promises";
 import type { Deps } from "./types.js";
-import { loadProjects, saveTask, appendHistory, getTaskPath, getOutcomePath } from "./state.js";
+import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
 import { buildAgentPrompt } from "./agent.js";
@@ -57,32 +57,6 @@ export async function linkTaskFile(
 
   // Create symlink
   await symlink(taskMdPath, symlinkPath);
-}
-
-/**
- * Create .orange-outcome file and symlink to worktree.
- */
-export async function linkOutcomeFile(
-  deps: Deps,
-  workspacePath: string,
-  project: string,
-  taskId: string
-): Promise<void> {
-  const outcomeSourcePath = getOutcomePath(deps, project, taskId);
-  const outcomeSymlinkPath = join(workspacePath, ".orange-outcome");
-
-  // Create/reset outcome file in task dir
-  await writeFile(outcomeSourcePath, JSON.stringify({ id: taskId }), "utf-8");
-
-  // Remove existing symlink if present
-  try {
-    await unlink(outcomeSymlinkPath);
-  } catch {
-    // Doesn't exist, fine
-  }
-
-  // Create symlink
-  await symlink(outcomeSourcePath, outcomeSymlinkPath);
 }
 
 
@@ -176,10 +150,6 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Symlink TASK.md to worktree
     await linkTaskFile(deps, workspacePath, task.project, task.id);
     log.debug("Linked task file to worktree", { workspacePath });
-
-    // Create .orange-outcome in task dir and symlink to worktree
-    await linkOutcomeFile(deps, workspacePath, task.project, task.id);
-    log.debug("Created outcome file and symlink", { workspacePath });
 
     // Run harness-specific workspace setup
     const harnessConfig = HARNESSES[task.harness];

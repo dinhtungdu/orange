@@ -65,30 +65,6 @@ This is useful when:
 - Branch names should be **descriptive** - e.g., `add-user-auth`, `fix-login-bug`
 - Descriptions should be **clear** - enough context for the agent to work autonomously
 
-## Interactive Sessions (No Description)
-
-When a task is created without a description:
-- TASK.md body is empty
-- Agent spawns with no initial prompt (interactive mode)
-- User describes what they want conversationally
-
-**Agent responsibility for interactive sessions:**
-1. Ask user what they want to work on
-2. Once understood, update using CLI:
-   ```bash
-   # New branch name (rename mode)
-   orange task update --branch add-user-auth --description "Add user authentication"
-   
-   # Existing branch name (switch mode) - checks out branch, deletes old
-   orange task update --branch existing-feature --description "Continue existing work"
-   ```
-   This atomically:
-   - Renames or switches git branch
-   - Deletes orphan branch if switching
-   - Renames tmux session
-   - Updates TASK.md
-3. Proceed with normal implementation workflow
-
 ## Reusing Existing Branches
 
 Before creating a task, check if a relevant branch already exists:
@@ -160,6 +136,7 @@ EOF
 ## Status Indicators
 
 - `pending` - Task created but not spawned
+- `clarification` - Agent waiting for user input (vague task or scope change)
 - `working` - Agent is actively working (includes self-review)
 - `reviewing` - Agent completed and passed self-review, ready for human review
 - `stuck` - Agent gave up after 2 review attempts
