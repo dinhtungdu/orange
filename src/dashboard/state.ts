@@ -94,6 +94,7 @@ const DONE_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
 export interface DashboardOptions {
   all?: boolean;
   project?: string;
+  exitOnAttach?: boolean;
 }
 
 export interface DiffStats {
@@ -147,6 +148,7 @@ export interface DashboardStateData {
 }
 
 type ChangeListener = () => void;
+type AttachListener = () => void;
 
 /**
  * Dashboard state machine.
@@ -188,6 +190,7 @@ export class DashboardState {
 
   private deps: Deps;
   private listeners: ChangeListener[] = [];
+  private attachListeners: AttachListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private captureInterval: ReturnType<typeof setInterval> | null = null;
   private prPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -210,8 +213,19 @@ export class DashboardState {
     };
   }
 
+  onAttach(fn: AttachListener): () => void {
+    this.attachListeners.push(fn);
+    return () => {
+      this.attachListeners = this.attachListeners.filter((l) => l !== fn);
+    };
+  }
+
   private emit(): void {
     for (const fn of this.listeners) fn();
+  }
+
+  private emitAttach(): void {
+    for (const fn of this.attachListeners) fn();
   }
 
   async init(options: DashboardOptions = {}): Promise<void> {
@@ -864,7 +878,9 @@ export class DashboardState {
         const stderr = await new Response(proc.stderr).text();
         this.data.error = stderr.trim() || `switch-client failed (exit code: ${exitCode})`;
         this.emit();
+        return;
       }
+      this.emitAttach();
     }
     // Note: non-tmux attach requires TUI suspend/resume — handled by the view layer
   }

@@ -18,7 +18,17 @@ export interface ParsedArgs {
   options: Record<string, string | boolean>;
 }
 
-const COMMANDS = ["project", "task", "workspace", "install", "log", "help", "--help", "-h"];
+const COMMANDS = [
+  "dashboard",
+  "project",
+  "task",
+  "workspace",
+  "install",
+  "log",
+  "help",
+  "--help",
+  "-h",
+];
 
 /**
  * Parse command line arguments.
@@ -47,6 +57,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     };
   }
 
+  // Dashboard flags at root level
+  if (args[0].startsWith("-")) {
+    return {
+      command: "dashboard",
+      subcommand: null,
+      args: [],
+      options: parseOptions(args),
+    };
+  }
+
   const command = args[0];
 
   // Unknown command → treat as dashboard (error will be shown later if truly invalid)
@@ -56,6 +76,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
     process.exit(1);
   }
   const remaining = args.slice(1);
+
+  if (command === "dashboard") {
+    return {
+      command,
+      subcommand: null,
+      args: [],
+      options: parseOptions(remaining),
+    };
+  }
 
   // Parse options and positional args
   const options: Record<string, string | boolean> = {};
@@ -182,7 +211,10 @@ orange - Agent orchestration system
 All commands are CWD-aware - they infer project from current directory.
 
 Usage:
-  orange                              Launch dashboard (auto-register if in git repo, global if not)
+  orange [--all] [--project <name>] [--exit-on-attach]
+                                      Launch dashboard (auto-register if in git repo, global if not)
+  orange dashboard [--all] [--project <name>] [--exit-on-attach]
+                                      Launch dashboard
   orange install                      Install agent skill
 
 Project Management:

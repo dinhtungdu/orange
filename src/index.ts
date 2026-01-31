@@ -43,7 +43,11 @@ async function main(): Promise<void> {
           await autoRegisterProject(deps);
         }
         // If not in git repo, detection.gitRoot is null → global view (handled by dashboard)
-        await runDashboard(deps);
+        await runDashboard(deps, {
+          all: parsed.options.all === true,
+          project: typeof parsed.options.project === "string" ? parsed.options.project : undefined,
+          exitOnAttach: parsed.options["exit-on-attach"] === true,
+        });
         break;
       }
 

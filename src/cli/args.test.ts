@@ -19,6 +19,12 @@ describe("parseArgs", () => {
     expect(result.subcommand).toBeNull();
   });
 
+  test("parses dashboard flags", () => {
+    const result = parseArgs(["bun", "script.ts", "--exit-on-attach"]);
+    expect(result.command).toBe("dashboard");
+    expect(result.options["exit-on-attach"]).toBe(true);
+  });
+
   test("parses command with subcommand", () => {
     const result = parseArgs(["bun", "script.ts", "project", "list"]);
     expect(result.command).toBe("project");

@@ -102,6 +102,7 @@ Footer shows relevant actions based on selected task's state:
 **Enter behavior:**
 - Pending → spawn agent
 - Has live session → attach
+  - If `--exit-on-attach`, dashboard exits after attach
 - Dead/no session → respawn agent
 - Cancelled/failed → reactivate (spawn agent)
 - Done → no-op

@@ -4,7 +4,8 @@ All commands are **CWD-aware** — they infer the project from the current direc
 
 ```bash
 # Dashboard (default command)
-orange                              # In git repo: auto-register + project-scoped; otherwise: global
+orange [--all] [--project <name>] [--exit-on-attach]  # In git repo: auto-register + project-scoped; otherwise: global
+orange dashboard [--all] [--project <name>] [--exit-on-attach]
 
 # Projects
 orange project add [path] [--name <name>] [--pool-size <n>]  # path defaults to cwd

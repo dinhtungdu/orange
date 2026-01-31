@@ -493,6 +493,15 @@ export async function runDashboard(
   const state = new DashboardState(deps, options);
   const dashboard = buildDashboard(renderer, state);
 
+  if (options.exitOnAttach) {
+    state.onAttach(() => {
+      state.dispose().then(() => {
+        renderer.destroy();
+        process.exit(0);
+      });
+    });
+  }
+
   // Keyboard handler
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
     if (key.ctrl && key.name === "c") {
