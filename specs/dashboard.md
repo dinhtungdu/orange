@@ -42,6 +42,13 @@ Colors: ● green, ✗ red, ○ gray
 
 When a task has a PR, the Status column shows PR info instead (e.g., `#123 open ✓`).
 
+## Sorting
+
+Tasks sorted by:
+1. **Active first** — pending, clarification, working, reviewing, reviewed, stuck
+2. **Terminal last** — done, cancelled, failed
+3. **Within groups** — by `updated_at` descending (most recent first)
+
 ## Layout
 
 ```

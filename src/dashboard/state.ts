@@ -65,6 +65,7 @@ export const SESSION_COLOR: Record<SessionState, string> = {
 /** Task status colors (hex). */
 export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
+  clarification: "#FF8800", // Orange — needs attention
   working: "#5599FF",
   reviewing: "#D4A000",
   reviewed: "#22BB22",
@@ -88,8 +89,21 @@ export const CHECKS_ICON: Record<string, string> = {
 
 export type StatusFilter = "all" | "active" | "done";
 
-const ACTIVE_STATUSES: TaskStatus[] = ["pending", "working", "reviewing", "reviewed", "stuck"];
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "reviewing", "reviewed", "stuck"];
 const DONE_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
+
+/** Sort tasks: active first, terminal last, by updated_at within groups */
+function sortTasks(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const aTerminal = DONE_STATUSES.includes(a.status);
+    const bTerminal = DONE_STATUSES.includes(b.status);
+    if (aTerminal !== bTerminal) {
+      return aTerminal ? 1 : -1;
+    }
+    // Within same group, sort by updated_at descending
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+}
 
 export interface DashboardOptions {
   all?: boolean;
@@ -751,20 +765,22 @@ export class DashboardState {
   }
 
   private applyStatusFilter(): void {
+    let filtered: Task[];
     switch (this.data.statusFilter) {
       case "active":
-        this.data.tasks = this.data.allTasks.filter((t) =>
+        filtered = this.data.allTasks.filter((t) =>
           ACTIVE_STATUSES.includes(t.status)
         );
         break;
       case "done":
-        this.data.tasks = this.data.allTasks.filter((t) =>
+        filtered = this.data.allTasks.filter((t) =>
           DONE_STATUSES.includes(t.status)
         );
         break;
       default:
-        this.data.tasks = [...this.data.allTasks];
+        filtered = this.data.allTasks;
     }
+    this.data.tasks = sortTasks(filtered);
   }
 
   private cycleStatusFilter(): void {
