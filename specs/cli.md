@@ -21,14 +21,13 @@ orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
 orange task respawn <task_id>
-orange task update [task_id] [--branch [name]] [--description <text>]
+orange task update [task_id] [--branch [name]] [--description <text>] [--status <status>]
   # task_id: optional if running inside workspace (auto-detected)
   # --branch: if name exists → checkout + delete old; else → rename current
   # --branch (no value): sync task to current git branch
   # --description: update TASK.md body
-orange task complete <task_id>      # Called by hook → reviewing
+  # --status: update task status (clarification, working, reviewing, stuck)
 orange task approve <task_id>       # Human approves → reviewed, pushes + creates PR
-orange task stuck <task_id>         # Called by hook → stuck
 orange task merge <task_id> [--strategy ff|merge] [--local]
 orange task cancel <task_id> [--yes]
 orange task delete <task_id> [--yes] # done/failed/cancelled only

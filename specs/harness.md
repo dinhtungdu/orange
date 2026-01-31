@@ -45,7 +45,6 @@ Added to main repo's `.git/info/exclude`:
 
 ```
 TASK.md
-.orange-outcome
 .claude/
 .pi/
 .codex/

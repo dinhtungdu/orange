@@ -29,6 +29,7 @@ Colors: ● green, ✗ red, ○ gray
 | Status | Meaning |
 |--------|---------|
 | pending | waiting to spawn |
+| clarification | agent waiting for user input |
 | working | agent assigned and should be running |
 | reviewing | agent done, awaiting human review |
 | reviewed | human approved, ready to merge |
@@ -36,6 +37,8 @@ Colors: ● green, ✗ red, ○ gray
 | done | merged/completed |
 | failed | errored |
 | cancelled | user cancelled |
+
+**Clarification tasks** need attention — agent has questions or discovered scope issues. Attach to session to discuss with agent.
 
 When a task has a PR, the Status column shows PR info instead (e.g., `#123 open ✓`).
 
@@ -72,6 +75,7 @@ Footer shows relevant actions based on selected task's state:
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
 | Pending | j/k:nav  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
+| Clarification | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
@@ -180,14 +184,9 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 ## Polling & Updates
 
 **File watcher** (chokidar, 100ms debounce):
-- Watches `~/orange/tasks/` for `TASK.md` and `.orange-outcome` changes
+- Watches `~/orange/tasks/` for `TASK.md` changes
 - Triggers immediate refresh on file change
-
-**Outcome detection** (harness-agnostic):
-- On refresh, checks `.orange-outcome` files for `working` tasks
-- If outcome is `passed` or `reviewing` → status becomes `reviewing`
-- If outcome is `stuck` → status becomes `stuck`
-- Works with any harness (Claude Code, pi, Cursor, etc.)
+- Status updates via `orange task update --status` are detected automatically
 
 **Health check** (30s interval):
 - Single `tmux list-sessions` call (not N `has-session` calls)

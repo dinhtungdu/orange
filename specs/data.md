@@ -15,7 +15,6 @@ All data in `~/orange/`.
     └── <project>/
         └── <task_id>/          # Directory named by task ID (not branch)
             ├── TASK.md           # Description, metadata (frontmatter)
-            ├── .orange-outcome   # Agent outcome (symlinked to worktree)
             └── history.jsonl     # Event log
 ```
 
@@ -61,6 +60,33 @@ Optional implementation context (separated by `---`).
 Piped via `--context -` on task create.
 ```
 
+### Questions Section
+
+When agent needs clarification, it adds a `## Questions` section:
+
+```markdown
+---
+status: clarification
+...
+---
+
+Task description here.
+
+## Questions
+
+- [ ] Should this apply to all workspaces or just active ones?
+- [ ] How should we handle edge case X?
+
+---
+
+Context...
+```
+
+After user answers (via session conversation), agent:
+1. Updates description with refined requirements
+2. Removes or checks off questions
+3. Sets status back to `working`
+
 ### Interactive Session (Empty Description)
 
 When created without a description, TASK.md body is empty. Agent spawns with no initial prompt. Agent reads AGENTS.md instruction to discuss with user, then update TASK.md body.
@@ -100,6 +126,7 @@ Append-only event log:
 | Status | Description |
 |--------|-------------|
 | `pending` | Created, not yet spawned |
+| `clarification` | Agent waiting for user input (vague task or scope change) |
 | `working` | Agent actively working (includes self-review) |
 | `reviewing` | Self-review passed, awaiting human review |
 | `reviewed` | Human approved, ready to merge |
@@ -107,3 +134,16 @@ Append-only event log:
 | `done` | Merged/completed |
 | `failed` | Agent crashed or errored |
 | `cancelled` | User cancelled |
+
+### Clarification Flow
+
+```
+pending → working → clarification → working → ...
+              ↑___________↓
+```
+
+Agent enters `clarification` when:
+1. **Task is vague** — unclear requirements before starting
+2. **Scope expands** — discovers complexity mid-work
+
+Agent writes questions to `## Questions` section, runs `orange task update --status clarification`, then waits in session. User attaches to tmux session, discusses with agent. Agent updates TASK.md body with refined spec, runs `orange task update --status working`.
