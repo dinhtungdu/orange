@@ -12,10 +12,13 @@ import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 import { loadProjects, saveTask, appendHistory } from "../core/state.js";
 import { createTaskRecord } from "../core/task.js";
-import { getWorkspacePath, loadPoolState } from "../core/workspace.js";
+import { getWorkspacePath, loadPoolState, releaseWorkspace } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
 import { refreshTaskPR } from "../core/task.js";
 import { getInstalledHarnesses } from "../core/harness.js";
+
+/** Terminal task statuses — task is finished, no more work expected */
+const TERMINAL_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
 
 /**
  * Clean up nested error messages for display.
@@ -204,8 +207,7 @@ export class DashboardState {
   private listeners: ChangeListener[] = [];
   private attachListeners: AttachListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
-  private captureInterval: ReturnType<typeof setInterval> | null = null;
-  private prPollInterval: ReturnType<typeof setInterval> | null = null;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(deps: Deps, options: DashboardOptions = {}) {
     this.deps = deps;
@@ -278,22 +280,22 @@ export class DashboardState {
       }, 100);
     });
 
-    // Health check for dead sessions (30s is fine, not time-critical)
-    this.captureInterval = setInterval(() => {
-      this.captureOutputs().then(() => this.emit());
+    // Poll loop: health check, orphan cleanup, PR sync (30s interval)
+    this.pollInterval = setInterval(() => {
+      Promise.all([
+        this.captureOutputs(),
+        this.cleanupOrphans(),
+        this.refreshPRStatuses(),
+      ]).then(() => this.emit());
     }, 30000);
 
-    // Poll PR statuses every 30s
+    // Initial PR status refresh
     await this.refreshPRStatuses();
-    this.prPollInterval = setInterval(() => {
-      this.refreshPRStatuses().then(() => this.emit());
-    }, 30000);
   }
 
   async dispose(): Promise<void> {
     if (this.watcher) await this.watcher.close();
-    if (this.captureInterval) clearInterval(this.captureInterval);
-    if (this.prPollInterval) clearInterval(this.prPollInterval);
+    if (this.pollInterval) clearInterval(this.pollInterval);
   }
 
   /** Load tasks without starting watchers. For testing. */
@@ -638,9 +640,7 @@ export class DashboardState {
   }
 
   private async refreshPRStatuses(): Promise<void> {
-    const tasksWithPR = this.data.tasks.filter((t) => t.pr_url);
-    if (tasksWithPR.length === 0) return;
-
+    const log = this.deps.logger.child("dashboard");
     const projects = await loadProjects(this.deps);
     const projectMap = new Map(projects.map((p) => [p.name, p]));
 
@@ -648,9 +648,15 @@ export class DashboardState {
     const ghAvailableByProject = new Map<string, boolean>();
 
     const mergedTasks: Task[] = [];
+    const discoveredPRs: Array<{ task: Task; url: string }> = [];
+
+    // Process all non-terminal tasks (both with and without PR)
+    const tasksToCheck = this.data.tasks.filter(
+      (t) => !TERMINAL_STATUSES.includes(t.status)
+    );
 
     await Promise.all(
-      tasksWithPR.map(async (task) => {
+      tasksToCheck.map(async (task) => {
         const project = projectMap.get(task.project);
         if (!project) return;
 
@@ -663,18 +669,39 @@ export class DashboardState {
 
         try {
           const status = await this.deps.github.getPRStatus(project.path, task.branch);
-          this.data.prStatuses.set(task.id, status);
 
-          // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
-          const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
-          if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
-            mergedTasks.push(task);
+          if (status.exists) {
+            this.data.prStatuses.set(task.id, status);
+
+            // PR discovery: task has no pr_url but PR exists on GitHub
+            if (!task.pr_url && status.url) {
+              discoveredPRs.push({ task, url: status.url });
+            }
+
+            // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
+            const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+            if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
+              mergedTasks.push(task);
+            }
           }
         } catch {
           // Ignore errors
         }
       })
     );
+
+    // Save discovered PRs to tasks
+    for (const { task, url } of discoveredPRs) {
+      log.info("Discovered existing PR for task", { task: task.id, branch: task.branch, url });
+      task.pr_url = url;
+      task.updated_at = this.deps.clock.now();
+      await saveTask(this.deps, task);
+      await appendHistory(this.deps, task.id, task.project, {
+        type: "pr.created",
+        timestamp: this.deps.clock.now(),
+        url,
+      });
+    }
 
     // Auto-merge tasks whose PRs were merged on GitHub
     for (const task of mergedTasks) {
@@ -760,6 +787,118 @@ export class DashboardState {
         }
       })
     );
+  }
+
+  /**
+   * Clean up orphaned resources:
+   * - Release workspaces bound to terminal tasks (done/cancelled/failed)
+   * - Kill sessions for terminal tasks
+   * - Release workspaces from interrupted spawns (bound but no tmux_session)
+   */
+  private async cleanupOrphans(): Promise<void> {
+    const log = this.deps.logger.child("dashboard");
+
+    // Build task lookup by ID
+    const taskById = new Map(this.data.allTasks.map((t) => [t.id, t]));
+
+    // Get all live sessions
+    const liveSessions = new Set(await this.deps.tmux.listSessions());
+
+    // Load pool state to find bound workspaces
+    const poolState = await loadPoolState(this.deps);
+
+    for (const [workspace, entry] of Object.entries(poolState.workspaces)) {
+      if (entry.status !== "bound" || !entry.task) continue;
+
+      // entry.task is "project/branch" format, need to find task by matching
+      const task = this.data.allTasks.find(
+        (t) => `${t.project}/${t.branch}` === entry.task
+      );
+
+      if (!task) {
+        // Task doesn't exist — orphaned workspace (task was deleted)
+        log.info("Releasing orphaned workspace (task deleted)", { workspace, task: entry.task });
+        try {
+          await releaseWorkspace(this.deps, workspace);
+        } catch (err) {
+          log.warn("Failed to release orphaned workspace", {
+            workspace,
+            error: err instanceof Error ? err.message : "Unknown",
+          });
+        }
+        continue;
+      }
+
+      // Terminal task with bound workspace — release it
+      if (TERMINAL_STATUSES.includes(task.status)) {
+        log.info("Releasing workspace for terminal task", {
+          workspace,
+          task: task.id,
+          status: task.status,
+        });
+
+        // Kill session if still alive
+        if (task.tmux_session && liveSessions.has(task.tmux_session)) {
+          log.info("Killing orphaned session for terminal task", {
+            session: task.tmux_session,
+            task: task.id,
+          });
+          await this.deps.tmux.killSessionSafe(task.tmux_session);
+        }
+
+        try {
+          await releaseWorkspace(this.deps, workspace);
+          // Clear workspace from task
+          task.workspace = null;
+          task.tmux_session = null;
+          await saveTask(this.deps, task);
+        } catch (err) {
+          log.warn("Failed to release workspace for terminal task", {
+            workspace,
+            task: task.id,
+            error: err instanceof Error ? err.message : "Unknown",
+          });
+        }
+        continue;
+      }
+
+      // Interrupted spawn: workspace bound but no tmux_session and still pending
+      if (task.status === "pending" && task.workspace && !task.tmux_session) {
+        log.info("Releasing workspace from interrupted spawn", {
+          workspace,
+          task: task.id,
+        });
+        try {
+          await releaseWorkspace(this.deps, workspace);
+          task.workspace = null;
+          await saveTask(this.deps, task);
+        } catch (err) {
+          log.warn("Failed to release workspace from interrupted spawn", {
+            workspace,
+            task: task.id,
+            error: err instanceof Error ? err.message : "Unknown",
+          });
+        }
+      }
+    }
+
+    // Also check for orphaned sessions (session alive but task is terminal)
+    for (const task of this.data.allTasks) {
+      if (!task.tmux_session) continue;
+      if (!TERMINAL_STATUSES.includes(task.status)) continue;
+      if (!liveSessions.has(task.tmux_session)) continue;
+
+      log.info("Killing orphaned session for terminal task", {
+        session: task.tmux_session,
+        task: task.id,
+        status: task.status,
+      });
+      await this.deps.tmux.killSessionSafe(task.tmux_session);
+
+      // Clear session from task
+      task.tmux_session = null;
+      await saveTask(this.deps, task);
+    }
   }
 
   private getOrangeCommand(args: string[]): string[] {
