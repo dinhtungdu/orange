@@ -113,7 +113,7 @@ describe("task create command", () => {
     expect(task!.project).toBe("testproj");
     expect(task!.branch).toBe("feature-x");
     expect(task!.status).toBe("pending");
-    expect(task!.description).toBe("Implement feature X");
+    expect(task!.summary).toBe("Implement feature X");
     expect(task!.workspace).toBeNull();
     expect(task!.tmux_session).toBeNull();
 
@@ -122,17 +122,17 @@ describe("task create command", () => {
     expect(consoleLogs[0]).toContain("testproj/feature-x");
   });
 
-  test("creates task with multi-word description", async () => {
+  test("creates task with multi-word summary", async () => {
     const parsed = parseArgs([
       "bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "my-branch",
-      "This", "is", "a", "multi", "word", "description"
+      "This", "is", "a", "multi", "word", "summary"
     ]);
 
     await runTaskCommand(parsed, deps);
 
     const taskId = await getTaskIdByBranch(deps, "my-branch");
     const task = await loadTask(deps, "testproj", taskId);
-    expect(task!.description).toBe("This is a multi word description");
+    expect(task!.summary).toBe("This is a multi word summary");
   });
 
   test("creates history entry for task creation", async () => {
@@ -177,8 +177,8 @@ describe("task create command", () => {
 
     await runTaskCommand(parsed, deps);
 
-    // Should create task with auto-generated branch (orange-tasks/<id>) and empty description
-    expect(consoleLogs[0]).toMatch(/Created task \w+ \(testproj\/orange-tasks\/\w+\)/);
+    // Should create task with auto-generated branch (orange-tasks/<id>) and clarification status (empty summary)
+    expect(consoleLogs[0]).toMatch(/Created task \w+ \(testproj\/orange-tasks\/\w+\) \[clarification\]/);
   });
 
   test("creates task with --status=reviewing and skips spawn", async () => {
@@ -1048,23 +1048,23 @@ describe("task update command", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test("updates task description", async () => {
+  test("updates task summary", async () => {
     // Create a task
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "test-branch", "original description"]),
+      parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "test-branch", "original summary"]),
       deps
     );
     const taskId = await getTaskIdByBranch(deps, "test-branch");
 
-    // Update description
+    // Update summary
     await runTaskCommand(
-      parseArgs(["bun", "script.ts", "task", "update", taskId, "--description", "updated description"]),
+      parseArgs(["bun", "script.ts", "task", "update", taskId, "--summary", "updated summary"]),
       deps
     );
 
     const task = await loadTask(deps, "testproj", taskId);
-    expect(task?.description).toBe("updated description");
-    expect(consoleLogs.some(l => l.includes("description updated"))).toBe(true);
+    expect(task?.summary).toBe("updated summary");
+    expect(consoleLogs.some(l => l.includes("summary updated"))).toBe(true);
   });
 
   test("renames branch when new name does not exist", async () => {
@@ -1120,12 +1120,12 @@ describe("task update command", () => {
       runTaskCommand(parseArgs(["bun", "script.ts", "task", "update", taskId]), deps)
     ).rejects.toThrow("process.exit(1)");
 
-    expect(consoleErrors[0]).toContain("--branch or --description");
+    expect(consoleErrors[0]).toContain("--branch, --summary, or --status");
   });
 
   test("errors when task not found", async () => {
     await expect(
-      runTaskCommand(parseArgs(["bun", "script.ts", "task", "update", "nonexistent", "--description", "test"]), deps)
+      runTaskCommand(parseArgs(["bun", "script.ts", "task", "update", "nonexistent", "--summary", "test"]), deps)
     ).rejects.toThrow("process.exit(1)");
 
     expect(consoleErrors[0]).toContain("not found");

@@ -321,17 +321,17 @@ function buildDashboard(
     createForm.visible = cm.active;
     if (cm.active) {
       const branchCursor = cm.focusedField === "branch" ? "█" : "";
-      const descCursor = cm.focusedField === "description" ? "█" : "";
+      const summaryCursor = cm.focusedField === "summary" ? "█" : "";
       const branchHighlight = cm.focusedField === "branch" ? "#00DDFF" : "#888888";
-      const descHighlight = cm.focusedField === "description" ? "#00DDFF" : "#888888";
+      const summaryHighlight = cm.focusedField === "summary" ? "#00DDFF" : "#888888";
       const harnessHighlight = cm.focusedField === "harness" ? "#00DDFF" : "#888888";
       const statusHighlight = cm.focusedField === "status" ? "#00DDFF" : "#888888";
       const branchHint = cm.branch ? "" : " (auto)";
       createBranchLabel.content = `Branch:      [${cm.branch}${branchCursor}]${branchHint}`;
       createBranchLabel.fg = branchHighlight;
-      const descHint = cm.description ? "" : " (optional)";
-      createDescLabel.content = `Description: [${cm.description}${descCursor}]${descHint}`;
-      createDescLabel.fg = descHighlight;
+      const summaryHint = cm.summary ? "" : " (optional)";
+      createDescLabel.content = `Summary:     [${cm.summary}${summaryCursor}]${summaryHint}`;
+      createDescLabel.fg = summaryHighlight;
       // Harness field: show as toggleable with indicator
       const harnessDisplay = `${cm.harness} ◀`;
       createHarnessLabel.content = `Harness:     [${harnessDisplay}]`;
@@ -428,7 +428,7 @@ function buildDashboard(
       const changesAdded = stats && stats.added > 0 ? `+${stats.added}` : "";
       const changesRemoved = stats && stats.removed > 0 ? `-${stats.removed}` : "";
 
-      // Outer container for row + description
+      // Outer container for row + summary
       const rowContainer = new BoxRenderable(renderer, {
         id: `task-row-${i}`,
         flexDirection: "column",
@@ -453,20 +453,20 @@ function buildDashboard(
 
       rowContainer.add(tableRow);
 
-      // Description for selected task
+      // Summary for selected task
       if (selected) {
         const idLabel = task.id;
-        const descMaxLen = width - 6 - idLabel.length;
-        const desc =
-          task.description.length > descMaxLen
-            ? task.description.slice(0, descMaxLen - 1) + "…"
-            : task.description;
-        const descText = new TextRenderable(renderer, {
-          id: `task-desc-${i}`,
-          content: ` └ ${desc} (${idLabel})`,
+        const summaryMaxLen = width - 6 - idLabel.length;
+        const summary =
+          task.summary.length > summaryMaxLen
+            ? task.summary.slice(0, summaryMaxLen - 1) + "…"
+            : task.summary;
+        const summaryText = new TextRenderable(renderer, {
+          id: `task-summary-${i}`,
+          content: ` └ ${summary} (${idLabel})`,
           fg: "#888888",
         });
-        rowContainer.add(descText);
+        rowContainer.add(summaryText);
       }
 
       taskList.add(rowContainer);

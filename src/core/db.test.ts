@@ -45,7 +45,7 @@ describe("Task Queries", () => {
     status: "pending",
     workspace: null,
     tmux_session: null,
-    description: "Test task",
+    summary: "Test task",
     body: "",
     created_at: "2024-01-01T00:00:00.000Z",
     updated_at: "2024-01-01T00:00:00.000Z",

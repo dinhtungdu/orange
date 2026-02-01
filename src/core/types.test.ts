@@ -23,7 +23,7 @@ describe("Task types", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Implement feature X",
+      summary: "Implement feature X",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -58,7 +58,7 @@ describe("Task types", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Test task",
+      summary: "Test task",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -118,7 +118,7 @@ describe("HistoryEvent types", () => {
       task_id: "abc12345",
       project: "orange",
       branch: "feature-x",
-      description: "Implement feature X",
+      summary: "Implement feature X",
     };
 
     expect(event.type).toBe("task.created");

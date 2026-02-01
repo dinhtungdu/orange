@@ -111,7 +111,7 @@ describe("Task state (TASK.md)", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Implement feature X",
+      summary: "Implement feature X",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -138,7 +138,7 @@ describe("Task state (TASK.md)", () => {
       status: "working",
       workspace: "orange--1",
       tmux_session: "orange/feature-x",
-      description: "Implement feature X",
+      summary: "Implement feature X",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T01:00:00.000Z",
@@ -166,7 +166,7 @@ describe("Task state (TASK.md)", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Initial description",
+      summary: "Initial description",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -177,7 +177,7 @@ describe("Task state (TASK.md)", () => {
 
     task.status = "working";
     task.workspace = "orange--1";
-    task.description = "Updated description";
+    task.summary = "Updated description";
 
     await saveTask(deps, task);
 
@@ -185,7 +185,7 @@ describe("Task state (TASK.md)", () => {
     const loaded = await loadTask(deps, "orange", "abc12345");
     expect(loaded?.status).toBe("working");
     expect(loaded?.workspace).toBe("orange--1");
-    expect(loaded?.description).toBe("Updated description");
+    expect(loaded?.summary).toBe("Updated description");
   });
 });
 
@@ -219,7 +219,7 @@ describe("History (history.jsonl)", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Test",
+      summary: "Test",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -234,7 +234,7 @@ describe("History (history.jsonl)", () => {
       task_id: "abc12345",
       project: "orange",
       branch: "feature-x",
-      description: "Test",
+      summary: "Test",
     });
 
     // loadHistory now takes task ID, not branch
@@ -252,7 +252,7 @@ describe("History (history.jsonl)", () => {
       status: "pending",
       workspace: null,
       tmux_session: null,
-      description: "Test",
+      summary: "Test",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -267,7 +267,7 @@ describe("History (history.jsonl)", () => {
       task_id: "abc12345",
       project: "orange",
       branch: "feature-x",
-      description: "Test",
+      summary: "Test",
     });
 
     await appendHistory(deps, "orange", "abc12345", {

@@ -117,7 +117,7 @@ export interface DiffStats {
 }
 
 /** Which field is focused in create mode. */
-export type CreateField = "branch" | "description" | "harness" | "status";
+export type CreateField = "branch" | "summary" | "harness" | "status";
 
 /** Initial status options for task creation. */
 export type CreateStatus = "pending" | "reviewing";
@@ -125,7 +125,7 @@ export type CreateStatus = "pending" | "reviewing";
 export interface CreateModeData {
   active: boolean;
   branch: string;
-  description: string;
+  summary: string;
   harness: Harness;
   installedHarnesses: Harness[];
   status: CreateStatus;
@@ -188,7 +188,7 @@ export class DashboardState {
     createMode: {
       active: false,
       branch: "",
-      description: "",
+      summary: "",
       harness: "claude", // Will be updated when entering create mode
       installedHarnesses: [],
       status: "pending",
@@ -410,7 +410,7 @@ export class DashboardState {
     this.data.createMode = {
       active: true,
       branch: "",
-      description: "",
+      summary: "",
       harness: installed[0],
       installedHarnesses: installed,
       status: "pending",
@@ -435,7 +435,7 @@ export class DashboardState {
     this.data.createMode = {
       active: false,
       branch: "",
-      description: "",
+      summary: "",
       harness: "claude",
       installedHarnesses: [],
       status: "pending",
@@ -452,8 +452,8 @@ export class DashboardState {
         this.exitCreateMode();
         return;
       case "tab": {
-        // Cycle through fields: branch → description → harness → status → branch
-        const fields: CreateField[] = ["branch", "description", "harness", "status"];
+        // Cycle through fields: branch → summary → harness → status → branch
+        const fields: CreateField[] = ["branch", "summary", "harness", "status"];
         const currentIdx = fields.indexOf(cm.focusedField);
         cm.focusedField = fields[(currentIdx + 1) % fields.length];
         this.emit();
@@ -465,8 +465,8 @@ export class DashboardState {
       case "backspace": {
         if (cm.focusedField === "branch") {
           cm.branch = cm.branch.slice(0, -1);
-        } else if (cm.focusedField === "description") {
-          cm.description = cm.description.slice(0, -1);
+        } else if (cm.focusedField === "summary") {
+          cm.summary = cm.summary.slice(0, -1);
         }
         // No backspace for harness/status fields
         this.emit();
@@ -480,8 +480,8 @@ export class DashboardState {
             if (/[a-zA-Z0-9\-_/.]/.test(key)) {
               cm.branch += key;
             }
-          } else if (cm.focusedField === "description") {
-            cm.description += key;
+          } else if (cm.focusedField === "summary") {
+            cm.summary += key;
           } else if (cm.focusedField === "harness") {
             // Cycle through installed harnesses on any key press
             const idx = cm.installedHarnesses.indexOf(cm.harness);
@@ -499,7 +499,7 @@ export class DashboardState {
   private async submitCreateTask(): Promise<void> {
     const cm = this.data.createMode;
     const inputBranch = cm.branch.trim();
-    const description = cm.description.trim();
+    const summary = cm.summary.trim();
     const harness = cm.harness;
     const status = cm.status;
 
@@ -508,8 +508,8 @@ export class DashboardState {
     const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
     const taskId = nanoid();
 
-    // Branch defaults to task ID if empty
-    const branch = inputBranch || taskId;
+    // Branch defaults to orange-tasks/<id> if empty
+    const branch = inputBranch || `orange-tasks/${taskId}`;
 
     const projectName = this.data.projectFilter!;
     const projects = await loadProjects(this.deps);
@@ -524,7 +524,7 @@ export class DashboardState {
     this.data.createMode = {
       active: false,
       branch: "",
-      description: "",
+      summary: "",
       harness: "claude",
       installedHarnesses: [],
       status: "pending",
@@ -536,18 +536,18 @@ export class DashboardState {
         id: taskId,
         project,
         branch,
-        description,
+        summary,
         harness,
         status,
       });
 
       // Refresh immediately so the new task shows up before spawning
-      this.data.message = `Created ${project.name}/${branch} [${status}] [${harness}]`;
+      this.data.message = `Created ${project.name}/${branch} [${task.status}] [${harness}]`;
       await this.refreshTasks();
       this.emit();
 
-      // Auto-spawn agent only for pending tasks
-      if (status === "pending") {
+      // Auto-spawn agent unless status is reviewing
+      if (task.status !== "reviewing") {
         try {
           await spawnTaskById(this.deps, task.id);
           await this.refreshTasks();

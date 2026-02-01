@@ -258,7 +258,7 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "pending" as const,
       workspace: null,
       tmux_session: null,
-      description: "Add new feature",
+      summary: "Add new feature",
       body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -288,7 +288,7 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "pending" as const,
       workspace: null,
       tmux_session: null,
-      description: "Task 1",
+      summary: "Task 1",
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
@@ -302,7 +302,7 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "working" as const,
       workspace: "test-repo--1",
       tmux_session: "test-repo/feature-2",
-      description: "Task 2",
+      summary: "Task 2",
       body: "",
       created_at: "2024-01-02T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
@@ -327,7 +327,7 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "pending" as const,
       workspace: null,
       tmux_session: null,
-      description: "Another feature",
+      summary: "Another feature",
       body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -435,13 +435,13 @@ describe("Integration: Multiple Projects", () => {
     // Create tasks for different projects
     const task1 = {
       id: "t1", project: "repo1", branch: "feat1", harness: "claude" as const, status: "pending" as const,
-      workspace: null, tmux_session: null, description: "Repo 1 task", body: "",
+      workspace: null, tmux_session: null, summary: "Repo 1 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       pr_url: null,
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", harness: "claude" as const, status: "working" as const,
-      workspace: null, tmux_session: null, description: "Repo 2 task", body: "",
+      workspace: null, tmux_session: null, summary: "Repo 2 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       pr_url: null,
     };

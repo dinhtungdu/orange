@@ -28,7 +28,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   status: "pending",
   workspace: null,
   tmux_session: null,
-  description: "Test task description",
+  summary: "Test task description",
   body: "",
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
@@ -188,7 +188,7 @@ function buildTestDashboard(
       if (selected) {
         rowContainer.add(new TextRenderable(renderer, {
           id: `task-desc-${i}`,
-          content: ` └ ${task.description}`,
+          content: ` └ ${task.summary}`,
           fg: "#888888",
         }));
       }
@@ -257,9 +257,9 @@ describe("Dashboard Visual", () => {
   test("renders task list with proper column alignment", async () => {
     // Use different timestamps for deterministic ordering (newest first)
     // Working task has an active session
-    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", tmux_session: "testproj/login-fix", description: "Fix OAuth redirect loop", created_at: "2024-01-15T12:00:00.000Z" }));
-    await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", description: "Add dark theme", created_at: "2024-01-15T11:00:00.000Z" }));
-    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", description: "Password reset flow", created_at: "2024-01-15T10:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t1", branch: "login-fix", status: "working", tmux_session: "testproj/login-fix", summary: "Fix OAuth redirect loop", created_at: "2024-01-15T12:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "dark-mode", status: "done", summary: "Add dark theme", created_at: "2024-01-15T11:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", summary: "Password reset flow", created_at: "2024-01-15T10:00:00.000Z" }));
 
     // Mock tmux to return the working task's session as alive
     (deps.tmux as MockTmux).sessions.set("testproj/login-fix", { cwd: "/tmp", command: "", output: [] });
@@ -337,8 +337,8 @@ describe("Dashboard Visual", () => {
 
   test("cursor navigation changes selected row", async () => {
     // Use different timestamps for deterministic ordering (newest first)
-    await saveTask(deps, createTask({ id: "t1", branch: "branch-a", status: "working", description: "First task", created_at: "2024-01-15T12:00:00.000Z" }));
-    await saveTask(deps, createTask({ id: "t2", branch: "branch-b", status: "done", description: "Second task", created_at: "2024-01-15T11:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t1", branch: "branch-a", status: "working", summary: "First task", created_at: "2024-01-15T12:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "branch-b", status: "done", summary: "Second task", created_at: "2024-01-15T11:00:00.000Z" }));
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,

@@ -30,7 +30,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   status: "pending",
   workspace: null,
   tmux_session: null,
-  description: "Test task description",
+  summary: "Test task description",
   body: "",
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
@@ -278,7 +278,7 @@ describe("Dashboard State", () => {
     state.handleInput("escape");
     expect(state.isCreateMode()).toBe(false);
     expect(state.data.createMode.branch).toBe("");
-    expect(state.data.createMode.description).toBe("");
+    expect(state.data.createMode.summary).toBe("");
   });
 
   test("tab switches focus between fields", async () => {
@@ -290,7 +290,7 @@ describe("Dashboard State", () => {
     expect(state.data.createMode.focusedField).toBe("branch");
 
     state.handleInput("tab");
-    expect(state.data.createMode.focusedField).toBe("description");
+    expect(state.data.createMode.focusedField).toBe("summary");
 
     state.handleInput("tab");
     expect(state.data.createMode.focusedField).toBe("harness");
@@ -319,7 +319,7 @@ describe("Dashboard State", () => {
     state.handleInput("B");
     state.handleInput("u");
     state.handleInput("g");
-    expect(state.data.createMode.description).toBe("Bug");
+    expect(state.data.createMode.summary).toBe("Bug");
   });
 
   test("backspace removes last character from focused field", async () => {

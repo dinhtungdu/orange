@@ -50,8 +50,8 @@ export interface Task {
   workspace: string | null;
   /** tmux session name (e.g., "orange/dark-mode"), null if not spawned */
   tmux_session: string | null;
-  /** Human-readable task description (short, in frontmatter) */
-  description: string;
+  /** Human-readable task summary (short one-liner, in frontmatter) */
+  summary: string;
   /** Free-form body content (context, questions, notes — agent-controlled) */
   body: string;
   /** ISO 8601 timestamp of task creation */
@@ -278,7 +278,7 @@ export interface TaskCreatedEvent extends HistoryEventBase {
   task_id: string;
   project: string;
   branch: string;
-  description: string;
+  summary: string;
 }
 
 /**
@@ -288,7 +288,7 @@ export interface TaskUpdatedEvent extends HistoryEventBase {
   type: "task.updated";
   changes: {
     branch?: { from: string; to: string };
-    description?: boolean;
+    summary?: boolean;
   };
 }
 

@@ -3,7 +3,7 @@
  *
  * Handles:
  * - projects.json: Project registry
- * - TASK.md: Task frontmatter and description
+ * - TASK.md: Task frontmatter and summary
  * - history.jsonl: Append-only event log
  */
 
@@ -65,7 +65,7 @@ export async function saveProjects(deps: Deps, projects: Project[]): Promise<voi
  *
  * Format:
  * ---
- * description: Short task description
+ * summary: Short task summary
  * ...other frontmatter...
  * ---
  * 
@@ -88,7 +88,7 @@ export async function loadTask(
       status: data.status as Task["status"],
       workspace: (data.workspace as string) ?? null,
       tmux_session: (data.tmux_session as string) ?? null,
-      description: (data.description as string) ?? "",
+      summary: (data.summary as string) ?? "",
       body: body.trim(),
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
@@ -104,7 +104,7 @@ export async function loadTask(
  *
  * Format:
  * ---
- * description: Short task description
+ * summary: Short task summary
  * ...other frontmatter...
  * ---
  * 
@@ -120,7 +120,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     branch: task.branch,
     harness: task.harness,
     status: task.status,
-    description: task.description,
+    summary: task.summary,
     workspace: task.workspace,
     tmux_session: task.tmux_session,
     created_at: task.created_at,

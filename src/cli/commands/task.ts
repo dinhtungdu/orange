@@ -4,7 +4,7 @@
  * All commands are CWD-aware - project is inferred from current directory.
  *
  * Commands:
- * - orange task create <branch> <description>
+ * - orange task create <branch> <summary>
  * - orange task list [--status <status>] [--all]
  * - orange task spawn <task_id>
  * - orange task attach <task_id>            (attach to running session)
@@ -123,27 +123,28 @@ export async function runTaskCommand(
 async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
-  // Branch and description are optional
+  // Branch and summary are optional
   // If branch not provided, use auto-generated task ID
-  // If description not provided, spawn interactive session
+  // If summary not provided, task starts in clarification status
   const { customAlphabet } = await import("nanoid");
   const nanoid = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
   const taskId = nanoid();
 
-  const [inputBranch, ...descParts] = parsed.args;
+  const [inputBranch, ...summaryParts] = parsed.args;
   const branch = inputBranch || `orange-tasks/${taskId}`;
-  const description = descParts.join(" ");
+  const summary = summaryParts.join(" ");
 
-  // Parse --status flag (default: pending)
+  // Parse --status flag (default: pending, auto-set to clarification if empty summary)
   const statusArg = parsed.options.status as string | undefined;
-  let status: "pending" | "reviewing" = "pending";
+  let status: "pending" | "clarification" | "reviewing" | undefined;
   if (statusArg) {
-    if (statusArg !== "pending" && statusArg !== "reviewing") {
-      console.error("Invalid status. Use 'pending' or 'reviewing'");
+    if (statusArg !== "pending" && statusArg !== "clarification" && statusArg !== "reviewing") {
+      console.error("Invalid status. Use 'pending', 'clarification', or 'reviewing'");
       process.exit(1);
     }
     status = statusArg;
   }
+  // Empty summary auto-sets clarification status (handled in createTaskRecord)
 
   // Parse --harness flag (optional, auto-detects if not specified)
   const harnessArg = parsed.options.harness as string | undefined;
@@ -178,7 +179,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   let task: Task;
   try {
-    const result = await createTaskRecord(deps, { id: taskId, project, branch, description, context, status, harness: harnessArg });
+    const result = await createTaskRecord(deps, { id: taskId, project, branch, summary, context, status, harness: harnessArg });
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });
@@ -187,10 +188,10 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`Created task ${task.id} (${project.name}/${branch}) [${status}] [${task.harness}]`);
+  console.log(`Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`);
 
-  // Auto-spawn agent only for pending tasks without --no-spawn flag
-  if (status === "pending" && !parsed.options["no-spawn"]) {
+  // Auto-spawn agent unless --no-spawn or status is reviewing
+  if (task.status !== "reviewing" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
   }
@@ -250,7 +251,7 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   for (const task of tasks) {
     const icon = statusIcon[task.status];
     console.log(`  ${icon} ${task.id} [${task.status}] ${task.project}/${task.branch}`);
-    console.log(`    ${task.description}`);
+    console.log(`    ${task.summary}`);
     console.log();
   }
 }
@@ -493,17 +494,27 @@ async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
 }
 
 /**
- * Update task branch and/or description.
+ * Update task branch and/or summary.
  */
 async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
 
   let branchOption = parsed.options.branch;
-  const newDescription = parsed.options.description as string | undefined;
+  const newSummary = parsed.options.summary as string | undefined;
+  const newStatus = parsed.options.status as string | undefined;
 
-  if (!branchOption && !newDescription) {
-    console.error("At least one of --branch or --description is required");
+  if (!branchOption && newSummary === undefined && !newStatus) {
+    console.error("At least one of --branch, --summary, or --status is required");
     process.exit(1);
+  }
+
+  // Validate status if provided
+  if (newStatus) {
+    const validStatuses = ["clarification", "working", "reviewing", "stuck"];
+    if (!validStatuses.includes(newStatus)) {
+      console.error(`Invalid status. Use: ${validStatuses.join(", ")}`);
+      process.exit(1);
+    }
   }
 
   // Get task ID from args or detect from workspace
@@ -511,7 +522,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (!taskId) {
     taskId = await getTaskIdFromWorkspace(deps) ?? "";
     if (!taskId) {
-      console.error("Usage: orange task update [task_id] --branch [name] --description <text>");
+      console.error("Usage: orange task update [task_id] --branch [name] --summary <text> --status <status>");
       console.error("Task ID required when not running inside a workspace");
       process.exit(1);
     }
@@ -595,28 +606,43 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     task.branch = newBranch;
   }
 
-  // Update description
-  if (newDescription !== undefined) {
-    task.description = newDescription;
+  // Update summary
+  if (newSummary !== undefined) {
+    task.summary = newSummary;
+  }
+
+  // Update status
+  const oldStatus = task.status;
+  if (newStatus && newStatus !== oldStatus) {
+    task.status = newStatus as Task["status"];
+    await appendHistory(deps, task.project, task.id, {
+      type: "status.changed",
+      timestamp: deps.clock.now(),
+      from: oldStatus,
+      to: task.status,
+    });
   }
 
   // Save task
   task.updated_at = deps.clock.now();
   await saveTask(deps, task);
 
-  // Log history
-  await appendHistory(deps, task.project, task.id, {
-    type: "task.updated",
-    timestamp: task.updated_at,
-    changes: {
-      ...(newBranch && newBranch !== oldBranch ? { branch: { from: oldBranch, to: newBranch } } : {}),
-      ...(newDescription !== undefined ? { description: true } : {}),
-    },
-  });
+  // Log history for branch/summary changes
+  if ((newBranch && newBranch !== oldBranch) || newSummary !== undefined) {
+    await appendHistory(deps, task.project, task.id, {
+      type: "task.updated",
+      timestamp: task.updated_at,
+      changes: {
+        ...(newBranch && newBranch !== oldBranch ? { branch: { from: oldBranch, to: newBranch } } : {}),
+        ...(newSummary !== undefined ? { summary: true } : {}),
+      },
+    });
+  }
 
   const changes: string[] = [];
   if (newBranch && newBranch !== oldBranch) changes.push(`branch: ${oldBranch} → ${newBranch}`);
-  if (newDescription !== undefined) changes.push("description updated");
+  if (newSummary !== undefined) changes.push("summary updated");
+  if (newStatus && newStatus !== oldStatus) changes.push(`status: ${oldStatus} → ${newStatus}`);
   console.log(`Updated task ${taskId}: ${changes.join(", ")}`);
 }
 
@@ -783,8 +809,8 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Create PR
-  const title = task.description.split("\n")[0];
-  const body = await buildPRBody(project.path, task.description, task.body);
+  const title = task.summary.split("\n")[0];
+  const body = await buildPRBody(project.path, task.summary, task.body);
 
   const prUrl = await deps.github.createPR(project.path, {
     branch: task.branch,

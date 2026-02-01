@@ -13,11 +13,11 @@ import { resolveHarness } from "./harness.js";
 export interface CreateTaskOptions {
   project: Project;
   branch: string;
-  description: string;
+  summary: string;
   /** Optional context to include in body as ## Context section */
   context?: string | null;
-  /** Initial status. Defaults to "pending". Only "pending" or "reviewing" allowed. */
-  status?: "pending" | "reviewing";
+  /** Initial status. Defaults to "pending". "clarification" auto-set for empty summary. */
+  status?: "pending" | "clarification" | "reviewing";
   /** Harness to use. If omitted, auto-detects first installed. */
   harness?: Harness | string;
   /** Task ID. If omitted, auto-generates. */
@@ -40,7 +40,9 @@ export async function createTaskRecord(
   deps: Deps,
   options: CreateTaskOptions
 ): Promise<CreateTaskResult> {
-  const { project, branch, description, context = null, status = "pending" } = options;
+  const { project, branch, summary, context = null } = options;
+  // Empty summary auto-sets clarification status
+  const status = options.status ?? (summary.trim() === "" ? "clarification" : "pending");
   const log = deps.logger.child("task");
 
   // Check if an orange task already exists for this branch
@@ -60,7 +62,7 @@ export async function createTaskRecord(
   // Alphanumeric-only alphabet to avoid IDs starting with '-' which breaks CLI arg parsing
   const id = options.id || customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21)();
 
-  log.info("Creating task", { taskId: id, project: project.name, branch, description, harness });
+  log.info("Creating task", { taskId: id, project: project.name, branch, summary, harness });
 
   // Build body from context (if provided)
   const body = context ? `## Context\n\n${context}` : "";
@@ -73,7 +75,7 @@ export async function createTaskRecord(
     status,
     workspace: null,
     tmux_session: null,
-    description,
+    summary,
     body,
     created_at: now,
     updated_at: now,
@@ -92,7 +94,7 @@ export async function createTaskRecord(
     task_id: id,
     project: project.name,
     branch,
-    description,
+    summary,
   });
 
   log.info("Task created", { taskId: id, project: project.name, branch });

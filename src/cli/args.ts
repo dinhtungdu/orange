@@ -225,19 +225,19 @@ Project Management:
   orange project remove <name>        Remove a project
 
 Task Management (project inferred from cwd):
-  orange task create [branch] [description]
+  orange task create [branch] [summary]
                                       Create a new task (both optional)
                                       Empty branch: auto-generates from task ID
-                                      Empty description: interactive session
+                                      Empty summary: clarification status (agent asks what to do)
   orange task list [options]          List tasks
     --status <status>                 Filter by status
     --all                             Show all projects' tasks
   orange task spawn <task_id>         Spawn agent for task
   orange task attach <task_id>        Attach to task's tmux session
   orange task respawn <task_id>       Restart dead session
-  orange task update [task_id] [options] Update task branch/description
+  orange task update [task_id] [options] Update task branch/summary
     --branch [name]                   Rename to name, or current git branch if omitted
-    --description <text>              Update description
+    --summary <text>                  Update summary
                                       Task ID auto-detected if inside workspace
   orange task complete <task_id>      Mark task complete (hook)
   orange task stuck <task_id>         Mark task stuck (hook)

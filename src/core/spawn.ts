@@ -96,9 +96,11 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     throw new Error(`Task '${taskId}' not found`);
   }
 
-  if (task.status !== "pending") {
-    log.error("Task not pending", { taskId, status: task.status });
-    throw new Error(`Task '${taskId}' is not pending (status: ${task.status})`);
+  // Allow spawning pending or clarification tasks
+  // clarification = empty summary, agent will ask user what to work on
+  if (task.status !== "pending" && task.status !== "clarification") {
+    log.error("Task not spawnable", { taskId, status: task.status });
+    throw new Error(`Task '${taskId}' is not pending or clarification (status: ${task.status})`);
   }
 
   log.debug("Task loaded", { taskId, project: task.project, branch: task.branch });
@@ -169,7 +171,10 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
 
     // Update task
     const now = deps.clock.now();
-    task.status = "working";
+    const previousStatus = task.status;
+    // Keep clarification status if task had empty summary; otherwise set to working
+    const newStatus = previousStatus === "clarification" ? "clarification" : "working";
+    task.status = newStatus;
     task.workspace = workspace;
     task.tmux_session = tmuxSession;
     task.updated_at = now;
@@ -181,12 +186,14 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
       workspace,
       tmux_session: tmuxSession,
     });
-    await appendHistory(deps, task.project, task.id, {
-      type: "status.changed",
-      timestamp: now,
-      from: "pending",
-      to: "working",
-    });
+    if (previousStatus !== newStatus) {
+      await appendHistory(deps, task.project, task.id, {
+        type: "status.changed",
+        timestamp: now,
+        from: previousStatus,
+        to: newStatus,
+      });
+    }
 
     log.info("Task spawned", { taskId, workspace, session: tmuxSession });
   } catch (err) {
