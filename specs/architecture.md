@@ -4,6 +4,7 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 
 ## Specs
 
+- [Flows](./flows.md) — end-to-end workflows, status transitions
 - [Data & Storage](./data.md) — files, formats, task status
 - [CLI Commands](./cli.md) — project, task, workspace commands
 - [Dashboard](./dashboard.md) — TUI, keybindings
