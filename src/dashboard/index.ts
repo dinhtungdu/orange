@@ -453,9 +453,9 @@ function buildDashboard(
 
       rowContainer.add(tableRow);
 
-      // Summary line (always shown, indented to align under task name)
-      // Indentation: 1 (paddingLeft on tableRow) + 2 (selector "❯ " or "  ") + 2 (icon "● ") = 5
-      const summaryIndent = "     └ "; // 5 spaces + └ + space to align under task name
+      // Summary line (always shown, indented to align under session icon)
+      // Indentation: 1 (paddingLeft) + 2 (selector area) = 3, then └ under the icon
+      const summaryIndent = "   └ "; // 3 spaces + └ + space to align under session icon
       const summaryMaxLen = width - summaryIndent.length - 1;
       const summaryDisplay =
         task.summary.length > summaryMaxLen
