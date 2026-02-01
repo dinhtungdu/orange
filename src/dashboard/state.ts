@@ -305,6 +305,15 @@ export class DashboardState {
     await this.refreshTasks();
   }
 
+  /** Run poll cycle manually. For testing. */
+  async runPollCycle(): Promise<void> {
+    await Promise.all([
+      this.captureOutputs(),
+      this.cleanupOrphans(),
+      this.refreshPRStatuses(),
+    ]);
+  }
+
   getCursor(): number {
     return this.data.cursor;
   }
@@ -688,7 +697,7 @@ export class DashboardState {
       task.pr_url = url;
       task.updated_at = this.deps.clock.now();
       await saveTask(this.deps, task);
-      await appendHistory(this.deps, task.id, task.project, {
+      await appendHistory(this.deps, task.project, task.id, {
         type: "pr.created",
         timestamp: this.deps.clock.now(),
         url,

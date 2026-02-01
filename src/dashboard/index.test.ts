@@ -15,7 +15,9 @@ import { MockGitHub } from "../core/github.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockClock } from "../core/clock.js";
 import { NullLogger } from "../core/logger.js";
-import { saveTask, saveProjects } from "../core/state.js";
+import { saveTask, saveProjects, loadTask } from "../core/state.js";
+import { loadPoolState } from "../core/workspace.js";
+import { mkdir, writeFile } from "node:fs/promises";
 
 /**
  * Helper to create a task.
@@ -431,5 +433,211 @@ describe("Dashboard State", () => {
     unsub();
     state.handleInput("k");
     expect(changeCount).toBe(1); // No change after unsub
+  });
+});
+
+describe("Dashboard Poll Cycle", () => {
+  let tempDir: string;
+  let deps: Deps;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-poll-test-"));
+
+    deps = {
+      tmux: new MockTmux(),
+      git: new MockGit(),
+      github: new MockGitHub(),
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      logger: new NullLogger(),
+      dataDir: tempDir,
+    };
+
+    const project: Project = {
+      name: "testproj",
+      path: "/path/to/testproj",
+      default_branch: "main",
+      pool_size: 2,
+    };
+    await saveProjects(deps, [project]);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("orphan cleanup releases workspace for done task", async () => {
+    // Create a done task with workspace bound
+    const task = createTask({
+      id: "done-task",
+      branch: "done-branch",
+      status: "done",
+      workspace: "testproj--1",
+      tmux_session: null,
+    });
+    await saveTask(deps, task);
+
+    // Set up pool state with workspace bound to the task
+    const workspacesDir = join(tempDir, "workspaces");
+    await mkdir(workspacesDir, { recursive: true });
+    await writeFile(
+      join(workspacesDir, ".pool.json"),
+      JSON.stringify({
+        workspaces: {
+          "testproj--1": { status: "bound", task: "testproj/done-branch" },
+        },
+      })
+    );
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // Run poll cycle
+    await state.runPollCycle();
+
+    // Check workspace was released
+    const poolState = await loadPoolState(deps);
+    expect(poolState.workspaces["testproj--1"].status).toBe("available");
+  });
+
+  test("orphan cleanup releases workspace for cancelled task", async () => {
+    const task = createTask({
+      id: "cancelled-task",
+      branch: "cancelled-branch",
+      status: "cancelled",
+      workspace: "testproj--1",
+      tmux_session: null,
+    });
+    await saveTask(deps, task);
+
+    const workspacesDir = join(tempDir, "workspaces");
+    await mkdir(workspacesDir, { recursive: true });
+    await writeFile(
+      join(workspacesDir, ".pool.json"),
+      JSON.stringify({
+        workspaces: {
+          "testproj--1": { status: "bound", task: "testproj/cancelled-branch" },
+        },
+      })
+    );
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    const poolState = await loadPoolState(deps);
+    expect(poolState.workspaces["testproj--1"].status).toBe("available");
+  });
+
+  test("orphan cleanup kills session for terminal task", async () => {
+    const mockTmux = deps.tmux as MockTmux;
+    // Create a session using the Map interface
+    mockTmux.sessions.set("testproj/done-branch", { cwd: "/tmp", command: "echo", output: [] });
+
+    const task = createTask({
+      id: "done-task",
+      branch: "done-branch",
+      status: "done",
+      workspace: null,
+      tmux_session: "testproj/done-branch",
+    });
+    await saveTask(deps, task);
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    // Session should be killed
+    expect(mockTmux.sessions.has("testproj/done-branch")).toBe(false);
+  });
+
+  test("PR discovery populates pr_url for task with existing PR", async () => {
+    const mockGitHub = deps.github as MockGitHub;
+    mockGitHub.prs.set("feature-x", {
+      exists: true,
+      url: "https://github.com/test/repo/pull/123",
+      state: "OPEN",
+      checks: "pass",
+    });
+
+    // Task without pr_url
+    const task = createTask({
+      id: "pr-task",
+      branch: "feature-x",
+      status: "working",
+      pr_url: null,
+    });
+    await saveTask(deps, task);
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    // Reload task and check pr_url was set
+    const updatedTask = await loadTask(deps, "testproj", "pr-task");
+    expect(updatedTask?.pr_url).toBe("https://github.com/test/repo/pull/123");
+  });
+
+  test("PR discovery does not overwrite existing pr_url", async () => {
+    const mockGitHub = deps.github as MockGitHub;
+    mockGitHub.prs.set("feature-x", {
+      exists: true,
+      url: "https://github.com/test/repo/pull/999",
+      state: "OPEN",
+      checks: "pass",
+    });
+
+    // Task with existing pr_url
+    const task = createTask({
+      id: "pr-task",
+      branch: "feature-x",
+      status: "working",
+      pr_url: "https://github.com/test/repo/pull/123",
+    });
+    await saveTask(deps, task);
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    // pr_url should remain unchanged
+    const updatedTask = await loadTask(deps, "testproj", "pr-task");
+    expect(updatedTask?.pr_url).toBe("https://github.com/test/repo/pull/123");
+  });
+
+  test("PR discovery skips terminal tasks", async () => {
+    const mockGitHub = deps.github as MockGitHub;
+    mockGitHub.prs.set("done-branch", {
+      exists: true,
+      url: "https://github.com/test/repo/pull/123",
+      state: "MERGED",
+      checks: "pass",
+    });
+
+    const task = createTask({
+      id: "done-task",
+      branch: "done-branch",
+      status: "done",
+      pr_url: null,
+    });
+    await saveTask(deps, task);
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    // pr_url should not be set for terminal tasks
+    const updatedTask = await loadTask(deps, "testproj", "done-task");
+    expect(updatedTask?.pr_url).toBeNull();
   });
 });
