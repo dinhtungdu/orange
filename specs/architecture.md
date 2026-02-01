@@ -96,3 +96,4 @@ Task sessions (one per task):
 6. **CWD-aware CLI** — commands infer project from current directory
 7. **Lazy workspace init** — worktrees created on-demand at first spawn
 8. **Dependency injection** — all external deps (tmux, git, clock, logger) injected for testability
+9. **Dashboard-driven polling** — auto-behaviors (health check, PR sync, future auto-spawn) require dashboard open; no background daemon

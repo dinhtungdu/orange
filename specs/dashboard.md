@@ -190,6 +190,8 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 
 ## Polling & Updates
 
+**Dashboard must be open for auto-behaviors.** When closed, state remains consistent (TASK.md is source of truth) but automatic actions don't trigger.
+
 **File watcher** (chokidar, 100ms debounce):
 - Watches `~/orange/tasks/` for `TASK.md` changes
 - Triggers immediate refresh on file change
@@ -203,3 +205,4 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 **Other refreshes:**
 - PR status polling (30s interval)
 - Diff stats refreshed on each task reload (async, non-blocking)
+- (Future) Auto-spawn ready tasks when dependencies complete
