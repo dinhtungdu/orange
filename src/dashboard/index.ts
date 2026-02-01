@@ -453,15 +453,17 @@ function buildDashboard(
 
       rowContainer.add(tableRow);
 
-      // Summary line (always shown)
-      const summaryMaxLen = width - 4;
+      // Summary line (always shown, indented to align under task name)
+      // Indentation: 1 (paddingLeft) + 2 (selector) + 2 (icon + space) = 5, but we add 1 for paddingLeft on row
+      const summaryIndent = "    └ "; // 4 spaces + └ + space to align under task name
+      const summaryMaxLen = width - summaryIndent.length - 1;
       const summaryDisplay =
         task.summary.length > summaryMaxLen
           ? task.summary.slice(0, summaryMaxLen - 1) + "…"
           : task.summary;
       const summaryText = new TextRenderable(renderer, {
         id: `task-summary-${i}`,
-        content: ` └ ${summaryDisplay || "(no summary)"}`,
+        content: `${summaryIndent}${summaryDisplay || "(no summary)"}`,
         fg: selected ? "#AAAAAA" : "#666666",
       });
       rowContainer.add(summaryText);
