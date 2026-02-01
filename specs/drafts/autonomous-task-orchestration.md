@@ -23,7 +23,7 @@ Enable agents to break down large tasks into sub-tasks with dependency tracking.
 ```
 pending → working → delegated → done (auto)
               ↓
-          reviewing → reviewed → done
+          reviewing → done
               ↓
             stuck
 ```
@@ -176,7 +176,7 @@ Display options:
 
 | Case | Behavior |
 |------|----------|
-| Child cancelled/failed | Parent stays delegated (manual intervention) |
+| Child cancelled | Parent stays delegated (manual intervention) |
 | Parent deleted | Children continue independently |
 | Nested delegation | Supported (child can delegate further) |
 | Circular dependency | Error on create |
