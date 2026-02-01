@@ -18,9 +18,9 @@ See [harness.md](./harness.md) for spawn commands per harness.
 
 The spawn prompt is minimal:
 - Task description and branch name
-- Reference to orange-worker skill for workflow instructions
+- Reference to orange skill for workflow instructions
 
-The orange-worker skill (installed via `orange install`) contains:
+The orange skill (installed via `orange install`) contains:
 - Clarity evaluation
 - Clarification flow
 - Self-review loop

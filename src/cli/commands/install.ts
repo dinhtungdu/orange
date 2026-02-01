@@ -56,7 +56,9 @@ async function installSkillForHarness(
   harness: Harness
 ): Promise<void> {
   const config = HARNESSES[harness];
-  const destDir = join(config.skillsDir, `orange-${skillName}`);
+  // Don't add orange- prefix if skill is already named 'orange'
+  const destName = skillName === "orange" ? "orange" : `orange-${skillName}`;
+  const destDir = join(config.skillsDir, destName);
 
   // Create destination directory
   await mkdir(destDir, { recursive: true });
@@ -78,7 +80,7 @@ async function installSkillForHarness(
     await cp(srcFile, destFile, { recursive: true });
   }
 
-  console.log(`  ${harness}: orange-${skillName}`);
+  console.log(`  ${harness}: ${destName}`);
 }
 
 /**

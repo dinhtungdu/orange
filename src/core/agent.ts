@@ -22,7 +22,7 @@ export function buildAgentPrompt(task: Task): string {
 Project: ${task.project}
 Branch: ${task.branch}
 
-Read the orange-worker skill for workflow instructions.`;
+Read the orange skill for workflow instructions.`;
 }
 
 /**
@@ -41,7 +41,7 @@ Project: ${task.project}
 Branch: ${task.branch}
 Status: ${task.status}
 
-Read the orange-worker skill for workflow instructions.
+Read the orange skill for workflow instructions.
 
 Check current status and continue accordingly:
 - reviewing → already done, stop
