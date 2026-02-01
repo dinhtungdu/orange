@@ -1,211 +1,220 @@
 # Autonomous Task Orchestration (DRAFT)
 
-> **Status**: Draft — capturing ideas from Beads + Ralph study
+> **Status**: Draft — planning for future implementation
 
-## Problem
+## Overview
 
-Support fully autonomous agent swarms with no human in loop. Agents need to:
-1. Break down big tasks into smaller ones
-2. Handle dependencies between tasks
-3. Execute in parallel where possible
-4. Re-evaluate plan as codebase changes
+Enable agents to break down large tasks into sub-tasks with dependency tracking. Self-executing task graph with automatic spawning.
 
-## Core Ideas
+## Data Model
 
-### From Beads: Dependency DAG
+### New Fields
 
-Minimal addition to task model:
+| Field | Type | Description |
+|-------|------|-------------|
+| `blocked_by` | `string[]` | Task IDs that must complete first |
+| `parent` | `string \| null` | Parent task ID (if sub-task) |
+| `children` | `string[]` | Child task IDs (if delegated) |
 
-```typescript
-interface Task {
-  // existing fields...
-  blockedBy?: string[]  // task IDs that must complete first
-}
-```
+### New Status
 
-Ready front query:
-
-```typescript
-function getReadyTasks(tasks: Task[]): Task[] {
-  return tasks.filter(t => 
-    t.status === 'pending' && 
-    (t.blockedBy ?? []).every(id => getTask(id).status === 'done')
-  )
-}
-```
-
-### From Ralph: Self-Executing Graph
-
-When agent finishes:
-1. Merge to base branch
-2. Status → `done`
-3. Check what's now unblocked
-4. Spawn those tasks
-5. Exit
-
-No central orchestrator babysitting. Graph self-executes.
-
-### Key Insight: Every Agent is an Orchestrator
-
-No special role. Any agent can:
-- Work directly (small task)
-- Break down → create tasks with `blockedBy` → spawn → let graph self-execute
-
-Same pattern, recursive at any depth.
-
-## Branch Model
+`delegated` — task spawned sub-tasks, waiting for them to complete.
 
 ```
-main
-└── feature-oauth        ← human merges when done
-    ├── task-1 branch    ← agent merges here
-    ├── task-2 branch    ← agent merges here
-    └── task-3 branch    ← agent merges here
+pending → working → delegated → done (auto)
+              ↓
+          reviewing → reviewed → done
+              ↓
+            stuck
 ```
 
-Sub-tasks branch from parent's branch, merge back to parent's branch.
+### TASK.md Examples
 
-When agent creates sub-tasks:
-```bash
-orange task create subtask-1 --base $(current_branch) --blocked-by ...
+```yaml
+# Task with dependency
+---
+id: def456
+blocked_by: [abc123]
+status: pending
+---
+
+# Parent task (delegated)
+---
+id: abc123
+status: delegated
+children: [def456, ghi789]
+workspace: null
+tmux_session: null
+---
+
+# Child task
+---
+id: def456
+parent: abc123
+blocked_by: []
+status: working
+---
 ```
 
-## CLI Extensions
+## CLI
 
 ```bash
-orange task create setup-db "create schema"
-orange task create add-api "endpoints" --blocked-by <setup-db-id>
-orange task list --ready  # only unblocked pending tasks
+# Create task with dependency
+orange task create oauth-api "endpoints" --blocked-by <id>
+
+# Create task with explicit parent
+orange task create oauth-db "schema" --parent <id>
+
+# Worker delegates
+orange task update --status delegated
+
+# List ready tasks only
+orange task list --ready
 ```
 
-## Execution Modes
+## Behaviors
 
-Two valid modes for different use cases:
+### Ready Task
 
-### Parallel Mode (Speed)
+A task is **ready** when:
+- Status is `pending`
+- All `blocked_by` tasks have status `done`
 
-Execute dependency graph with max concurrency:
+### Auto-Spawn
 
-```bash
-orange run --parallel
+Poll checks for ready tasks. Spawns up to available pool slots.
+
+### Delegated Transition
+
+When worker sets `--status delegated`:
+- Release workspace
+- Kill tmux session
+- Task remains visible in dashboard
+
+### Auto-Complete
+
+Poll checks delegated tasks. When all children have status `done`, parent automatically transitions to `done`.
+
+### Parent Auto-Linking
+
+When creating task with `--parent`:
+- Child's `parent` field set
+- Parent's `children` array updated
+
+When creating task from within a workspace (worker context):
+- Parent auto-detected from current task
+
+## Validation
+
+On task create:
+- `blocked_by` IDs must exist
+- `blocked_by` must be same project (no cross-project)
+- No circular dependencies
+
+## Flows
+
+### Phase 1: Orchestrator Creates Task Graph
+
+```
+User: "Add OAuth with DB, API, and UI"
+    │
+    ▼
+Orchestrator creates:
+    orange task create oauth-db "schema"
+    orange task create oauth-api "endpoints" --blocked-by <db-id>
+    orange task create oauth-ui "button" --blocked-by <api-id>
+    │
+    ▼
+oauth-db ready (no blockers) → spawns
+    │
+    ▼
+oauth-db done → oauth-api ready → spawns
+    │
+    ▼
+oauth-api done → oauth-ui ready → spawns
+    │
+    ▼
+oauth-ui done → all tasks complete
 ```
 
-- Plan is static, created upfront
-- Tasks independent within dependency constraints
-- Multiple agents run simultaneously
-- Good when: plan is clear, speed matters
-
-### Sequential Mode (Correctness)
-
-One task at a time, reassess after each (Ralph loop):
-
-```bash
-orange run --sequential
-```
-
-Each iteration:
-1. Re-read codebase state
-2. Re-evaluate: "what's most important NOW?"
-3. Execute one task
-4. Repeat
-
-- Plan evolves as code changes
-- Previous tasks might invalidate later ones
-- New urgent tasks might emerge
-- Good when: exploratory, correctness matters, "run while you sleep"
-
-### Why Sequential Matters
-
-Ralph's insight: after each task, the world changed. The plan made before might be wrong now.
+### Phase 2: Worker Delegation
 
 ```
-task-1 done
-  → code changed
-  → re-read specs + src
-  → re-evaluate what's next
-  → maybe task-2 no longer needed
-  → maybe new task-5 is urgent
+Worker on "Add OAuth" (working)
+    │
+    ├── creates oauth-db
+    ├── creates oauth-api (blocked by db)
+    └── creates oauth-ui (blocked by api)
+    │
+    ▼
+Worker runs: orange task update --status delegated
+    │
+    ▼
+Workspace released, session killed
+    │
+    ▼
+"Add OAuth" shows as delegated (0/3)
+    │
+    │   oauth-db ready → spawns
+    │   oauth-db done → oauth-api ready → spawns
+    │   oauth-api done → oauth-ui ready → spawns
+    │   oauth-ui done
+    │
+    ▼
+All children done → "Add OAuth" auto-completes
 ```
 
-Parallel mode assumes static plan. Sequential mode assumes evolving plan.
+## Dashboard
 
-## What We Don't Need
+Delegated tasks show progress: `delegated (2/3)`
 
-From Beads:
-- Hash IDs (no multi-writer conflict)
-- JSONL/git sync (SQLite sufficient)
-- Molecules/wisps (overkill)
-- Compaction (tasks are small)
+Display options:
+- Nested: children indented under parent
+- Flat: parent column shows relationship
 
-From Ralph:
-- External bash loop (agents spawn dependents on exit)
-- Subagents (each task is real agent with own session)
-- specs/ files (TASK.md + codebase is enough)
-- IMPLEMENTATION_PLAN.md (dependency graph is the plan)
+## Edge Cases
 
-## What We Keep
+| Case | Behavior |
+|------|----------|
+| Child cancelled/failed | Parent stays delegated (manual intervention) |
+| Parent deleted | Children continue independently |
+| Nested delegation | Supported (child can delegate further) |
+| Circular dependency | Error on create |
+| Cross-project dependency | Error on create |
+| Pool exhausted | Ready tasks wait for available slot |
 
-From Beads:
-- `blockedBy` field
-- `getReadyTasks()` query
-- Ready front pattern
+## Phases
 
-From Ralph:
-- Any agent can break down and spawn
-- Self-executing graph
-- Context refresh between tasks (each agent = fresh session)
-- Sequential reassessment mode
+### Phase 1: Flat Dependencies (Orchestrator Only)
 
-From Orange (already have):
-- Worktree isolation
-- Feature branch model
-- Agents self-merge to base branch
-- TASK.md for context survival
-- Persistent tmux sessions
+Orchestrator creates task graphs with sequencing. Workers implement tasks but don't break down.
 
-## Other Small Ideas
+- `blocked_by` field
+- Ready task query
+- Auto-spawn on poll
+- `--blocked-by` flag
+- `orange task list --ready`
 
-**1. Session handoff format**
-Structured notes in TASK.md:
-```
-COMPLETED: X
-IN PROGRESS: Y  
-NEXT: Z
-BLOCKER: (if any)
-```
+### Phase 2: Worker Delegation
 
-**2. `--json` on everything**
-Consistent JSON output for programmatic use.
+Workers can break down large tasks into sub-tasks. Full parent-child tracking with auto-complete.
 
-**3. Stale detection**
-Detect stuck tasks (working for N hours with no git activity).
+- `parent` and `children` fields
+- `delegated` status
+- Auto-complete delegated parents
+- `--parent` flag
+- Auto-detect parent from workspace context
+- Dashboard progress display
+- Skill update: workers can delegate
 
-**4. Close reason**
-```typescript
-interface Task {
-  closeReason?: string  // "completed" | "cancelled" | "duplicate"
-}
-```
+## Future Ideas
 
-## Ralph ↔ Orange Mapping
+### Execution Modes
 
-| Ralph | Orange |
-|-------|--------|
-| `IMPLEMENTATION_PLAN.md` | Task DB (`orange task list`) |
-| Plan loop → generates plan | Planning mode → creates tasks with dependencies |
-| Build loop → picks task, implements | Agent works in worktree |
-| "Update IMPLEMENTATION_PLAN.md with findings" | `orange task create` for discovered work |
-| "Keep plan current with learnings" | Update task status, create sub-tasks if needed |
+**Sequential**: One task at a time, reassess after each completion.
 
-The task DB *is* the implementation plan — queryable, with dependency tracking.
+**Parallel**: Execute full DAG with max concurrency.
 
-Agent behavior (add to orchestrator skill):
-- Create tasks for discovered work
-- Update own task status throughout operation
-- Break down into sub-tasks when stuck
+### Hierarchical Branch Model
 
-## Open Questions
-
-- Schema: `blocked_by TEXT` column (JSON array) or separate table?
-- How does sequential mode decide "what's most important"? Agent reads specs? Human provides goal?
-- Auto-spawn on completion: in CLI post-hook or agent responsibility?
+Sub-tasks branch from and merge to parent branch instead of main. Single PR for aggregate review.
