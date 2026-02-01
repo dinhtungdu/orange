@@ -187,7 +187,7 @@ Integration with GitHub via `gh` CLI.
 ### Create PR
 
 ```
-Task status: reviewed
+Task status: reviewing
     ↓
 Create PR (p key or orange task create-pr)
     ↓
@@ -229,7 +229,7 @@ Dashboard polls PR status. When PR merged externally, auto-triggers cleanup.
 User cancels active task.
 
 ```
-Task active (pending/clarification/working/reviewing/reviewed/stuck)
+Task active (pending/clarification/working/reviewing/stuck)
     ↓
 Cancel (x key or orange task cancel)
     ↓
@@ -244,10 +244,10 @@ Status: cancelled
 
 ## 9. Reactivate Flow
 
-Revive cancelled or failed task.
+Revive cancelled task.
 
 ```
-Task status: cancelled or failed
+Task status: cancelled
     ↓
 Enter key in dashboard
     ↓

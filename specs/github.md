@@ -9,14 +9,6 @@ Automate PR creation and merge detection via GitHub CLI (`gh`).
 
 ## PR Lifecycle
 
-### Approve
-
-`orange task approve <id>` moves task from `reviewing` → `reviewed`. Status change only — no push or PR creation.
-
-### Unapprove
-
-`orange task unapprove <id>` (or `u` key in dashboard) moves task from `reviewed` → `reviewing`. Undo for accidental approvals.
-
 ### Auto-detect Existing PR
 
 On task creation, Orange checks if the branch already has a PR on GitHub. If found, `pr_url` is populated automatically. This enables:
@@ -35,7 +27,7 @@ Best-effort: errors are ignored silently.
 
 ### Create PR
 
-`orange task create-pr <id>` (or `p` key in dashboard) for reviewed tasks:
+`orange task create-pr <id>` (or `p` key in dashboard) for reviewing tasks:
 
 1. Push branch to remote from workspace
 2. Create PR with:
@@ -74,7 +66,7 @@ Cleanup is always: release workspace, kill tmux session, delete remote branch, s
 
 ### Dashboard PR Polling
 
-Dashboard polls PR statuses every 30s. When a PR is detected as merged for any active task (`working`, `reviewing`, `reviewed`, `stuck`), it auto-triggers merge cleanup.
+Dashboard polls PR statuses every 30s. When a PR is detected as merged for any active task (`working`, `reviewing`, `stuck`), it auto-triggers merge cleanup.
 
 ### Task Metadata
 
@@ -85,7 +77,7 @@ Tasks gain a `pr_url` field in TASK.md frontmatter:
 id: abc123
 project: orange
 branch: dark-mode
-status: reviewed
+status: reviewing
 pr_url: https://github.com/user/orange/pull/42
 # ...
 ---
@@ -103,15 +95,12 @@ Null when no PR was created.
 ## CLI Commands
 
 ```bash
-orange task approve <task_id>                    # reviewing → reviewed
-orange task unapprove <task_id>                  # reviewed → reviewing
-orange task create-pr <task_id>                  # Push + create PR for reviewed task
+orange task create-pr <task_id>                  # Push + create PR for reviewing task
 orange task merge <task_id> [--strategy ff|merge] [--local]  # --local: bypass PR check
 ```
 
 ## Future Work
 
-- `orange task sync` command: poll reviewed tasks, auto-cleanup merged PRs
 - Webhook-based detection (currently polling-only)
 
 ## Edge Cases
