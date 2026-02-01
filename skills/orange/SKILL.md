@@ -287,9 +287,7 @@ orange workspace gc
 | `pending` | Created, not spawned | Wait for spawn |
 | `clarification` | Waiting for user input | Answer questions when user attaches |
 | `working` | Actively implementing | Continue work |
-| `reviewing` | Self-review passed | Wait for human review |
-| `reviewed` | Human approved | Wait for merge |
+| `reviewing` | Self-review passed | Wait for human review/merge |
 | `stuck` | Gave up after 2 attempts | Wait for help or cancel |
 | `done` | Merged | Nothing (terminal) |
-| `failed` | Errored | Nothing (terminal) |
 | `cancelled` | User cancelled | Nothing (terminal) |

@@ -118,12 +118,10 @@ Append-only event log:
 | `pending` | Created, not yet spawned |
 | `clarification` | Agent waiting for user input (vague task or scope change) |
 | `working` | Agent actively working (includes self-review) |
-| `reviewing` | Self-review passed, awaiting human review |
-| `reviewed` | Human approved, ready to merge |
+| `reviewing` | Self-review passed, awaiting human review/merge |
 | `stuck` | Agent gave up after max review attempts |
 | `done` | Merged/completed |
-| `failed` | Agent crashed or errored |
-| `cancelled` | User cancelled |
+| `cancelled` | User cancelled or errored |
 
 ### Clarification Flow
 

@@ -38,16 +38,15 @@ describe("Task types", () => {
   test("TaskStatus includes all valid states", () => {
     const statuses: TaskStatus[] = [
       "pending",
+      "clarification",
       "working",
       "reviewing",
-      "reviewed",
       "stuck",
       "done",
-      "failed",
       "cancelled",
     ];
 
-    expect(statuses).toHaveLength(8);
+    expect(statuses).toHaveLength(7);
   });
 
   test("Task can transition through statuses", () => {

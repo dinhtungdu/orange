@@ -27,11 +27,10 @@ orange task update [task_id] [--branch [name]] [--description <text>] [--status 
   # --branch (no value): sync task to current git branch
   # --description: update TASK.md body
   # --status: update task status (clarification, working, reviewing, stuck)
-orange task approve <task_id>       # Human approves → reviewed, pushes + creates PR
 orange task merge <task_id> [--strategy ff|merge] [--local]
 orange task cancel <task_id> [--yes]
-orange task delete <task_id> [--yes] # done/failed/cancelled only
-orange task create-pr <task_id>     # Create PR for reviewed task (retry/manual)
+orange task delete <task_id> [--yes] # done/cancelled only
+orange task create-pr <task_id>     # Create PR for reviewing task
 
 # Workspaces (project inferred from cwd)
 orange workspace init
@@ -68,13 +67,9 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 Restart a task whose session died. Reuses existing workspace and branch.
 
 Requirements:
-- Active task (working/reviewing/reviewed/stuck)
+- Active task (working/reviewing/stuck)
 - Has assigned workspace
 - tmux session no longer exists
-
-## Task Approve
-
-Mark a reviewing task as reviewed (human approved). Also pushes branch and creates a GitHub PR if `gh` is available.
 
 ## Task Cancel
 
@@ -82,7 +77,7 @@ Requires user confirmation before cancelling. CLI prompts "Cancel task <project>
 
 ## Task Delete
 
-Remove task folder. Only works for done/failed/cancelled tasks. Active tasks must be cancelled first.
+Remove task folder. Only works for done/cancelled tasks. Active tasks must be cancelled first.
 Requires user confirmation before deleting. CLI prompts "Delete task <project>/<branch>? (y/N)". Skip with `--yes`.
 
 ## Task Merge
@@ -97,7 +92,7 @@ Use `--local` to bypass PR status check and force local merge.
 
 ## Task Create-PR
 
-Create a GitHub PR for a reviewed task. Useful when `gh` was unavailable during approve, or for manual retry. Errors if task already has a PR.
+Create a GitHub PR for a reviewing task. Pushes branch and opens PR on GitHub. Errors if task already has a PR.
 
 ## Workspace GC
 

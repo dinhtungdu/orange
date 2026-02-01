@@ -73,14 +73,6 @@ export async function runTaskCommand(
       await completeTask(parsed, deps);
       break;
 
-    case "approve":
-      await approveTask(parsed, deps);
-      break;
-
-    case "unapprove":
-      await unapproveTask(parsed, deps);
-      break;
-
     case "stuck":
       await stuckTask(parsed, deps);
       break;
@@ -248,10 +240,8 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     clarification: "?",
     working: "●",
     reviewing: "◉",
-    reviewed: "◈",
     stuck: "⚠",
     done: "✓",
-    failed: "✗",
     cancelled: "⊘",
   };
 
@@ -321,7 +311,7 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Check task has an active session
-  const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+  const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
   if (!activeStatuses.includes(task.status)) {
     log.error("Task not active for attach", { taskId, status: task.status });
     console.error(`Task '${taskId}' is ${task.status}, not active`);
@@ -679,89 +669,6 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * Mark task as reviewed (human approved).
  * Also pushes branch and creates a GitHub PR if gh is available.
  */
-async function approveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  const log = deps.logger.child("task");
-
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange task approve <task_id>");
-    process.exit(1);
-  }
-
-  const taskId = parsed.args[0];
-
-  const tasks = await listTasks(deps, {});
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task) {
-    log.error("Task not found for approve", { taskId });
-    console.error(`Task '${taskId}' not found`);
-    process.exit(1);
-  }
-
-  if (task.status !== "reviewing") {
-    log.error("Task not in reviewing status", { taskId, status: task.status });
-    console.error(`Task '${taskId}' is not in reviewing status (status: ${task.status})`);
-    process.exit(1);
-  }
-
-  const now = deps.clock.now();
-  task.status = "reviewed";
-  task.updated_at = now;
-
-  await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.id, {
-    type: "status.changed",
-    timestamp: now,
-    from: "reviewing",
-    to: "reviewed",
-  });
-
-  log.info("Task approved", { taskId });
-  console.log(`Task ${taskId} approved (reviewed)`);
-}
-
-/**
- * Undo approval — move task from reviewed back to reviewing.
- */
-async function unapproveTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
-  const log = deps.logger.child("task");
-
-  if (parsed.args.length < 1) {
-    console.error("Usage: orange task unapprove <task_id>");
-    process.exit(1);
-  }
-
-  const taskId = parsed.args[0];
-
-  const tasks = await listTasks(deps, {});
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task) {
-    log.error("Task not found for unapprove", { taskId });
-    console.error(`Task '${taskId}' not found`);
-    process.exit(1);
-  }
-
-  if (task.status !== "reviewed") {
-    log.error("Task not in reviewed status", { taskId, status: task.status });
-    console.error(`Task '${taskId}' is not in reviewed status (status: ${task.status})`);
-    process.exit(1);
-  }
-
-  const now = deps.clock.now();
-  task.status = "reviewing";
-  task.updated_at = now;
-
-  await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.id, {
-    type: "status.changed",
-    timestamp: now,
-    from: "reviewed",
-    to: "reviewing",
-  });
-
-  log.info("Task unapproved", { taskId });
-  console.log(`Task ${taskId} unapproved (back to reviewing)`);
-}
-
 /**
  * Mark task as stuck (called by hook).
  */
@@ -841,8 +748,8 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  if (task.status !== "reviewed") {
-    console.error(`Task '${taskId}' is not reviewed (status: ${task.status})`);
+  if (task.status !== "reviewing") {
+    console.error(`Task '${taskId}' is not ready for PR (status: ${task.status})`);
     process.exit(1);
   }
 
@@ -1108,7 +1015,7 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * Delete task permanently.
- * Only allowed for done/failed tasks - active tasks must be cancelled first.
+ * Only allowed for terminal tasks (done/cancelled) - active tasks must be cancelled first.
  */
 async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
@@ -1131,11 +1038,11 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Only allow deleting done/failed tasks
-  if (task.status !== "done" && task.status !== "failed" && task.status !== "cancelled") {
+  // Only allow deleting terminal tasks (done/cancelled)
+  if (task.status !== "done" && task.status !== "cancelled") {
     log.error("Cannot delete active task", { taskId, status: task.status });
     console.error(`Cannot delete task '${taskId}' with status '${task.status}'`);
-    console.error("Only done or failed tasks can be deleted. Use 'orange task cancel' first.");
+    console.error("Only done or cancelled tasks can be deleted. Use 'orange task cancel' first.");
     process.exit(1);
   }
 

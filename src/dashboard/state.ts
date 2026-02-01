@@ -18,7 +18,7 @@ import { refreshTaskPR } from "../core/task.js";
 import { getInstalledHarnesses } from "../core/harness.js";
 
 /** Terminal task statuses — task is finished, no more work expected */
-const TERMINAL_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
+const TERMINAL_STATUSES: TaskStatus[] = ["done", "cancelled"];
 
 /**
  * Clean up nested error messages for display.
@@ -68,11 +68,9 @@ export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
   clarification: "#FF8800", // Orange — needs attention
   working: "#5599FF",
-  reviewing: "#D4A000",
-  reviewed: "#22BB22",
+  reviewing: "#D4A000",     // Yellow — needs human review
   stuck: "#DD4444",
   done: "#22BB22",
-  failed: "#DD4444",
   cancelled: "#888888",
 };
 
@@ -90,8 +88,8 @@ export const CHECKS_ICON: Record<string, string> = {
 
 export type StatusFilter = "all" | "active" | "done";
 
-const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "reviewing", "reviewed", "stuck"];
-const DONE_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "reviewing", "stuck"];
+const DONE_STATUSES: TaskStatus[] = ["done", "cancelled"];
 
 /** Sort tasks: active first, terminal last, by updated_at within groups */
 function sortTasks(tasks: Task[]): Task[] {
@@ -369,12 +367,6 @@ export class DashboardState {
         break;
       case "d":
         this.deleteTask();
-        break;
-      case "a":
-        this.approveTask();
-        break;
-      case "u":
-        this.unapproveTask();
         break;
       case "p":
         this.createOrOpenPR();
@@ -679,7 +671,7 @@ export class DashboardState {
             }
 
             // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
-            const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+            const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
             if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
               mergedTasks.push(task);
             }
@@ -759,7 +751,7 @@ export class DashboardState {
   }
 
   private async captureOutputs(): Promise<void> {
-    const activeStatuses: TaskStatus[] = ["working", "reviewing", "reviewed", "stuck"];
+    const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
     const activeTasks = this.data.tasks.filter(
       (t) => t.tmux_session && activeStatuses.includes(t.status)
     );
@@ -927,8 +919,8 @@ export class DashboardState {
       return;
     }
 
-    // Cancelled/failed: reactivate via respawn
-    if (task.status === "cancelled" || task.status === "failed") {
+    // Cancelled: reactivate via respawn
+    if (task.status === "cancelled") {
       this.respawnTask();
       return;
     }
@@ -977,76 +969,12 @@ export class DashboardState {
     // Note: non-tmux attach requires TUI suspend/resume — handled by the view layer
   }
 
-  private approveTask(): void {
-    const task = this.data.tasks[this.data.cursor];
-    if (!task || this.data.pendingOps.has(task.id)) return;
-
-    if (task.status !== "reviewing") {
-      this.data.error = "Only reviewing tasks can be approved.";
-      this.emit();
-      return;
-    }
-
-    const taskBranch = task.branch;
-    this.data.pendingOps.add(task.id);
-    this.emit();
-
-    const proc = Bun.spawn(this.getOrangeCommand(["task", "approve", task.id]), {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    proc.exited.then(async (exitCode) => {
-      this.data.pendingOps.delete(task.id);
-      if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
-        this.data.error = `Approve failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
-      } else {
-        this.data.message = `Approved ${taskBranch}`;
-      }
-      await this.refreshTasks();
-      this.emit();
-    });
-  }
-
-  private unapproveTask(): void {
-    const task = this.data.tasks[this.data.cursor];
-    if (!task || this.data.pendingOps.has(task.id)) return;
-
-    if (task.status !== "reviewed") {
-      this.data.error = "Only reviewed tasks can be unapproved.";
-      this.emit();
-      return;
-    }
-
-    const taskBranch = task.branch;
-    this.data.pendingOps.add(task.id);
-    this.emit();
-
-    const proc = Bun.spawn(this.getOrangeCommand(["task", "unapprove", task.id]), {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    proc.exited.then(async (exitCode) => {
-      this.data.pendingOps.delete(task.id);
-      if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
-        this.data.error = `Unapprove failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
-      } else {
-        this.data.message = `Unapproved ${taskBranch}`;
-      }
-      await this.refreshTasks();
-      this.emit();
-    });
-  }
-
   private mergeTask(): void {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (task.status !== "reviewed") {
-      this.data.error = "Only reviewed tasks can be merged.";
+    if (task.status !== "reviewing") {
+      this.data.error = "Only reviewing tasks can be merged.";
       this.emit();
       return;
     }
@@ -1112,7 +1040,7 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (task.status !== "done" && task.status !== "failed" && task.status !== "cancelled") {
+    if (task.status !== "done" && task.status !== "cancelled") {
       this.data.error = `Cannot delete task with status '${task.status}'. Use cancel first.`;
       this.emit();
       return;
@@ -1156,13 +1084,13 @@ export class DashboardState {
     // Raw dead session check - for respawn, any dead session is valid
     const sessionDead = this.data.deadSessions.has(task.id);
     const noWorkspace = !task.workspace;
-    const isCancelledOrFailed = task.status === "cancelled" || task.status === "failed";
+    const isCancelled = task.status === "cancelled";
     const isStuck = task.status === "stuck";
     const isWorking = task.status === "working";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: working with dead session, stuck, cancelled/failed, or reviewing without workspace/dead session
-    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelledOrFailed || (isReviewing && (noWorkspace || sessionDead));
+    // Allow: working with dead session, stuck, cancelled, or reviewing without workspace/dead session
+    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelled || (isReviewing && (noWorkspace || sessionDead));
     if (!canRespawn) {
       this.data.error = "Cannot respawn this task.";
       this.emit();
@@ -1239,9 +1167,9 @@ export class DashboardState {
       return;
     }
 
-    // Create PR — only for reviewed tasks without a PR
-    if (task.status !== "reviewed") {
-      this.data.error = "Only reviewed tasks can have PRs created.";
+    // Create PR — only for reviewing tasks without a PR
+    if (task.status !== "reviewing") {
+      this.data.error = "Only reviewing tasks can have PRs created.";
       this.emit();
       return;
     }
@@ -1320,23 +1248,19 @@ export class DashboardState {
       keys += "  Enter:spawn  x:cancel";
     } else if (task.status === "done") {
       keys += "  d:del";
-    } else if (task.status === "cancelled" || task.status === "failed") {
+    } else if (task.status === "cancelled") {
       keys += "  Enter:reactivate  d:del";
     } else if (isDead) {
       // Working task with dead session - needs respawn
       keys += "  Enter:respawn  x:cancel";
-    } else if (task.status === "reviewed") {
-      keys += "  Enter:attach  u:unapprove";
-      keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
-      keys += "  x:cancel";
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  x:cancel";
     } else if (task.status === "reviewing") {
       keys += "  Enter:attach";
-      keys += task.pr_url ? "  p:open PR" : "  a:approve";
+      keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {
-      // working
+      // working, clarification
       keys += "  Enter:attach  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;

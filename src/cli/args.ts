@@ -6,7 +6,7 @@
  * Routes commands to appropriate handlers:
  * - (no args or flags only): Dashboard (auto-register if in git repo, fallback to global)
  * - project: Project management (add, list, remove)
- * - task: Task management (create, list, spawn, attach, respawn, complete, approve, stuck, merge, cancel, delete, create-pr)
+ * - task: Task management (create, list, spawn, attach, respawn, complete, stuck, merge, cancel, delete, create-pr)
  * - workspace: Workspace pool management (init, list)
  * - install: Install orchestrator skill
  */
@@ -187,8 +187,6 @@ function isSubcommand(command: string, arg: string): boolean {
       "respawn",
       "update",
       "complete",
-      "approve",
-      "unapprove",
       "stuck",
       "merge",
       "cancel",
@@ -242,15 +240,13 @@ Task Management (project inferred from cwd):
     --description <text>              Update description
                                       Task ID auto-detected if inside workspace
   orange task complete <task_id>      Mark task complete (hook)
-  orange task approve <task_id>       Approve task (reviewing → reviewed)
-  orange task unapprove <task_id>     Unapprove task (reviewed → reviewing)
   orange task stuck <task_id>         Mark task stuck (hook)
-  orange task merge <task_id> [options] Merge and cleanup
+  orange task merge <task_id> [options] Merge task and cleanup
     --strategy <ff|merge>             Merge strategy (default: ff)
     --local                           Force local merge, bypass PR check
   orange task cancel <task_id> [--yes] Cancel task (prompts for confirmation)
-  orange task delete <task_id> [--yes] Delete task (only done/failed/cancelled)
-  orange task create-pr <task_id>     Create PR for reviewed task
+  orange task delete <task_id> [--yes] Delete task (only done/cancelled)
+  orange task create-pr <task_id>     Create PR for reviewing task
 
 Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project

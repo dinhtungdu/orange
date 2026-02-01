@@ -1,6 +1,6 @@
 # Dashboard TUI
 
-Shows tasks from TASK.md files (including done/failed).
+Shows tasks from TASK.md files (including done/cancelled).
 
 ## Scoping
 
@@ -31,12 +31,10 @@ Colors: ● green, ✗ red, ○ gray
 | pending | waiting to spawn |
 | clarification | agent waiting for user input |
 | working | agent assigned and should be running |
-| reviewing | agent done, awaiting human review |
-| reviewed | human approved, ready to merge |
+| reviewing | agent done, awaiting human review/merge |
 | stuck | agent needs help |
 | done | merged/completed |
-| failed | errored |
-| cancelled | user cancelled |
+| cancelled | user cancelled or errored |
 
 **Clarification tasks** need attention — agent has questions or discovered scope issues. Attach to session to discuss with agent.
 
@@ -45,8 +43,8 @@ When a task has a PR, the Status column shows PR info instead (e.g., `#123 open 
 ## Sorting
 
 Tasks sorted by:
-1. **Active first** — pending, clarification, working, reviewing, reviewed, stuck
-2. **Terminal last** — done, cancelled, failed
+1. **Active first** — pending, clarification, working, reviewing, stuck
+2. **Terminal last** — done, cancelled
 3. **Within groups** — by `updated_at` descending (most recent first)
 
 ## Layout
@@ -66,7 +64,7 @@ Tasks sorted by:
 
 **Columns:**
 - Task: session icon + project/branch (or just branch if project-scoped)
-- Status: task stage (pending/working/reviewing/reviewed/stuck/done/failed/cancelled)
+- Status: task stage (pending/working/reviewing/stuck/done/cancelled)
 - PR: PR number + state + checks (blank if no PR)
 - Commits: number of commits ahead of default branch (blank if none)
 - Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
@@ -84,13 +82,11 @@ Footer shows relevant actions based on selected task's state:
 | Pending | j/k:nav  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
 | Clarification | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (no PR) | j/k:nav  Enter:attach  a:approve  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Reviewed (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
-| Reviewed (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Stuck | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Dead/no session | j/k:nav  Enter:respawn  x:cancel  c:create  f:filter  q:quit |
-| Cancelled/Failed | j/k:nav  Enter:reactivate  d:del  c:create  f:filter  q:quit |
+| Cancelled | j/k:nav  Enter:reactivate  d:del  c:create  f:filter  q:quit |
 | Done | j/k:nav  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
@@ -100,13 +96,11 @@ Footer shows relevant actions based on selected task's state:
 | j/k | Navigate tasks | Always |
 | c | Create new task | Always (project-scoped only) |
 | Enter | Work on task | Context-dependent (see below) |
-| a | Approve task | Reviewing tasks (no PR) |
-| u | Unapprove task | Reviewed tasks |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
-| m | Merge task (local) | Reviewed tasks (no PR) |
-| p | Create PR / Open PR in browser | Reviewed (no PR) creates, any with PR opens |
+| m | Merge task | Reviewing tasks (no PR) |
+| p | Create PR / Open PR in browser | Reviewing (no PR) creates, any with PR opens |
 | x | Cancel task (shows confirmation) | Active tasks |
-| d | Delete task folder (shows confirmation) | Cancelled, failed, or done tasks |
+| d | Delete task folder (shows confirmation) | Cancelled or done tasks |
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
 
@@ -115,7 +109,7 @@ Footer shows relevant actions based on selected task's state:
 - Has live session → attach
   - If `--exit-on-attach`, dashboard exits after attach
 - Dead/no session → respawn agent
-- Cancelled/failed → reactivate (spawn agent)
+- Cancelled → reactivate (spawn agent)
 - Done → no-op
 
 ## Create Task
@@ -203,7 +197,7 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 - Marks dead sessions for respawn UI
 
 **Orphan cleanup** (30s interval):
-- Release workspaces bound to terminal tasks (done/cancelled/failed)
+- Release workspaces bound to terminal tasks (done/cancelled)
 - Kill sessions for terminal tasks that still have one
 - Release workspaces from interrupted spawns (workspace bound but no tmux_session)
 

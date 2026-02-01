@@ -9,12 +9,10 @@ End-to-end workflows in Orange.
 | `pending` | Created, not spawned |
 | `clarification` | Agent waiting for user input |
 | `working` | Agent actively working |
-| `reviewing` | Self-review passed, awaiting human |
-| `reviewed` | Human approved, ready to merge |
+| `reviewing` | Self-review passed, awaiting human review/merge |
 | `stuck` | Agent gave up after max attempts |
 | `done` | Merged/completed |
-| `failed` | Errored |
-| `cancelled` | User cancelled |
+| `cancelled` | User cancelled or errored |
 
 ## 1. Orchestrator Flow
 
@@ -135,7 +133,7 @@ Normal Worker Flow
 
 ## 5. Review & Merge Flow
 
-Task ready for review → human reviews → approves → merges.
+Task ready for review → human reviews → merges.
 
 ```
 Task status: reviewing
@@ -146,15 +144,9 @@ Human attaches (Enter) to review changes
     ↓
 Satisfied? ─── no ──→ Discuss with agent, iterate
     ↓ yes
-Approve (a key)
-    ↓
-Status: reviewed
-    ↓
-Push + create PR (if gh available)
-    ↓
-Merge:
-    - GitHub: merge PR on GitHub
-    - Local: merge (m key)
+Either:
+    - Create PR (p key) → merge on GitHub later
+    - Merge directly (m key)
     ↓
 Cleanup: release workspace, kill session, delete remote branch
     ↓
@@ -162,9 +154,7 @@ Status: done
 ```
 
 **Status transitions:**
-- `reviewing` → `reviewed` (human approves)
-- `reviewed` → `reviewing` (unapprove, undo)
-- `reviewed` → `done` (merged)
+- `reviewing` → `done` (merged)
 
 ## 6. Respawn Flow
 
@@ -276,16 +266,15 @@ Status: working
           │                                          ▲
           ▼                                          │
       working ◄────────► clarification               │
-          │                    │                     │
-          ├────────────────────┤                     │
-          ▼                    ▼                     │
-       stuck              reviewing ─────────────────┤
-          │                    │                     │
-          ▼                    ▼                     │
-       failed             reviewed ──────────────────┤
-                               │
-                               ▼
-                             done
+          │                                          │
+          ├──────────────────────────────────────────┤
+          ▼                                          │
+       stuck                                         │
+          │                                          │
+          │              reviewing ──────────────────┤
+          │                    │
+          │                    ▼
+          └──────────────►   done
 ```
 
 ## Future: Delegation Flow (Phase 2)

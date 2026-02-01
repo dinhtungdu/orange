@@ -15,23 +15,21 @@ export type Harness = "pi" | "opencode" | "claude" | "codex";
 /**
  * Task status represents the lifecycle state of a task.
  *
- * Flow: pending → working → reviewing → reviewed → done
+ * Flow: pending → working → reviewing → done
  *                    ↑↓
  *              clarification (vague task or scope change)
- *                                     ↘ stuck
- *                         ↘ failed (crashed/errored)
+ *                    ↓
+ *                  stuck
  *       cancelled (from any active state)
  */
 export type TaskStatus =
   | "pending" // Created but not spawned
   | "clarification" // Agent waiting for user input (vague task or scope change)
   | "working" // Agent actively processing (includes self-review)
-  | "reviewing" // Self-review passed, awaiting human review
-  | "reviewed" // Human approved, ready to merge
+  | "reviewing" // Self-review passed, awaiting human review/merge
   | "stuck" // Agent gave up after max review attempts
   | "done" // Successfully merged/completed
-  | "failed" // Agent crashed or errored
-  | "cancelled"; // User cancelled
+  | "cancelled"; // User cancelled or errored
 
 /**
  * Task represents a unit of work assigned to an agent.
