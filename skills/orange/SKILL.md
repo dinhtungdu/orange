@@ -6,6 +6,7 @@ description: Orange agent orchestration. Use when TASK.md present (worker mode) 
 # Orange
 
 Your mode depends on context:
+
 - **TASK.md exists** → Worker (implement the task)
 - **No TASK.md** → Orchestrator (create/manage tasks)
 
@@ -19,12 +20,13 @@ Your mode depends on context:
 2. **Check status** — if `clarification`/`working`/`stuck`, you're resuming (read `## Notes`)
 3. **Evaluate clarity** — vague? Add `## Questions`, set `--status clarification`, wait
 4. **Implement** — read project rules, code, test, commit
-5. **Self-review** — use /code-review skill, fix issues (max 2 attempts)
+5. **Self-review** — review the code, fix issues (max 2 attempts)
 6. **Complete** — `--status reviewing` (passed) or `--status stuck` (gave up)
 
 ### Clarification
 
 When task is vague or scope expands:
+
 ```bash
 # Add questions to TASK.md body, then:
 orange task update --status clarification
@@ -36,6 +38,7 @@ orange task update --status working
 ### Interactive Session
 
 If TASK.md body is empty:
+
 1. Ask user what to work on
 2. Update task: `orange task update --branch <name> --description "..."`
 3. Proceed with normal workflow
@@ -43,8 +46,10 @@ If TASK.md body is empty:
 ### Session Handoff
 
 Always update `## Notes` before stopping:
+
 ```markdown
 ## Notes
+
 COMPLETED: X
 IN PROGRESS: Y
 NEXT: Z
@@ -85,10 +90,10 @@ EOF
 
 ### Handling Issues
 
-| Issue | Action |
-|-------|--------|
+| Issue            | Action                     |
+| ---------------- | -------------------------- |
 | Session died (✗) | `orange task respawn <id>` |
-| Task stuck | Attach and help, or cancel |
+| Task stuck       | Attach and help, or cancel |
 
 ---
 
@@ -106,12 +111,12 @@ orange task merge <task_id>
 
 ## Status
 
-| Status | Meaning |
-|--------|---------|
-| `pending` | Created, not spawned |
-| `clarification` | Waiting for user input |
-| `working` | Actively implementing |
-| `reviewing` | Done, awaiting human review/merge |
-| `stuck` | Gave up after 2 attempts |
-| `done` | Merged |
-| `cancelled` | Cancelled or errored |
+| Status          | Meaning                           |
+| --------------- | --------------------------------- |
+| `pending`       | Created, not spawned              |
+| `clarification` | Waiting for user input            |
+| `working`       | Actively implementing             |
+| `reviewing`     | Done, awaiting human review/merge |
+| `stuck`         | Gave up after 2 attempts          |
+| `done`          | Merged                            |
+| `cancelled`     | Cancelled or errored              |
