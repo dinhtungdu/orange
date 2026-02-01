@@ -6,14 +6,11 @@
  *   orange install --harness claude   # Install only for Claude Code
  *
  * Skills are discovered from the skills/ directory. Each subfolder with a SKILL.md
- * is installed to the harness-specific skills directory.
- *
- * The SKILL.md is modified to include --harness <name> in orange commands,
- * so spawned agents pass their identity back to orange.
+ * is symlinked to the harness-specific skills directory.
  */
 
-import { mkdir, writeFile, readFile, readdir, cp } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile, readFile, readdir, symlink, rm, lstat } from "node:fs/promises";
+import { join, relative, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import type { Harness } from "../../core/types.js";
@@ -35,20 +32,7 @@ interface Settings {
 }
 
 /**
- * Template SKILL.md content with harness-specific commands.
- * Adds --harness <name> to orange task create commands.
- */
-function templateSkillContent(content: string, harness: Harness): string {
-  // Replace 'orange task create' with 'orange task create --harness <harness>'
-  // but only if --harness is not already present
-  return content.replace(
-    /orange task create (?!--harness)/g,
-    `orange task create --harness ${harness} `
-  );
-}
-
-/**
- * Install a single skill to a harness's skills directory.
+ * Install a single skill to a harness's skills directory via symlink.
  */
 async function installSkillForHarness(
   skillName: string,
@@ -58,29 +42,23 @@ async function installSkillForHarness(
   const config = HARNESSES[harness];
   // Don't add orange- prefix if skill is already named 'orange'
   const destName = skillName === "orange" ? "orange" : `orange-${skillName}`;
-  const destDir = join(config.skillsDir, destName);
+  const destPath = join(config.skillsDir, destName);
 
-  // Create destination directory
-  await mkdir(destDir, { recursive: true });
-
-  // Read and template SKILL.md
-  const skillMdPath = join(sourcePath, "SKILL.md");
-  const skillContent = await readFile(skillMdPath, "utf-8");
-  const templatedContent = templateSkillContent(skillContent, harness);
-
-  // Write templated SKILL.md
-  await writeFile(join(destDir, "SKILL.md"), templatedContent);
-
-  // Copy any other files in the skill directory
-  const entries = await readdir(sourcePath, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === "SKILL.md") continue; // Already handled
-    const srcFile = join(sourcePath, entry.name);
-    const destFile = join(destDir, entry.name);
-    await cp(srcFile, destFile, { recursive: true });
+  // Remove existing symlink/directory if present
+  try {
+    const stats = await lstat(destPath);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
+      await rm(destPath, { recursive: true, force: true });
+    }
+  } catch {
+    // Doesn't exist, that's fine
   }
 
-  console.log(`  ${harness}: ${destName}`);
+  // Create relative symlink
+  const relPath = relative(dirname(destPath), sourcePath);
+  await symlink(relPath, destPath);
+
+  console.log(`  ${harness}: ${destName} -> ${sourcePath}`);
 }
 
 /**
