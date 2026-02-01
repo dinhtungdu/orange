@@ -453,21 +453,18 @@ function buildDashboard(
 
       rowContainer.add(tableRow);
 
-      // Summary for selected task
-      if (selected) {
-        const idLabel = task.id;
-        const summaryMaxLen = width - 6 - idLabel.length;
-        const summary =
-          task.summary.length > summaryMaxLen
-            ? task.summary.slice(0, summaryMaxLen - 1) + "…"
-            : task.summary;
-        const summaryText = new TextRenderable(renderer, {
-          id: `task-summary-${i}`,
-          content: ` └ ${summary} (${idLabel})`,
-          fg: "#888888",
-        });
-        rowContainer.add(summaryText);
-      }
+      // Summary line (always shown)
+      const summaryMaxLen = width - 4;
+      const summaryDisplay =
+        task.summary.length > summaryMaxLen
+          ? task.summary.slice(0, summaryMaxLen - 1) + "…"
+          : task.summary;
+      const summaryText = new TextRenderable(renderer, {
+        id: `task-summary-${i}`,
+        content: ` └ ${summaryDisplay || "(no summary)"}`,
+        fg: selected ? "#AAAAAA" : "#666666",
+      });
+      rowContainer.add(summaryText);
 
       taskList.add(rowContainer);
       taskRows.push(rowContainer);
