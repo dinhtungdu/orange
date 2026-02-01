@@ -202,7 +202,18 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 - Parallel capture for working tasks
 - Marks dead sessions for respawn UI
 
-**Other refreshes:**
-- PR status polling (30s interval)
-- Diff stats refreshed on each task reload (async, non-blocking)
-- (Future) Auto-spawn ready tasks when dependencies complete
+**Orphan cleanup** (30s interval):
+- Release workspaces bound to terminal tasks (done/cancelled/failed)
+- Kill sessions for terminal tasks that still have one
+- Release workspaces from interrupted spawns (workspace bound but no tmux_session)
+
+**PR sync** (30s interval):
+- Poll status for tasks with existing pr_url
+- Discover PRs for tasks with branch but no pr_url (auto-populate)
+- Auto-trigger merge cleanup when PR detected as merged
+
+**Diff stats:**
+- Refreshed on each task reload (async, non-blocking)
+
+**Future:**
+- Auto-spawn ready tasks when dependencies complete (Phase 1)
