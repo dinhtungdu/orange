@@ -36,7 +36,7 @@ Colors: ● green, ✗ red, ○ gray
 | done | merged/completed |
 | cancelled | user cancelled or errored |
 
-**Clarification tasks** need attention — agent has questions or discovered scope issues. Attach to session to discuss with agent.
+**Clarification tasks** need attention — agent has questions or is waiting for requirements. Attach to session to discuss with agent.
 
 When a task has a PR, the Status column shows PR info instead (e.g., `#123 open ✓`).
 
@@ -70,7 +70,7 @@ Tasks sorted by:
 - Changes: lines added/removed vs default branch (green +N, red -N; blank if none)
 - Activity: relative time since last update (2m ago, 3h ago)
 
-**Selected row** shows description underneath.
+**Selected row** shows summary underneath.
 
 ## Context-Aware Keybindings
 
@@ -124,40 +124,29 @@ Press `c` to create a new task inline. Only available when the dashboard is proj
    ──────────────────────────────────────────────────────────────────────────────
     Create Task
     Branch:      [█] (auto)
-    Description: [ ] (optional)
+    Summary:     [ ] (optional)
     Harness:     [pi ◀]
     Status:      [pending ◀]
     Enter:submit  Escape:cancel
    ```
-3. `Tab` cycles through branch → description → harness → status fields
+3. `Tab` cycles through branch → summary → harness → status fields
 4. Harness field: any key cycles through installed harnesses (pi → opencode → claude → codex)
 5. Status field: any key toggles between `pending` and `reviewing`
-6. `Enter` submits the form → creates task + auto-spawns agent (if pending)
+6. `Enter` submits the form → creates task + auto-spawns agent
 7. `Escape` cancels and returns to task list
 
 ### Behavior
 
 - **All fields are optional** — press `c` then `Enter` to create immediately
-- Empty branch: auto-generates from task ID (e.g., `abc123`)
-- Empty description: spawns interactive session (agent opens with no prompt)
+- Empty branch: auto-generates from task ID (e.g., `orange-tasks/abc123`)
+- Empty summary: spawns in `clarification` status (agent asks what to work on)
 - Harness defaults to first installed (pi → opencode → claude → codex)
 - Status defaults to `pending`; set to `reviewing` for existing work (skips agent spawn)
 - Errors if an orange task already exists for the branch
-- Auto-spawns agent after creation only for `pending` status
+- Auto-spawns agent after creation (except `reviewing` status)
 - On success: shows "Created project/branch [status]" message, task appears in list
 - On error: shows error message, stays in task list mode
 - While in create mode, task list navigation keys (j/k/etc.) are disabled
-
-### Interactive Session
-
-When a task has no description:
-1. Agent spawns in interactive mode (no initial prompt)
-2. User describes what they want to work on
-3. Agent should update TASK.md:
-   - Rename branch: `git branch -m <taskId> <meaningful-name>`
-   - Update `branch:` field in frontmatter
-   - Add description to body
-4. Then proceed with implementation
 
 ## Session Detection
 

@@ -31,8 +31,8 @@ Best-effort: errors are ignored silently.
 
 1. Push branch to remote from workspace
 2. Create PR with:
-   - Title: first line of task description
-   - Body: task description + context, followed by repo's PR template if it exists
+   - Title: task summary
+   - Body: summary + context, followed by repo's PR template if it exists
    - Base: project's default branch
 3. Store PR URL in task metadata
 4. Log `pr.created` history event

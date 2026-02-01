@@ -49,9 +49,9 @@ Agent receives task → evaluates → implements → self-reviews → completes.
 ```
 Spawn with TASK.md
     ↓
-Read task description + context
+Read task summary + context
     ↓
-Evaluate clarity ─── vague? ──→ Clarification Flow
+Evaluate clarity ─── empty/vague? ──→ Clarification Flow
     ↓ clear
 Read project rules (AGENTS.md, etc.)
     ↓
@@ -68,7 +68,8 @@ reviewing          stuck
 ```
 
 **Status transitions:**
-- `pending` → `working` (on spawn)
+- `pending` → `working` (on spawn with summary)
+- `pending` → `clarification` (on spawn without summary)
 - `working` → `reviewing` (self-review passed)
 - `working` → `stuck` (gave up)
 
@@ -77,9 +78,10 @@ reviewing          stuck
 Agent encounters ambiguity → asks questions → waits for user → continues.
 
 ```
-Agent finds task vague OR scope expands mid-work
+Empty/vague summary OR scope expands mid-work
     ↓
 Add ## Questions to TASK.md body
+(e.g., "What would you like to work on?")
     ↓
 orange task update --status clarification
     ↓
@@ -89,49 +91,26 @@ User attaches (dashboard Enter key)
     ↓
 Discussion in session
     ↓
-Update ## Notes with clarified requirements
+Update summary and/or ## Notes with clarified requirements
     ↓
-orange task update --status working
+orange task update --summary "..." --status working
     ↓
 Continue implementation
 ```
 
 **Triggers:**
+- Empty summary (no requirements)
 - Ambiguous requirements
 - Missing context
 - Multiple valid interpretations
 - Discovered scope larger than expected
 
 **Status transitions:**
+- `pending` → `clarification` (empty summary)
 - `working` → `clarification` (agent asks)
 - `clarification` → `working` (user answers)
 
-## 4. Interactive Session Flow
-
-Task created without description → agent spawns in interactive mode.
-
-```
-orange task create (no description)
-    ↓
-Agent spawns with no prompt
-    ↓
-User attaches to session
-    ↓
-User describes work
-    ↓
-Agent updates task:
-    - Rename branch to meaningful name
-    - Set description
-    ↓
-Normal Worker Flow
-```
-
-**Use cases:**
-- Exploratory work
-- Requirements emerge during conversation
-- Pair programming with agent
-
-## 5. Review & Merge Flow
+## 4. Review & Merge Flow
 
 Task ready for review → human reviews → merges.
 
@@ -156,7 +135,7 @@ Status: done
 **Status transitions:**
 - `reviewing` → `done` (merged)
 
-## 6. Respawn Flow
+## 5. Respawn Flow
 
 Session dies unexpectedly → human respawns → agent continues.
 
@@ -180,7 +159,7 @@ Stop (nothing to do)   Continue work     Wait for user
 - ✗ crashed (tmux died, task active)
 - ○ inactive (no session expected)
 
-## 7. PR Flow
+## 6. PR Flow
 
 Integration with GitHub via `gh` CLI.
 
@@ -194,8 +173,8 @@ Create PR (p key or orange task create-pr)
 Push branch to remote
     ↓
 Create PR:
-    - Title: task description first line
-    - Body: description + context + repo template
+    - Title: task summary
+    - Body: summary + context + repo template
     ↓
 Store PR URL in task
 ```
@@ -224,7 +203,7 @@ Status: done
 
 Dashboard polls PR status. When PR merged externally, auto-triggers cleanup.
 
-## 8. Cancel Flow
+## 7. Cancel Flow
 
 User cancels active task.
 
@@ -242,7 +221,7 @@ Release workspace (if bound)
 Status: cancelled
 ```
 
-## 9. Reactivate Flow
+## 8. Reactivate Flow
 
 Revive cancelled task.
 
@@ -253,7 +232,7 @@ Enter key in dashboard
     ↓
 Spawn agent (acquires workspace, creates session)
     ↓
-Status: working
+Status: working (or clarification if empty summary)
 ```
 
 ## Status State Machine
@@ -264,8 +243,9 @@ Status: working
           ▼                                          │
       pending ──────────────────────────────────► cancelled
           │                                          ▲
-          ▼                                          │
-      working ◄────────► clarification               │
+          ├───────────► clarification                │
+          ▼                   ↕                      │
+      working ◄───────────────┘                      │
           │                                          │
           ├──────────────────────────────────────────┤
           ▼                                          │

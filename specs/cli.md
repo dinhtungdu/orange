@@ -14,18 +14,18 @@ orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create [branch] [description] [--harness <name>] [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
+orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|reviewing] [--project <name>]
   # branch: optional, auto-generates from task ID if empty
-  # description: optional, empty = interactive session (no prompt)
+  # summary: optional, empty = clarification status (agent asks what to work on)
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
 orange task respawn <task_id>
-orange task update [task_id] [--branch [name]] [--description <text>] [--status <status>]
+orange task update [task_id] [--branch [name]] [--summary <text>] [--status <status>]
   # task_id: optional if running inside workspace (auto-detected)
   # --branch: if name exists → checkout + delete old; else → rename current
   # --branch (no value): sync task to current git branch
-  # --description: update TASK.md body
+  # --summary: update frontmatter summary field
   # --status: update task status (clarification, working, reviewing, stuck)
 orange task merge <task_id> [--strategy ff|merge] [--local]
 orange task cancel <task_id> [--yes]
@@ -51,23 +51,26 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
   - If omitted: fallback to first installed (pi → opencode → claude → codex)
   - Skills should pass `--harness <name>` to identify the orchestrator
 - `--context -` reads implementation context from stdin, stored as `## Context` in body
-- `--status` sets initial status: `pending` (default) or `reviewing`
+- `--status` sets initial status: `pending` (default), `clarification`, or `reviewing`
   - `pending`: normal flow, spawns agent
+  - `clarification`: for empty/vague summary, spawns agent in clarification mode
   - `reviewing`: for existing work, skips agent spawn, goes to review queue
+- Empty summary auto-sets `--status clarification`
 - `--project` specifies project explicitly (otherwise inferred from cwd)
 - Errors if an orange task already exists for the branch
 - If the git branch exists (local or remote), the agent reuses it on spawn
 
 **TASK.md structure:**
-- `description` in frontmatter (CLI-controlled)
-- Body is free-form (agent-controlled: context, questions, notes)
+- `summary` in frontmatter (CLI-controlled, short one-liner)
+- `## Context` in body (orchestrator-controlled, read-only for agent)
+- `## Questions`, `## Notes` in body (agent-controlled)
 
 ## Task Respawn
 
 Restart a task whose session died. Reuses existing workspace and branch.
 
 Requirements:
-- Active task (working/reviewing/stuck)
+- Active task (working/clarification/reviewing/stuck)
 - Has assigned workspace
 - tmux session no longer exists
 

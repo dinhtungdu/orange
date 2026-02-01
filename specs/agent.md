@@ -8,7 +8,7 @@
 4. Setup harness-specific files (see [harness.md](./harness.md))
 5. Add harness files to git exclude
 6. Create tmux session running agent with prompt (harness-specific command)
-7. Update task: status → `working`, set workspace + tmux_session, log events
+7. Update task: status → `working` (or keep `clarification` if empty summary), set workspace + tmux_session, log events
 
 On spawn failure, release workspace to prevent leaks.
 
@@ -17,7 +17,7 @@ See [harness.md](./harness.md) for spawn commands per harness.
 ## 2. Agent Prompt
 
 The spawn prompt is minimal:
-- Task description and branch name
+- Task summary and branch name
 - Reference to orange skill for workflow instructions
 
 The orange skill (installed via `orange install`) contains:
@@ -31,30 +31,23 @@ The orange skill (installed via `orange install`) contains:
 Before starting work, agent evaluates if the task is clear enough to implement:
 
 1. **Clear task** → proceed to implementation
-2. **Vague task** → enter clarification mode:
+2. **Empty/vague summary** → enter clarification mode:
    - Add `## Questions` section to TASK.md body with specific questions
    - Run `orange task update --status clarification`
    - Wait in session for user to attach and discuss
-   - After discussion, update TASK.md body with refined requirements
+   - After discussion, update summary and/or `## Notes` with refined requirements
    - Run `orange task update --status working`, proceed
 
 Triggers for clarification:
+- Empty summary (no requirements provided)
 - Ambiguous requirements ("improve performance" — which part?)
 - Missing context ("fix the bug" — which bug?)
 - Multiple valid interpretations
 - Scope seems larger than typical task
 
-### Interactive Session (No Description)
-
-When task has no description (empty TASK.md body):
-- Agent spawns with **no prompt** (interactive mode)
-- Harness opens directly: `pi` instead of `pi "prompt"`
-- Agent reads AGENTS.md instruction to discuss with user, then update TASK.md body
-- Then proceed with normal workflow
-
 ### Auto-Generated Branch Names
 
-When no branch name provided, defaults to `orange-tasks/<id>`. Agent reads AGENTS.md instruction to rename based on task description:
+When no branch name provided, defaults to `orange-tasks/<id>`. Agent renames based on task:
 1. `git branch -m orange-tasks/<id> <meaningful-name>`
 2. `orange task update --branch`
 

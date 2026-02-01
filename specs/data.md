@@ -14,7 +14,7 @@ All data in `~/orange/`.
 └── tasks/                  # Task folders (source of truth)
     └── <project>/
         └── <task_id>/          # Directory named by task ID (not branch)
-            ├── TASK.md           # Description, metadata (frontmatter)
+            ├── TASK.md           # Summary, metadata (frontmatter)
             └── history.jsonl     # Event log
 ```
 
@@ -46,7 +46,7 @@ project: orange
 branch: dark-mode
 harness: pi
 status: working
-description: Implement dark mode for dashboard
+summary: Implement dark mode for dashboard
 workspace: orange--1
 tmux_session: orange/dark-mode
 created_at: 2024-01-15T10:00:00Z
@@ -67,13 +67,13 @@ Agent working notes, discoveries, session handoff...
 ```
 
 **Structure:**
-- **Frontmatter**: Metadata including `description` (short, CLI-controlled)
-- **Body**: Free-form content (agent-controlled)
+- **Frontmatter**: Metadata including `summary` (short one-liner, CLI-controlled)
+- **Body**: Sections with different ownership
 
 **Body sections** (all optional):
-- `## Context` — Implementation context from `--context -`
-- `## Questions` — Agent's clarifying questions
-- `## Notes` — Working notes, session handoff
+- `## Context` — Implementation context from `--context -` (orchestrator-controlled, read-only for agent)
+- `## Questions` — Agent's clarifying questions (agent-controlled)
+- `## Notes` — Working notes, session handoff (agent-controlled)
 
 ### Session Handoff Format
 
@@ -88,9 +88,9 @@ NEXT: Z
 BLOCKER: (if any)
 ```
 
-### Interactive Session (Empty Description)
+### Empty Summary
 
-When created without a description, `description` frontmatter is empty. Agent spawns with no initial prompt (interactive mode). Agent follows worker skill to discuss with user, then update via `orange task update --description`.
+When created without a summary, task starts with `clarification` status. Agent writes "What would you like to work on?" in `## Questions`, waits for user to attach and discuss. After discussion, agent updates summary via `orange task update --summary "..."` and proceeds.
 
 ### Auto-Generated Branch Names
 
@@ -116,7 +116,7 @@ Append-only event log:
 | Status | Description |
 |--------|-------------|
 | `pending` | Created, not yet spawned |
-| `clarification` | Agent waiting for user input (vague task or scope change) |
+| `clarification` | Agent waiting for user input (empty/vague summary, or scope change) |
 | `working` | Agent actively working (includes self-review) |
 | `reviewing` | Self-review passed, awaiting human review/merge |
 | `stuck` | Agent gave up after max review attempts |
@@ -126,12 +126,13 @@ Append-only event log:
 ### Clarification Flow
 
 ```
-pending → working → clarification → working → ...
-              ↑___________↓
+pending → clarification → working → ...
+               ↑______________↓
 ```
 
 Agent enters `clarification` when:
-1. **Task is vague** — unclear requirements before starting
-2. **Scope expands** — discovers complexity mid-work
+1. **Empty summary** — no requirements provided
+2. **Vague summary** — unclear requirements before starting
+3. **Scope expands** — discovers complexity mid-work
 
-Agent writes questions to `## Questions` section, runs `orange task update --status clarification`, then waits in session. User attaches to tmux session, discusses with agent. Agent updates TASK.md body with refined spec, runs `orange task update --status working`.
+Agent writes questions to `## Questions` section, runs `orange task update --status clarification`, then waits in session. User attaches to tmux session, discusses with agent. Agent updates summary and/or `## Notes` with refined spec, runs `orange task update --status working`.

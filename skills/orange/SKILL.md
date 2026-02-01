@@ -16,10 +16,10 @@ Your mode depends on context:
 
 ### Workflow
 
-1. **Read** `TASK.md` — description in frontmatter, context in body
+1. **Read** `TASK.md` — summary in frontmatter, context in body
 2. **Check status** — behavior depends on current status (see Respawn Behavior)
 3. **Handle branch** — if `orange-tasks/<id>`, rename to meaningful name
-4. **Evaluate clarity** — vague? Add `## Questions`, set `--status clarification`, wait
+4. **Evaluate clarity** — empty/vague? Add `## Questions`, set `--status clarification`, wait
 5. **Implement** — read project rules, code, test, commit
 6. **Self-review** — use `/code-review` skill, fix issues (max 2 attempts)
 7. **Complete** — `--status reviewing` (passed) or `--status stuck` (gave up)
@@ -48,26 +48,17 @@ orange task update --branch
 
 ### Clarification
 
-When task is vague or scope expands mid-work:
+When summary is empty, vague, or scope expands mid-work:
 
 ```bash
-# Add questions to TASK.md body, then:
+# Add questions to TASK.md body (e.g., "What would you like to work on?")
 orange task update --status clarification
 # Wait for user to attach and discuss
-# After resolved:
-orange task update --status working
+# After resolved, update summary and notes:
+orange task update --summary "..." --status working
 ```
 
 **Mid-work discovery:** If you find the task requires more than expected (DB schema change, affects multiple modules), stop and clarify before proceeding.
-
-### Interactive Session
-
-If TASK.md body is empty (no description):
-
-1. Ask user what to work on
-2. Rename branch: `git branch -m orange-tasks/<id> <meaningful-name>`
-3. Update task: `orange task update --branch --description "..."`
-4. Proceed with normal workflow
 
 ### Session Handoff
 
@@ -87,6 +78,7 @@ BLOCKER: (if any)
 - Don't push or merge — human handles that
 - Update status via CLI before stopping
 - Use `/code-review` skill for self-review
+- `## Context` is read-only (orchestrator-provided)
 
 ---
 
@@ -104,7 +96,7 @@ BLOCKER: (if any)
 
 - Independent (no dependencies between parallel tasks)
 - Atomic (one clear objective)
-- Clear description (enough for autonomous work)
+- Clear summary (enough for autonomous work)
 
 ### Passing Context
 
@@ -132,7 +124,7 @@ EOF
 orange [--all] [--project <name>]
 
 # Task lifecycle
-orange task create [branch] [description] [--harness <name>] [--context -] [--no-spawn] [--status pending|reviewing] [--project <name>]
+orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|reviewing] [--project <name>]
 orange task spawn <task_id>
 orange task respawn <task_id>
 orange task attach <task_id>
@@ -140,9 +132,10 @@ orange task cancel <task_id> [--yes]
 orange task delete <task_id> [--yes]  # done/cancelled only
 
 # Task updates (task_id optional if in workspace)
-orange task update [task_id] [--status <status>] [--branch [name]] [--description <text>]
+orange task update [task_id] [--status <status>] [--branch [name]] [--summary <text>]
   # --branch (no value): sync task to current git branch
   # --branch <name>: checkout existing or rename current
+  # --summary: update frontmatter summary
 
 # Review & merge
 orange task create-pr <task_id>
@@ -157,8 +150,9 @@ orange task list [--status <status>] [--all]
 | Flag | Purpose |
 |------|---------|
 | `--harness <name>` | Agent to use (pi/claude/opencode/codex) — always pass as orchestrator |
-| `--context -` | Read context from stdin → `## Context` in body |
+| `--context -` | Read context from stdin → `## Context` in body (read-only for agent) |
 | `--no-spawn` | Create without starting agent |
+| `--status clarification` | For empty summary (auto-set when summary omitted) |
 | `--status reviewing` | For existing work, skip agent spawn |
 | `--project <name>` | Explicit project (otherwise inferred from cwd) |
 
@@ -169,7 +163,7 @@ orange task list [--status <status>] [--all]
 | Status | Meaning |
 |--------|---------|
 | `pending` | Created, not spawned |
-| `clarification` | Waiting for user input |
+| `clarification` | Waiting for user input (empty/vague summary, or scope change) |
 | `working` | Actively implementing |
 | `reviewing` | Done, awaiting human review/merge |
 | `stuck` | Gave up after 2 attempts |
@@ -179,7 +173,10 @@ orange task list [--status <status>] [--all]
 ### Transitions
 
 ```
-pending → working ⇄ clarification → reviewing → done
-                 ↘ stuck                    ↗
+pending → working (with summary)
+pending → clarification (empty summary)
+working ⇄ clarification
+working → reviewing | stuck
 Any active → cancelled
+reviewing → done
 ```
