@@ -799,8 +799,11 @@ export class DashboardState {
   private async cleanupOrphans(): Promise<void> {
     const log = this.deps.logger.child("dashboard");
 
+    // Load ALL tasks (unfiltered) to check for orphans across all projects
+    const allTasksUnfiltered = await listTasks(this.deps, {});
+
     // Build task lookup by ID
-    const taskById = new Map(this.data.allTasks.map((t) => [t.id, t]));
+    const taskById = new Map(allTasksUnfiltered.map((t) => [t.id, t]));
 
     // Get all live sessions
     const liveSessions = new Set(await this.deps.tmux.listSessions());
@@ -812,7 +815,7 @@ export class DashboardState {
       if (entry.status !== "bound" || !entry.task) continue;
 
       // entry.task is "project/branch" format, need to find task by matching
-      const task = this.data.allTasks.find(
+      const task = allTasksUnfiltered.find(
         (t) => `${t.project}/${t.branch}` === entry.task
       );
 
@@ -884,7 +887,7 @@ export class DashboardState {
     }
 
     // Also check for orphaned sessions (session alive but task is terminal)
-    for (const task of this.data.allTasks) {
+    for (const task of allTasksUnfiltered) {
       if (!task.tmux_session) continue;
       if (!TERMINAL_STATUSES.includes(task.status)) continue;
       if (!liveSessions.has(task.tmux_session)) continue;
