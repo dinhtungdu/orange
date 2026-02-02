@@ -2,13 +2,16 @@
  * Tests for workspace pool management.
  *
  * Tests the acquire/release lifecycle with mocked git executor.
+ * 
+ * Note: TASK.md is the single source of truth for workspace allocation.
+ * A workspace is "bound" if a TASK.md has `workspace: <name>` in frontmatter.
  */
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Deps, Project } from "./types.js";
+import type { Deps, Project, Task } from "./types.js";
 import { MockGit } from "./git.js";
 import { MockGitHub } from "./github.js";
 import { MockTmux } from "./tmux.js";
@@ -21,7 +24,32 @@ import {
   loadPoolState,
   getPoolStats,
 } from "./workspace.js";
-import { saveProjects } from "./state.js";
+import { saveProjects, saveTask } from "./state.js";
+
+/** Helper to create a task with a workspace binding */
+async function createTaskWithWorkspace(
+  deps: Deps,
+  projectName: string,
+  branch: string,
+  workspace: string
+): Promise<Task> {
+  const task: Task = {
+    id: `task-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    project: projectName,
+    branch,
+    harness: "claude",
+    status: "working",
+    workspace,
+    tmux_session: `${projectName}/${branch}`,
+    summary: "Test task",
+    body: "",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    pr_url: null,
+  };
+  await saveTask(deps, task);
+  return task;
+}
 
 describe("Workspace Pool", () => {
   let tempDir: string;
@@ -70,34 +98,41 @@ describe("Workspace Pool", () => {
 
     const workspace = await acquireWorkspace(deps, "test-project", "test-project/feature");
 
+    // acquireWorkspace just returns the name - it doesn't mark as bound
+    // Caller must create TASK.md to mark as bound
     expect(workspace).toBe("test-project--1");
 
+    // Before TASK.md is created, workspace is still "available"
     const state = await loadPoolState(deps);
-    expect(state.workspaces["test-project--1"]).toEqual({
-      status: "bound",
-      task: "test-project/feature",
-    });
-    expect(state.workspaces["test-project--2"]).toEqual({ status: "available" });
+    expect(state.workspaces["test-project--1"]).toEqual({ status: "available" });
   });
 
   test("acquireWorkspace returns second workspace when first is bound", async () => {
     await initWorkspacePool(deps, testProject);
 
-    await acquireWorkspace(deps, "test-project", "test-project/feature-1");
+    // Acquire first and bind via TASK.md
+    const ws1 = await acquireWorkspace(deps, "test-project", "test-project/feature-1");
+    await createTaskWithWorkspace(deps, "test-project", "feature-1", ws1);
+
+    // Now acquire second
     const workspace2 = await acquireWorkspace(deps, "test-project", "test-project/feature-2");
 
     expect(workspace2).toBe("test-project--2");
 
     const state = await loadPoolState(deps);
     expect(state.workspaces["test-project--1"].status).toBe("bound");
-    expect(state.workspaces["test-project--2"].status).toBe("bound");
+    expect(state.workspaces["test-project--2"].status).toBe("available");
   });
 
   test("acquireWorkspace throws when pool exhausted", async () => {
     await initWorkspacePool(deps, testProject);
 
-    await acquireWorkspace(deps, "test-project", "test-project/feature-1");
-    await acquireWorkspace(deps, "test-project", "test-project/feature-2");
+    // Bind both workspaces via TASK.md
+    const ws1 = await acquireWorkspace(deps, "test-project", "test-project/feature-1");
+    await createTaskWithWorkspace(deps, "test-project", "feature-1", ws1);
+    
+    const ws2 = await acquireWorkspace(deps, "test-project", "test-project/feature-2");
+    await createTaskWithWorkspace(deps, "test-project", "feature-2", ws2);
 
     await expect(
       acquireWorkspace(deps, "test-project", "test-project/feature-3")
@@ -111,12 +146,22 @@ describe("Workspace Pool", () => {
 
     await initWorkspacePool(deps, testProject);
 
+    // Acquire and bind
     const workspace = await acquireWorkspace(deps, "test-project", "test-project/feature");
-    expect(workspace).toBe("test-project--1");
+    const task = await createTaskWithWorkspace(deps, "test-project", "feature", workspace);
+    
+    // Verify it's bound
+    let state = await loadPoolState(deps);
+    expect(state.workspaces["test-project--1"].status).toBe("bound");
 
+    // Clear workspace from task (caller's responsibility before releaseWorkspace)
+    task.workspace = null;
+    await saveTask(deps, task);
+
+    // Release just cleans git state
     await releaseWorkspace(deps, workspace);
 
-    const state = await loadPoolState(deps);
+    state = await loadPoolState(deps);
     expect(state.workspaces["test-project--1"]).toEqual({ status: "available" });
   });
 
@@ -129,22 +174,21 @@ describe("Workspace Pool", () => {
 
     await initWorkspacePool(deps, testProject);
 
-    // Acquire both
+    // Acquire and bind both
     const ws1 = await acquireWorkspace(deps, "test-project", "test-project/feature-1");
+    const task1 = await createTaskWithWorkspace(deps, "test-project", "feature-1", ws1);
+    
     const ws2 = await acquireWorkspace(deps, "test-project", "test-project/feature-2");
+    await createTaskWithWorkspace(deps, "test-project", "feature-2", ws2);
 
-    // Release first
+    // Release first (clear from task first)
+    task1.workspace = null;
+    await saveTask(deps, task1);
     await releaseWorkspace(deps, ws1);
 
     // Acquire again - should get the released one
     const ws3 = await acquireWorkspace(deps, "test-project", "test-project/feature-3");
     expect(ws3).toBe("test-project--1");
-
-    const state = await loadPoolState(deps);
-    expect(state.workspaces["test-project--1"]).toEqual({
-      status: "bound",
-      task: "test-project/feature-3",
-    });
   });
 
   test("initWorkspacePool is idempotent", async () => {
@@ -172,11 +216,12 @@ describe("Workspace Pool", () => {
     const state = await loadPoolState(deps);
     expect(Object.keys(state.workspaces)).toHaveLength(3);
 
-    // Acquire from test-project
+    // Acquire from test-project and bind
     const ws1 = await acquireWorkspace(deps, "test-project", "test-project/feature");
+    await createTaskWithWorkspace(deps, "test-project", "feature", ws1);
     expect(ws1).toBe("test-project--1");
 
-    // Acquire from other-project
+    // Acquire from other-project - should still work
     const ws2 = await acquireWorkspace(deps, "other-project", "other-project/feature");
     expect(ws2).toBe("other-project--1");
   });
@@ -233,16 +278,15 @@ describe("Lazy Workspace Initialization", () => {
     expect(workspace).toBe("lazy-project--1");
     expect(consoleLogs.join("\n")).toContain("Creating workspace lazy-project--1");
 
+    // Workspace exists but is available (no TASK.md binding yet)
     const state = await loadPoolState(deps);
-    expect(state.workspaces["lazy-project--1"]).toEqual({
-      status: "bound",
-      task: "lazy-project/feature-1",
-    });
+    expect(state.workspaces["lazy-project--1"]).toEqual({ status: "available" });
   });
 
   test("acquireWorkspace creates second worktree when first is bound", async () => {
-    // Acquire first (lazy creates)
+    // Acquire first (lazy creates) and bind
     const ws1 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+    await createTaskWithWorkspace(deps, "lazy-project", "feature-1", ws1);
     expect(ws1).toBe("lazy-project--1");
 
     consoleLogs = [];
@@ -255,13 +299,16 @@ describe("Lazy Workspace Initialization", () => {
     const state = await loadPoolState(deps);
     expect(Object.keys(state.workspaces)).toHaveLength(2);
     expect(state.workspaces["lazy-project--1"].status).toBe("bound");
-    expect(state.workspaces["lazy-project--2"].status).toBe("bound");
+    expect(state.workspaces["lazy-project--2"].status).toBe("available");
   });
 
   test("acquireWorkspace throws when pool_size reached via lazy init", async () => {
-    // Acquire up to pool_size (2) via lazy init
-    await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
-    await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
+    // Acquire up to pool_size (2) via lazy init and bind both
+    const ws1 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+    await createTaskWithWorkspace(deps, "lazy-project", "feature-1", ws1);
+    
+    const ws2 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
+    await createTaskWithWorkspace(deps, "lazy-project", "feature-2", ws2);
 
     // Third should fail
     await expect(
@@ -288,19 +335,23 @@ describe("Lazy Workspace Initialization", () => {
     let stats = await getPoolStats(deps, "lazy-project");
     expect(stats).toEqual({ total: 0, available: 0, bound: 0, poolSize: 2 });
 
-    // Acquire one (lazy creates)
-    await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+    // Acquire one (lazy creates) and bind
+    const ws1 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+    const task1 = await createTaskWithWorkspace(deps, "lazy-project", "feature-1", ws1);
 
     stats = await getPoolStats(deps, "lazy-project");
     expect(stats).toEqual({ total: 1, available: 0, bound: 1, poolSize: 2 });
 
-    // Acquire another
-    await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
+    // Acquire another and bind
+    const ws2 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
+    await createTaskWithWorkspace(deps, "lazy-project", "feature-2", ws2);
 
     stats = await getPoolStats(deps, "lazy-project");
     expect(stats).toEqual({ total: 2, available: 0, bound: 2, poolSize: 2 });
 
-    // Release one
+    // Release one (clear workspace from task first)
+    task1.workspace = null;
+    await saveTask(deps, task1);
     const workspacePath = join(tempDir, "workspaces", "lazy-project--1");
     mockGit.initRepo(workspacePath, "main");
     await releaseWorkspace(deps, "lazy-project--1");
@@ -316,8 +367,9 @@ describe("Lazy Workspace Initialization", () => {
     const state1 = await loadPoolState(deps);
     expect(Object.keys(state1.workspaces)).toHaveLength(1);
 
-    // Acquire first (uses existing)
+    // Acquire first (uses existing) and bind
     const ws1 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+    await createTaskWithWorkspace(deps, "lazy-project", "feature-1", ws1);
     expect(ws1).toBe("lazy-project--1");
 
     consoleLogs = [];

@@ -9,7 +9,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Deps, Project } from "../core/types.js";
+import type { Deps, Project, Task } from "../core/types.js";
 import { MockTmux } from "../core/tmux.js";
 import { MockGit } from "../core/git.js";
 import { MockGitHub } from "../core/github.js";
@@ -206,7 +206,23 @@ describe("Integration: Workspace Pool", () => {
     expect(stats.available).toBe(2);
     expect(stats.bound).toBe(0);
 
-    await acquireWorkspace(deps, "test-repo", "test-repo/f1");
+    // Acquire workspace and bind via TASK.md (source of truth)
+    const ws = await acquireWorkspace(deps, "test-repo", "test-repo/f1");
+    const task: Task = {
+      id: "test-task-1",
+      project: "test-repo",
+      branch: "f1",
+      harness: "claude",
+      status: "working",
+      workspace: ws,
+      tmux_session: "test-repo/f1",
+      summary: "Test task",
+      body: "",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      pr_url: null,
+    };
+    await saveTask(deps, task);
     
     stats = await getPoolStats(deps, "test-repo");
     expect(stats.total).toBe(2);

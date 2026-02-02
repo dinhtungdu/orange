@@ -466,7 +466,7 @@ describe("Dashboard Poll Cycle", () => {
   });
 
   test("orphan cleanup releases workspace for done task", async () => {
-    // Create a done task with workspace bound
+    // Create a done task with workspace bound (TASK.md is source of truth)
     const task = createTask({
       id: "done-task",
       branch: "done-branch",
@@ -476,27 +476,28 @@ describe("Dashboard Poll Cycle", () => {
     });
     await saveTask(deps, task);
 
-    // Set up pool state with workspace bound to the task
+    // Create workspace directory (required for loadPoolState to see it)
     const workspacesDir = join(tempDir, "workspaces");
-    await mkdir(workspacesDir, { recursive: true });
-    await writeFile(
-      join(workspacesDir, ".pool.json"),
-      JSON.stringify({
-        workspaces: {
-          "testproj--1": { status: "bound", task: "testproj/done-branch" },
-        },
-      })
-    );
+    const workspacePath = join(workspacesDir, "testproj--1");
+    await mkdir(workspacePath, { recursive: true });
+
+    // Init mock git for the workspace
+    const mockGit = deps.git as MockGit;
+    mockGit.initRepo(workspacePath, "main");
 
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
     await state.loadTasks();
 
-    // Run poll cycle
+    // Verify workspace shows as bound before cleanup
+    let poolState = await loadPoolState(deps);
+    expect(poolState.workspaces["testproj--1"].status).toBe("bound");
+
+    // Run poll cycle (orphan cleanup clears task.workspace and releases)
     await state.runPollCycle();
 
-    // Check workspace was released
-    const poolState = await loadPoolState(deps);
+    // Check workspace was released (task.workspace cleared, so now available)
+    poolState = await loadPoolState(deps);
     expect(poolState.workspaces["testproj--1"].status).toBe("available");
   });
 
@@ -510,16 +511,14 @@ describe("Dashboard Poll Cycle", () => {
     });
     await saveTask(deps, task);
 
+    // Create workspace directory
     const workspacesDir = join(tempDir, "workspaces");
-    await mkdir(workspacesDir, { recursive: true });
-    await writeFile(
-      join(workspacesDir, ".pool.json"),
-      JSON.stringify({
-        workspaces: {
-          "testproj--1": { status: "bound", task: "testproj/cancelled-branch" },
-        },
-      })
-    );
+    const workspacePath = join(workspacesDir, "testproj--1");
+    await mkdir(workspacePath, { recursive: true });
+
+    // Init mock git for the workspace
+    const mockGit = deps.git as MockGit;
+    mockGit.initRepo(workspacePath, "main");
 
     const { DashboardState } = await import("./state.js");
     const state = new DashboardState(deps, { project: "testproj" });
