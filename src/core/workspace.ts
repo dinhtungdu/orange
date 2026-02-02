@@ -52,8 +52,13 @@ async function getExistingWorkspaces(deps: Deps): Promise<string[]> {
         if (projA !== projB) return projA.localeCompare(projB);
         return parseInt(numA, 10) - parseInt(numB, 10);
       });
-  } catch {
-    return [];
+  } catch (err) {
+    // Directory doesn't exist yet - this is expected on first run
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    // Other errors (permissions, etc.) should propagate
+    throw err;
   }
 }
 
@@ -140,6 +145,23 @@ async function createWorktree(
   const number = getNextWorkspaceNumber(existingWorkspaces, project.name);
   const name = `${project.name}--${number}`;
   const worktreePath = join(getWorkspacesDir(deps), name);
+
+  // Safety check: verify the directory doesn't already exist
+  // This catches stale state / race conditions
+  const { stat } = await import("node:fs/promises");
+  try {
+    await stat(worktreePath);
+    // If we get here, the path exists but wasn't in existingWorkspaces
+    throw new Error(
+      `Workspace directory '${worktreePath}' already exists but wasn't detected. ` +
+      `This may indicate stale state. Try running 'orange workspace gc'.`
+    );
+  } catch (err) {
+    // ENOENT is expected - directory doesn't exist, we can create it
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
+    }
+  }
 
   console.log(`Creating workspace ${name}...`);
   await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
@@ -249,9 +271,15 @@ export async function acquireWorkspace(
 
     // Find first available workspace for this project
     const prefix = `${projectName}--`;
-    const available = existingWorkspaces.find(
-      (name) => name.startsWith(prefix) && !boundWorkspaces.has(name)
-    );
+    const projectWorkspaces = existingWorkspaces.filter((name) => name.startsWith(prefix));
+    const available = projectWorkspaces.find((name) => !boundWorkspaces.has(name));
+
+    log.debug("Workspace pool state", {
+      project: projectName,
+      existing: projectWorkspaces,
+      bound: Array.from(boundWorkspaces.keys()).filter((name) => name.startsWith(prefix)),
+      available,
+    });
 
     if (available) {
       log.info("Workspace acquired", { workspace: available, project: projectName });
