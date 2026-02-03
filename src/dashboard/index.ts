@@ -80,6 +80,7 @@ function createTableRow(
     content: taskContent,
     flexGrow: 1,
     flexShrink: 1,
+    truncate: true,
   });
 
   // Status column: fixed width

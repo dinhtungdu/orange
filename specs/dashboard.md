@@ -86,7 +86,7 @@ Footer shows relevant actions based on selected task's state:
 | Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Stuck | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Dead/no session | j/k:nav  Enter:respawn  x:cancel  c:create  f:filter  q:quit |
-| Cancelled | j/k:nav  Enter:reactivate  d:del  c:create  f:filter  q:quit |
+| Cancelled | j/k:nav  d:del  c:create  f:filter  q:quit |
 | Done | j/k:nav  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
@@ -109,8 +109,7 @@ Footer shows relevant actions based on selected task's state:
 - Has live session → attach
   - If `--exit-on-attach`, dashboard exits after attach
 - Dead/no session → respawn agent
-- Cancelled → reactivate (spawn agent)
-- Done → no-op
+- Cancelled/Done → no-op
 
 ## Create Task
 

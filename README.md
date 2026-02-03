@@ -1,117 +1,142 @@
 # Orange
 
-Agent orchestration system for parallel Claude Code agents.
+Agent orchestration for parallel coding agents.
 
 ## Overview
 
 Orange enables you to:
 1. Chat with an orchestrator agent to describe tasks
 2. Break tasks into independent, parallel work items
-3. Spawn Claude Code agents that work autonomously in isolated tmux sessions
+3. Spawn coding agents that work autonomously in isolated tmux sessions
 4. Monitor progress via a TUI dashboard
 5. Review and merge completed work
 
 ## Quick Start
 
 ```bash
-# Install dependencies
+# Install
 bun install
 
-# Add a project
-bun run dev project add /path/to/your/project --name myproject --pool-size 2
+# Install skill to your coding agent
+bun run dev install
 
-# Initialize workspace pool
-bun run dev workspace init myproject
-
-# Create and spawn a task
-bun run dev task create myproject feature-branch "Implement feature X"
-bun run dev task spawn <task_id>
-
-# View dashboard
+# From a git project directory, open dashboard
 bun run dev
 
-# Or start orchestrator session
-bun run dev start
+# Create a task (auto-spawns agent)
+bun run dev task create my-feature "Implement feature X"
+
+# Or let orchestrator plan and create tasks
+# (chat with your coding agent, it will call orange task create)
 ```
 
 ## Commands
 
+### Dashboard
+```bash
+orange                              # Dashboard (project-scoped if in git repo)
+orange --all                        # Dashboard (all projects)
+orange --project <name>             # Dashboard (specific project)
+```
+
 ### Project Management
 ```bash
-orange project add <path> [--name <name>] [--pool-size <n>]
+orange project add [path] [--name <name>] [--pool-size <n>]
 orange project list
+orange project update <name> [--pool-size <n>]
+orange project remove <name>
 ```
 
 ### Task Management
 ```bash
-orange task create <project> <branch> <description>
-orange task list [--project <project>] [--status <status>]
+orange task create [branch] [summary] [--harness <name>] [--status pending|reviewing]
+orange task list [--status <status>] [--all]
 orange task spawn <task_id>
-orange task peek <task_id> [--lines N]
-orange task complete <task_id>
-orange task stuck <task_id>
-orange task merge <task_id> [--strategy ff|merge]
-orange task cancel <task_id>
+orange task attach <task_id>
+orange task respawn <task_id>
+orange task update [task_id] [--branch [name]] [--summary <text>] [--status <status>]
+orange task merge <task_id> [--strategy ff|merge] [--local]
+orange task cancel <task_id> [--yes]
+orange task delete <task_id> [--yes]
+orange task create-pr <task_id>
+orange task complete <task_id>      # Agent use: set status to reviewing
+orange task stuck <task_id>         # Agent use: set status to stuck
 ```
 
 ### Workspace Management
 ```bash
-orange workspace init <project>
-orange workspace list
+orange workspace init
+orange workspace list [--all]
+orange workspace gc
 ```
 
-### Session Management
+### Other
 ```bash
-orange start    # Start orchestrator session
-orange install  # Install orchestrator skill and stop hook
+orange install [--harness <name>]   # Install skill to coding agents
+orange log [--level <level>] [--lines N]
 ```
 
 ## Task Status Flow
 
 ```
-pending → working → needs_human → done
-                 ↘ stuck (gave up after 3 reviews)
-                 ↘ failed (crashed/errored)
+pending → working → reviewing → done
+            ↕           ↓
+      clarification  cancelled
+            ↓
+          stuck
 ```
+
+| Status | Description |
+|--------|-------------|
+| pending | Created, waiting to spawn |
+| clarification | Agent waiting for user input |
+| working | Agent actively working |
+| reviewing | Self-review passed, awaiting human review |
+| stuck | Agent gave up after max attempts |
+| done | Merged/completed |
+| cancelled | User cancelled |
 
 ## Dashboard Keybindings
 
 | Key | Action |
 |-----|--------|
 | j/k | Navigate up/down |
-| Enter | Attach to task's tmux session |
-| p | Peek - show more agent output |
+| Enter | Spawn/attach/respawn (context-dependent) |
+| c | Create new task |
 | m | Merge task |
+| p | Create PR / Open PR in browser |
+| R | Refresh PR status |
 | x | Cancel task |
-| o | Open PR in browser |
+| d | Delete task (done/cancelled only) |
 | f | Filter by status (all → active → done) |
 | q | Quit |
 
 ## Architecture
 
-- **Single binary**: CLI + Dashboard via pi-tui
-- **Storage**: File-based (source of truth) + SQLite (cache)
-- **Workspace pool**: Reusable git worktrees
-- **Self-review**: Agents handle their own review loop
+- **CLI + TUI**: Single binary with dashboard
+- **Storage**: File-based (`~/orange/`)
+- **Workspace pool**: Reusable git worktrees per project
+- **Multi-harness**: Supports pi, claude, opencode, codex
 
 ## Data Storage
 
-- `~/orange/projects.json` - Project registry
-- `~/orange/workspaces/` - Worktree pool
-- `~/orange/tasks/<project>/<branch>/` - Task data (TASK.md, history.jsonl)
-- `~/orange/index.db` - SQLite cache
+```
+~/orange/
+├── projects.json           # Project registry
+├── orange.log              # Structured log
+├── workspaces/             # Git worktree pool
+│   └── .pool.json
+└── tasks/<project>/<id>/   # Task data
+    ├── TASK.md
+    └── history.jsonl
+```
 
 ## Development
 
 ```bash
-# Run in development
-bun run dev <command>
-
-# Run tests
-bun test
-
-# Type check + tests
-bun run check
+bun run dev <command>    # Run in development
+bun test                 # Run tests
+bun run check            # Type check + tests
 ```
 
 ## License
