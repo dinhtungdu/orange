@@ -1002,10 +1002,10 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
   }
 
-  // Release workspace
+  // Release workspace (no auto-spawn - cancelled is terminal, not a trigger for next task)
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
-    await releaseWorkspace(deps, task.workspace);
+    await releaseWorkspace(deps, task.workspace, false);
   }
 
   // Kill tmux session (safe - ignores errors if session already gone)

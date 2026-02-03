@@ -920,20 +920,14 @@ export class DashboardState {
     // Session dead only matters for "working" tasks
     const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
 
-    // Done tasks: no-op
-    if (task.status === "done") {
+    // Terminal states: no action
+    if (task.status === "done" || task.status === "cancelled") {
       return;
     }
 
     // Pending: spawn
     if (task.status === "pending") {
       this.spawnTask();
-      return;
-    }
-
-    // Cancelled: reactivate via respawn
-    if (task.status === "cancelled") {
-      this.respawnTask();
       return;
     }
 
@@ -1261,7 +1255,7 @@ export class DashboardState {
     } else if (task.status === "done") {
       keys += "  d:del";
     } else if (task.status === "cancelled") {
-      keys += "  Enter:reactivate  d:del";
+      keys += "  d:del";
     } else if (isDead) {
       // Working task with dead session - needs respawn
       keys += "  Enter:respawn  x:cancel";

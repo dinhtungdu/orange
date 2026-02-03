@@ -322,9 +322,11 @@ export async function acquireWorkspace(
  * Note: The caller must clear `workspace` in TASK.md to mark it as available
  * (TASK.md is the source of truth for allocation).
  *
- * After release, auto-spawns the next pending task for this project.
+ * After release, optionally auto-spawns the next pending task for this project.
+ *
+ * @param autoSpawn - Whether to auto-spawn next pending task (default: true)
  */
-export async function releaseWorkspace(deps: Deps, workspace: string): Promise<void> {
+export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn = true): Promise<void> {
   const log = deps.logger.child("workspace");
 
   log.debug("Releasing workspace", { workspace });
@@ -401,9 +403,11 @@ export async function releaseWorkspace(deps: Deps, workspace: string): Promise<v
   }
 
   // Auto-spawn next pending task for this project (outside lock)
-  // Imported dynamically to avoid circular dependency
-  const { spawnNextPending } = await import("./spawn.js");
-  await spawnNextPending(deps, projectName);
+  if (autoSpawn) {
+    // Imported dynamically to avoid circular dependency
+    const { spawnNextPending } = await import("./spawn.js");
+    await spawnNextPending(deps, projectName);
+  }
 }
 
 /**

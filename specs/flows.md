@@ -221,24 +221,12 @@ Confirm prompt
     ↓
 Kill tmux session (if exists)
     ↓
-Release workspace (if bound)
+Release workspace (if bound, no auto-spawn)
     ↓
-Status: cancelled
+Status: cancelled (terminal, not respawnable)
 ```
 
-## 8. Reactivate Flow
-
-Revive cancelled task.
-
-```
-Task status: cancelled
-    ↓
-Enter key in dashboard
-    ↓
-Spawn agent (acquires workspace, creates session)
-    ↓
-Status: working (or clarification if empty summary)
-```
+**Note:** Unlike merge/done, cancellation does not auto-spawn the next pending task. If you need to restart the same work, create a new task.
 
 ## Status State Machine
 
