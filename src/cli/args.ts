@@ -184,6 +184,7 @@ function isSubcommand(command: string, arg: string): boolean {
     task: [
       "create",
       "list",
+      "show",
       "spawn",
       "attach",
       "respawn",
