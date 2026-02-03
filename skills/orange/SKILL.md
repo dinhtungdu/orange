@@ -129,12 +129,19 @@ cat << 'EOF' | orange task create add-login "Implement login" --harness pi --con
 EOF
 ```
 
+### Inspecting Tasks
+
+Use `orange task show <id>` to see task details, plan, notes, and history. Useful when:
+- A task failed and you need to understand what was tried
+- Planning an alternative approach for a similar problem
+- Reviewing what context was provided to a worker
+
 ### Handling Issues
 
 | Issue | Action |
 |-------|--------|
 | Session died (✗) | `orange task respawn <id>` |
-| Task stuck | `orange task attach <id>` and help, or cancel |
+| Task stuck | `orange task show <id>` to review, then attach or create new task with different approach |
 | Needs PR | `orange task create-pr <id>` |
 
 ---
@@ -162,6 +169,9 @@ orange task update [task_id] [--status <status>] [--branch [name]] [--summary <t
 # Review & merge
 orange task create-pr <task_id>
 orange task merge <task_id> [--local]
+
+# Inspect
+orange task show <task_id>          # Show details, TASK.md content, history
 
 # List
 orange task list [--status <status>] [--all]

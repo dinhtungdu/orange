@@ -26,6 +26,7 @@ import {
   loadProjects,
   saveTask,
   appendHistory,
+  loadHistory,
   getTaskDir,
 } from "../../core/state.js";
 import { createTaskRecord } from "../../core/task.js";
@@ -103,6 +104,10 @@ export async function runTaskCommand(
 
     case "update":
       await updateTask(parsed, deps);
+      break;
+
+    case "show":
+      await showTask(parsed, deps);
       break;
 
     default:
@@ -254,6 +259,83 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     console.log(`    ${task.summary}`);
     console.log();
   }
+}
+
+/**
+ * Show detailed task information including TASK.md content and history.
+ */
+async function showTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task show <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  // Find task
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error("Task not found", { taskId });
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  // Load history
+  const history = await loadHistory(deps, task.project, task.id);
+
+  // Output task details
+  console.log("═".repeat(60));
+  console.log(`TASK: ${task.id}`);
+  console.log("═".repeat(60));
+  console.log();
+
+  // Metadata
+  console.log("## Metadata");
+  console.log();
+  console.log(`Project:     ${task.project}`);
+  console.log(`Branch:      ${task.branch}`);
+  console.log(`Status:      ${task.status}`);
+  console.log(`Harness:     ${task.harness}`);
+  console.log(`Workspace:   ${task.workspace ?? "(none)"}`);
+  console.log(`Session:     ${task.tmux_session ?? "(none)"}`);
+  console.log(`PR:          ${task.pr_url ?? "(none)"}`);
+  console.log(`Created:     ${task.created_at}`);
+  console.log(`Updated:     ${task.updated_at}`);
+  console.log();
+
+  // Summary
+  console.log("## Summary");
+  console.log();
+  console.log(task.summary || "(no summary)");
+  console.log();
+
+  // Body (Context, Questions, Notes)
+  if (task.body) {
+    console.log("## Content");
+    console.log();
+    console.log(task.body);
+    console.log();
+  }
+
+  // History
+  if (history.length > 0) {
+    console.log("## History");
+    console.log();
+    for (const event of history) {
+      const time = event.timestamp.split("T")[1]?.slice(0, 8) ?? event.timestamp;
+      const { type, timestamp, ...rest } = event;
+      const details = Object.entries(rest)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(" ");
+      console.log(`  ${time} ${type}${details ? " " + details : ""}`);
+    }
+    console.log();
+  }
+
+  console.log("═".repeat(60));
 }
 
 /**
