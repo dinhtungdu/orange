@@ -45,6 +45,22 @@ Triggers for clarification:
 - Multiple valid interpretations
 - Scope seems larger than typical task
 
+### Planning (No Context)
+
+When task has summary but no `## Context` (no orchestrator-provided plan), agent documents approach in `## Notes` before implementing:
+
+```markdown
+## Notes
+
+PLAN: <implementation approach>
+TOUCHING: <files/areas affected>
+```
+
+This provides:
+- Review prep (know what agent decided to do)
+- Handoff context (respawn knows the approach)
+- Early course-correction (human can attach if plan looks wrong)
+
 ### Auto-Generated Branch Names
 
 When no branch name provided, defaults to `orange-tasks/<id>`. Agent renames based on task:

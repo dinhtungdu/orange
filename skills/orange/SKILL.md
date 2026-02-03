@@ -20,9 +20,10 @@ Your mode depends on context:
 2. **Check status** — behavior depends on current status (see Respawn Behavior)
 3. **Handle branch** — if `orange-tasks/<id>`, rename to meaningful name
 4. **Evaluate clarity** — empty/vague? Add `## Questions`, set `--status clarification`, wait
-5. **Implement** — read project rules, code, test, commit
-6. **Self-review** — use `/code-review` skill, fix issues (max 2 attempts)
-7. **Complete** — `--status reviewing` (passed) or `--status stuck` (gave up)
+5. **Plan** — if no `## Context`, document approach in `## Notes` before coding
+6. **Implement** — read project rules, code, test, commit
+7. **Self-review** — use `/code-review` skill, fix issues (max 2 attempts)
+8. **Complete** — `--status reviewing` (passed) or `--status stuck` (gave up)
 
 ### Respawn Behavior
 
@@ -45,6 +46,19 @@ git branch -m orange-tasks/abc123 fix-login-redirect
 # Sync task metadata to new branch
 orange task update --branch
 ```
+
+### Planning (No Context)
+
+When task has summary but no `## Context`, document your approach before coding:
+
+```markdown
+## Notes
+
+PLAN: <your implementation approach>
+TOUCHING: <files/areas affected>
+```
+
+This helps with review prep and session handoff.
 
 ### Clarification
 
@@ -86,9 +100,17 @@ BLOCKER: (if any)
 
 ### Workflow
 
-1. **Understand** — clarify ambiguous requests
-2. **Break down** — independent, parallel tasks
-3. **Create** — `orange task create` for each (pass `--harness` to identify yourself)
+1. **Clarify** — ask questions if user request is ambiguous
+2. **Plan** — break down into actionable steps (concise but clear)
+3. **Create** — `orange task create` for each, with plan in context:
+   ```bash
+   orange task create fix-auth "Fix auth redirect" --harness pi --context - << 'EOF'
+   ## Plan
+   1. Check AuthService.redirect()
+   2. Add returnUrl param
+   3. Update LoginPage to pass returnUrl
+   EOF
+   ```
 4. **Monitor** — `orange task list`
 5. **Notify** — when tasks reach `reviewing`
 
@@ -96,7 +118,7 @@ BLOCKER: (if any)
 
 - Independent (no dependencies between parallel tasks)
 - Atomic (one clear objective)
-- Clear summary (enough for autonomous work)
+- Clear summary + plan (worker executes from TASK.md, must know what to do)
 
 ### Passing Context
 

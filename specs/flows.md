@@ -16,17 +16,19 @@ End-to-end workflows in Orange.
 
 ## 1. Orchestrator Flow
 
-User requests work → orchestrator breaks down → agents execute in parallel.
+User requests work → orchestrator clarifies → plans → agents execute in parallel.
 
 ```
 User in terminal: "Add auth with login, logout, password reset"
     ↓
-Orchestrator analyzes codebase
+Clarify ambiguities (ask questions if needed)
     ↓
-Creates tasks:
-    - add-login "Implement login form"
-    - add-logout "Implement logout"
-    - password-reset "Add password reset flow"
+Build plan for each task (concise but actionable)
+    ↓
+Creates tasks with plan in context:
+    - add-login "Implement login form" --context "## Plan\n1. Create LoginForm component\n2. ..."
+    - add-logout "Implement logout" --context "## Plan\n1. Add logout button\n2. ..."
+    - password-reset "Add password reset flow" --context "## Plan\n1. Create ResetForm\n2. ..."
     ↓
 Agents spawn in parallel worktrees
     ↓
@@ -36,9 +38,10 @@ Tasks reach reviewing → notify user
 ```
 
 **Orchestrator responsibilities:**
-- Understand user request
+- Clarify ambiguous requests before proceeding
+- Build actionable plan for each task (worker executes from TASK.md)
 - Break into independent, parallel tasks
-- Pass context to agents
+- Pass plan as context to agents
 - Monitor progress
 - Notify user when tasks need attention
 
@@ -53,6 +56,8 @@ Read task summary + context
     ↓
 Evaluate clarity ─── empty/vague? ──→ Clarification Flow
     ↓ clear
+No ## Context? ─── yes ──→ Document plan in ## Notes
+    ↓
 Read project rules (AGENTS.md, etc.)
     ↓
 Implement (code, test, commit)

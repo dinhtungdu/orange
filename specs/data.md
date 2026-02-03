@@ -73,20 +73,26 @@ Agent working notes, discoveries, session handoff...
 **Body sections** (all optional):
 - `## Context` — Implementation context from `--context -` (orchestrator-controlled, read-only for agent)
 - `## Questions` — Agent's clarifying questions (agent-controlled)
-- `## Notes` — Working notes, session handoff (agent-controlled)
+- `## Notes` — Working notes, plan, session handoff (agent-controlled)
 
-### Session Handoff Format
+### Notes Format
 
 For autonomous agents, structured notes in body:
 
 ```markdown
 ## Notes
 
+PLAN: <implementation approach, if no ## Context provided>
+TOUCHING: <files/areas affected>
+
 COMPLETED: X
 IN PROGRESS: Y
 NEXT: Z
 BLOCKER: (if any)
 ```
+
+- **PLAN/TOUCHING**: Written before implementation when no `## Context` provided
+- **COMPLETED/IN PROGRESS/NEXT/BLOCKER**: Updated before stopping (session handoff)
 
 ### Empty Summary
 
