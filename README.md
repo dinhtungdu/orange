@@ -59,6 +59,7 @@ orange task merge <task_id> [--strategy ff|merge] [--local]
 orange task cancel <task_id> [--yes]
 orange task delete <task_id> [--yes]
 orange task create-pr <task_id>
+orange task show <task_id>          # Show task details, content, history
 orange task complete <task_id>      # Agent use: set status to reviewing
 orange task stuck <task_id>         # Agent use: set status to stuck
 ```
