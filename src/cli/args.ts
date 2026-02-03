@@ -100,19 +100,21 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const nextArg = remaining[i + 1];
 
       // Check if next arg is a value or another flag
-      if (nextArg && !nextArg.startsWith("-")) {
+      // Special case: "-" alone means stdin, not a flag
+      if (nextArg && (nextArg === "-" || !nextArg.startsWith("-"))) {
         options[key] = nextArg;
         i += 2;
       } else {
         options[key] = true;
         i += 1;
       }
-    } else if (arg.startsWith("-")) {
-      // Short option
+    } else if (arg.startsWith("-") && arg.length > 1) {
+      // Short option (but not standalone "-")
       const key = arg.slice(1);
       const nextArg = remaining[i + 1];
 
-      if (nextArg && !nextArg.startsWith("-")) {
+      // Special case: "-" alone means stdin, not a flag
+      if (nextArg && (nextArg === "-" || !nextArg.startsWith("-"))) {
         options[key] = nextArg;
         i += 2;
       } else {

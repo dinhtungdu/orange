@@ -191,4 +191,21 @@ describe("parseArgs", () => {
     const result = parseArgs(["bun", "script.ts", "--help"]);
     expect(result.command).toBe("--help");
   });
+
+  test("parses dash as option value (stdin)", () => {
+    const result = parseArgs([
+      "bun",
+      "script.ts",
+      "task",
+      "create",
+      "feature-x",
+      "Description",
+      "--context",
+      "-",
+    ]);
+    expect(result.command).toBe("task");
+    expect(result.subcommand).toBe("create");
+    expect(result.options.context).toBe("-");
+    expect(result.args).toEqual(["feature-x", "Description"]);
+  });
 });

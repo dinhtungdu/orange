@@ -104,7 +104,7 @@ BLOCKER: (if any)
 2. **Plan** — break down into actionable steps (concise but clear)
 3. **Create** — `orange task create` for each, with plan in context:
    ```bash
-   orange task create fix-auth "Fix auth redirect" --harness pi --context - << 'EOF'
+   cat << 'EOF' | orange task create fix-auth "Fix auth redirect" --harness pi --context -
    ## Plan
    1. Check AuthService.redirect()
    2. Add returnUrl param
@@ -123,7 +123,7 @@ BLOCKER: (if any)
 ### Passing Context
 
 ```bash
-orange task create add-login "Implement login" --harness pi --context - << 'EOF'
+cat << 'EOF' | orange task create add-login "Implement login" --harness pi --context -
 ## Notes
 - Use AuthService in src/services/auth.ts
 EOF
