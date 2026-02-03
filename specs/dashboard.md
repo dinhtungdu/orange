@@ -94,6 +94,7 @@ Footer shows relevant actions based on selected task's state:
 | Key | Action | When |
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
+| y | Copy task ID to clipboard | Any task selected |
 | c | Create new task | Always (project-scoped only) |
 | Enter | Work on task | Context-dependent (see below) |
 | R | Refresh PR status | Any task (checks GitHub for PR) |

@@ -383,6 +383,9 @@ export class DashboardState {
       case "R":
         this.refreshPR();
         break;
+      case "y":
+        this.copyTaskId();
+        break;
       case "f":
         this.cycleStatusFilter();
         break;
@@ -1232,6 +1235,28 @@ export class DashboardState {
     }
   }
 
+  private async copyTaskId(): Promise<void> {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task) return;
+
+    try {
+      // Use pbcopy on macOS, xclip on Linux
+      const proc = Bun.spawn(
+        process.platform === "darwin" ? ["pbcopy"] : ["xclip", "-selection", "clipboard"],
+        { stdin: "pipe" }
+      );
+      proc.stdin.write(task.id);
+      proc.stdin.end();
+      await proc.exited;
+
+      this.data.message = `Copied: ${task.id}`;
+      this.emit();
+    } catch {
+      this.data.error = "Failed to copy to clipboard";
+      this.emit();
+    }
+  }
+
   /**
    * Get context-aware keybindings label based on selected task.
    */
@@ -1249,7 +1274,7 @@ export class DashboardState {
     const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
     const hasLiveSession = task.tmux_session && !isDead;
 
-    let keys = " j/k:nav";
+    let keys = " j/k:nav  y:copy";
     if (task.status === "pending") {
       keys += "  Enter:spawn  x:cancel";
     } else if (task.status === "done") {

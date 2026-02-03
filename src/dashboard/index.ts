@@ -396,6 +396,8 @@ function buildDashboard(
       const taskName = s.projectFilter
         ? task.branch
         : `${task.project}/${task.branch}`;
+      // Show task ID when selected
+      const taskDisplay = selected ? `${taskName} (${task.id})` : taskName;
 
       // Status column: always task stage
       let statusCol: string = pending ? "processing…" : task.status;
@@ -438,7 +440,7 @@ function buildDashboard(
 
       // Table row with flex columns
       const tableRow = createTableRow(renderer, `task-cells-${i}`, {
-        task: `${sessionIcon} ${taskName}`,
+        task: `${sessionIcon} ${taskDisplay}`,
         taskColor: sessionColor,
         status: statusCol,
         statusColor: STATUS_COLOR[task.status],
