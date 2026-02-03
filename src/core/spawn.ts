@@ -136,7 +136,15 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
       // Branch exists locally or remotely — check it out
       try {
         await deps.git.checkout(workspacePath, task.branch);
-      } catch {
+      } catch (e) {
+        // Check if this is a worktree conflict
+        const errMsg = e instanceof Error ? e.message : String(e);
+        if (errMsg.includes("already used by worktree")) {
+          throw new Error(
+            `Branch '${task.branch}' is already checked out in another worktree. ` +
+            `Switch the main repo to a different branch first.`
+          );
+        }
         // Local branch doesn't exist but remote does — create tracking branch
         await deps.git.createBranch(workspacePath, task.branch, `origin/${task.branch}`);
       }
