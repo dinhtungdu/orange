@@ -579,11 +579,32 @@ export class DashboardState {
       if (this.data.cursor >= this.data.tasks.length) {
         this.data.cursor = Math.max(0, this.data.tasks.length - 1);
       }
+      this.pruneStaleEntries();
       this.refreshDiffStats();
       this.refreshPoolStatus();
     } catch (err) {
       this.data.error =
         err instanceof Error ? err.message : "Failed to load tasks";
+    }
+  }
+
+  /** Remove map entries for tasks that no longer exist. */
+  private pruneStaleEntries(): void {
+    const taskIds = new Set(this.data.allTasks.map((t) => t.id));
+    for (const id of this.data.lastOutput.keys()) {
+      if (!taskIds.has(id)) this.data.lastOutput.delete(id);
+    }
+    for (const id of this.data.diffStats.keys()) {
+      if (!taskIds.has(id)) this.data.diffStats.delete(id);
+    }
+    for (const id of this.data.prStatuses.keys()) {
+      if (!taskIds.has(id)) this.data.prStatuses.delete(id);
+    }
+    for (const id of this.data.deadSessions) {
+      if (!taskIds.has(id)) this.data.deadSessions.delete(id);
+    }
+    for (const id of this.data.pendingOps) {
+      if (!taskIds.has(id)) this.data.pendingOps.delete(id);
     }
   }
 

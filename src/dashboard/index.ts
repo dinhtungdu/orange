@@ -357,7 +357,7 @@ function buildDashboard(
 
     // --- Task rows ---
     for (const row of taskRows) {
-      row.destroy();
+      row.destroyRecursively();
     }
     taskRows = [];
 
