@@ -151,7 +151,7 @@ describe("task create command", () => {
     expect(createdEvent.branch).toBe("feature-y");
   });
 
-  test("adds task to SQLite index", async () => {
+  test("adds task to index", async () => {
     const parsed = parseArgs([
       "bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "indexed-task", "Test indexing"
     ]);

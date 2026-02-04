@@ -1,6 +1,6 @@
 # Orange
 
-Agent orchestration. TS + opentui + tmux + SQLite.
+Agent orchestration. TS + opentui + tmux.
 
 ## Related Projects
 
