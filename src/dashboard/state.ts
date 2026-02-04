@@ -833,7 +833,7 @@ export class DashboardState {
       this.data.pendingOps.add(task.id);
       this.emit();
 
-      const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id]), {
+      const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id, "--yes"]), {
         stdout: "pipe",
         stderr: "pipe",
       });
