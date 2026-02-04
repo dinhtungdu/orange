@@ -32,7 +32,8 @@ Before starting work, agent evaluates if the task is clear enough to implement:
 
 1. **Clear task** → proceed to implementation
 2. **Empty/vague summary** → enter clarification mode:
-   - Add `## Questions` section to TASK.md body with specific questions
+   - Add `## Questions` section to TASK.md body with 2-3 specific questions
+   - Don't assume scope or make up requirements
    - Run `orange task update --status clarification`
    - Wait in session for user to attach and discuss
    - After discussion, update summary and/or `## Notes` with refined requirements

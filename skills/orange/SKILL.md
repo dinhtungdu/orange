@@ -19,7 +19,7 @@ Your mode depends on context:
 1. **Read** `TASK.md` — summary in frontmatter, context in body
 2. **Check status** — behavior depends on current status (see Respawn Behavior)
 3. **Handle branch** — if `orange-tasks/<id>`, rename to meaningful name
-4. **Evaluate clarity** — empty/vague? Add `## Questions`, set `--status clarification`, wait
+4. **Evaluate clarity** — empty/vague? Add `## Questions` with 2-3 specific questions, set `--status clarification`, wait. Don't assume scope or make up requirements.
 5. **Plan** — if no `## Context`, document approach in `## Notes` before coding
 6. **Implement** — read project rules, code, test, commit
 7. **Self-review** — use `/code-review` skill, fix issues (max 2 attempts)
@@ -100,7 +100,7 @@ BLOCKER: (if any)
 
 ### Workflow
 
-1. **Clarify** — ask questions if user request is ambiguous
+1. **Refine** — don't accept vague requests. Ask 2-3 clarifying questions about scope, edge cases, and acceptance criteria. Don't plan or create tasks until answers are clear. Wait for user responses before proceeding.
 2. **Plan** — break down into actionable steps (concise but clear)
 3. **Create** — `orange task create` for each, with plan in context:
    ```bash
@@ -119,6 +119,7 @@ BLOCKER: (if any)
 - Independent (no dependencies between parallel tasks)
 - Atomic (one clear objective)
 - Clear summary + plan (worker executes from TASK.md, must know what to do)
+- Never create tasks from vague requests — refine first
 
 ### Passing Context
 

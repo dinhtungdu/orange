@@ -434,6 +434,145 @@ describe("Dashboard State", () => {
     state.handleInput("k");
     expect(changeCount).toBe(1); // No change after unsub
   });
+
+  // --- View mode tests ---
+
+  test("v key enters view mode with selected task", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", body: "Task body content" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    expect(state.isViewMode()).toBe(false);
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(true);
+    expect(state.data.viewMode.task?.id).toBe("t1");
+    expect(state.data.viewMode.scrollOffset).toBe(0);
+  });
+
+  test("v key does nothing when no tasks", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(false);
+  });
+
+  test("escape exits view mode", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(true);
+
+    state.handleInput("escape");
+    expect(state.isViewMode()).toBe(false);
+    expect(state.data.viewMode.task).toBeNull();
+  });
+
+  test("v key also exits view mode", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(true);
+
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(false);
+  });
+
+  test("j/k scrolls in view mode", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    expect(state.data.viewMode.scrollOffset).toBe(0);
+
+    state.handleInput("j");
+    expect(state.data.viewMode.scrollOffset).toBe(1);
+
+    state.handleInput("j");
+    expect(state.data.viewMode.scrollOffset).toBe(2);
+
+    state.handleInput("k");
+    expect(state.data.viewMode.scrollOffset).toBe(1);
+  });
+
+  test("k does not scroll below 0", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    state.handleInput("k");
+    expect(state.data.viewMode.scrollOffset).toBe(0);
+  });
+
+  test("view mode disables normal navigation", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    // j in view mode scrolls, does not move cursor
+    state.handleInput("j");
+    expect(state.getCursor()).toBe(0);
+    expect(state.data.viewMode.scrollOffset).toBe(1);
+  });
+
+  test("context keys show view mode hints", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    const keys = state.getContextKeys();
+    expect(keys).toContain("j/k:scroll");
+    expect(keys).toContain("Esc:close");
+  });
+
+  test("context keys show v:view when task selected", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    const keys = state.getContextKeys();
+    expect(keys).toContain("v:view");
+  });
+
+  test("q exits view mode instead of quitting", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("v");
+    expect(state.isViewMode()).toBe(true);
+
+    state.handleInput("q");
+    expect(state.isViewMode()).toBe(false);
+  });
 });
 
 describe("Dashboard Poll Cycle", () => {

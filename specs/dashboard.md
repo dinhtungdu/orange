@@ -79,21 +79,22 @@ Footer shows relevant actions based on selected task's state:
 | Task State | Available Keys |
 |------------|----------------|
 | No task selected | j/k:nav  c:create  f:filter  q:quit |
-| Pending | j/k:nav  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
-| Clarification | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
-| Working | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (no PR) | j/k:nav  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
-| Reviewing (with PR) | j/k:nav  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
-| Stuck | j/k:nav  Enter:attach  x:cancel  c:create  f:filter  q:quit |
-| Dead/no session | j/k:nav  Enter:respawn  x:cancel  c:create  f:filter  q:quit |
-| Cancelled | j/k:nav  d:del  c:create  f:filter  q:quit |
-| Done | j/k:nav  d:del  c:create  f:filter  q:quit |
+| Pending | j/k:nav  v:view  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
+| Clarification | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Working | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (no PR) | j/k:nav  v:view  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
+| Reviewing (with PR) | j/k:nav  v:view  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
+| Stuck | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Dead/no session | j/k:nav  v:view  Enter:respawn  x:cancel  c:create  f:filter  q:quit |
+| Cancelled | j/k:nav  v:view  d:del  c:create  f:filter  q:quit |
+| Done | j/k:nav  v:view  d:del  c:create  f:filter  q:quit |
 
 ### Key Actions
 
 | Key | Action | When |
 |-----|--------|------|
 | j/k | Navigate tasks | Always |
+| v | View TASK.md content (scroll with j/k, Esc to close) | Any task selected |
 | y | Copy task ID to clipboard | Any task selected |
 | c | Create new task | Always (project-scoped only) |
 | Enter | Work on task | Context-dependent (see below) |

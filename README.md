@@ -102,6 +102,7 @@ pending → working → reviewing → done
 | Key | Action |
 |-----|--------|
 | j/k | Navigate up/down |
+| v | View TASK.md content |
 | y | Copy task ID to clipboard |
 | Enter | Spawn/attach/respawn (context-dependent) |
 | c | Create new task |

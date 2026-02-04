@@ -288,12 +288,45 @@ function buildDashboard(
     visible: false,
   });
   root.add(confirmPrompt);
+
+  // --- View overlay ---
+  const viewOverlay = new BoxRenderable(renderer, {
+    id: "view-overlay",
+    flexDirection: "column",
+    width: "100%",
+    flexGrow: 1,
+    visible: false,
+    paddingLeft: 1,
+    paddingRight: 1,
+  });
+  const viewHeader = new TextRenderable(renderer, {
+    id: "view-header",
+    content: "",
+    fg: "#00DDFF",
+  });
+  const viewSep = new TextRenderable(renderer, {
+    id: "view-sep",
+    content: "",
+    fg: "#555555",
+  });
+  const viewBody = new BoxRenderable(renderer, {
+    id: "view-body",
+    flexDirection: "column",
+    width: "100%",
+    flexGrow: 1,
+  });
+  viewOverlay.add(viewHeader);
+  viewOverlay.add(viewSep);
+  viewOverlay.add(viewBody);
+  root.add(viewOverlay);
+
   root.add(footerSep);
   root.add(footerKeys);
   renderer.root.add(root);
 
   // Track task row renderables for cleanup
   let taskRows: BoxRenderable[] = [];
+  let viewLines: TextRenderable[] = [];
 
   function update() {
     const width = renderer.width;
@@ -348,6 +381,66 @@ function buildDashboard(
     confirmPrompt.visible = cfm.active;
     if (cfm.active) {
       confirmPrompt.content = ` ${cfm.message} (y/N)`;
+    }
+
+    // --- View overlay ---
+    const vm = s.viewMode;
+    viewOverlay.visible = vm.active;
+    // Hide main content when view is active
+    colHeaderRow.visible = !vm.active;
+    separator.visible = !vm.active;
+    taskList.visible = !vm.active;
+    createForm.visible = vm.active ? false : createForm.visible;
+
+    for (const line of viewLines) {
+      line.destroy();
+    }
+    viewLines = [];
+
+    if (vm.active && vm.task) {
+      const task = vm.task;
+      const statusColor = STATUS_COLOR[task.status] || "#888888";
+      viewHeader.content = `${task.project}/${task.branch}  ${task.summary || "(no summary)"}`;
+      viewSep.content = "─".repeat(width - 2);
+
+      // Build content lines from task body
+      const bodyText = task.body?.trim() || "(no body)";
+      const allLines = bodyText.split("\n");
+
+      // Available height for body (terminal height minus header/footer/chrome)
+      const availableHeight = Math.max(1, renderer.height - 6);
+      const maxScroll = Math.max(0, allLines.length - availableHeight);
+      // Clamp scroll offset
+      if (s.viewMode.scrollOffset > maxScroll) {
+        s.viewMode.scrollOffset = maxScroll;
+      }
+
+      const visibleLines = allLines.slice(
+        s.viewMode.scrollOffset,
+        s.viewMode.scrollOffset + availableHeight
+      );
+
+      for (let i = 0; i < visibleLines.length; i++) {
+        const line = new TextRenderable(renderer, {
+          id: `view-line-${i}`,
+          content: visibleLines[i],
+          fg: "#CCCCCC",
+        });
+        viewBody.add(line);
+        viewLines.push(line);
+      }
+
+      // Scroll indicator
+      if (allLines.length > availableHeight) {
+        const pos = `${s.viewMode.scrollOffset + 1}-${Math.min(s.viewMode.scrollOffset + availableHeight, allLines.length)}/${allLines.length}`;
+        const scrollLine = new TextRenderable(renderer, {
+          id: "view-scroll-indicator",
+          content: pos,
+          fg: "#555555",
+        });
+        viewBody.add(scrollLine);
+        viewLines.push(scrollLine);
+      }
     }
 
     // Footer
@@ -511,6 +604,19 @@ export async function runDashboard(
         renderer.destroy();
         process.exit(0);
       });
+      return;
+    }
+
+    // In view mode, only j/k/up/down/escape/v/q are accepted
+    if (state.isViewMode()) {
+      const name = key.name;
+      if (name === "escape") {
+        state.handleInput("escape");
+      } else if (name === "up" || name === "down") {
+        state.handleInput(name);
+      } else if (key.sequence === "j" || key.sequence === "k" || key.sequence === "v" || key.sequence === "q") {
+        state.handleInput(key.sequence);
+      }
       return;
     }
 

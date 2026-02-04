@@ -21,7 +21,8 @@ User requests work → orchestrator clarifies → plans → agents execute in pa
 ```
 User in terminal: "Add auth with login, logout, password reset"
     ↓
-Clarify ambiguities (ask questions if needed)
+Refine: ask 2-3 clarifying questions about scope, edge cases,
+acceptance criteria. Don't plan until answers are clear.
     ↓
 Build plan for each task (concise but actionable)
     ↓
@@ -38,8 +39,9 @@ Tasks reach reviewing → notify user
 ```
 
 **Orchestrator responsibilities:**
-- Clarify ambiguous requests before proceeding
+- Refine vague requests — ask questions, don't assume. Wait for answers before planning.
 - Build actionable plan for each task (worker executes from TASK.md)
+- Never create tasks from vague requests
 - Break into independent, parallel tasks
 - Pass plan as context to agents
 - Monitor progress

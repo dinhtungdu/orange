@@ -138,6 +138,12 @@ export interface ConfirmModeData {
   action: (() => void) | null;
 }
 
+export interface ViewModeData {
+  active: boolean;
+  task: Task | null;
+  scrollOffset: number;
+}
+
 export interface DashboardStateData {
   tasks: Task[];
   allTasks: Task[];
@@ -158,6 +164,7 @@ export interface DashboardStateData {
   installedHarnesses: Harness[];
   createMode: CreateModeData;
   confirmMode: ConfirmModeData;
+  viewMode: ViewModeData;
 }
 
 type ChangeListener = () => void;
@@ -198,6 +205,11 @@ export class DashboardState {
       active: false,
       message: "",
       action: null,
+    },
+    viewMode: {
+      active: false,
+      task: null,
+      scrollOffset: 0,
     },
   };
 
@@ -334,9 +346,18 @@ export class DashboardState {
     return this.data.confirmMode.active;
   }
 
+  isViewMode(): boolean {
+    return this.data.viewMode.active;
+  }
+
   // --- Input handling ---
 
   handleInput(key: string): void {
+    if (this.data.viewMode.active) {
+      this.handleViewInput(key);
+      return;
+    }
+
     if (this.data.confirmMode.active) {
       this.handleConfirmInput(key);
       return;
@@ -389,6 +410,9 @@ export class DashboardState {
       case "f":
         this.cycleStatusFilter();
         break;
+      case "v":
+        this.enterViewMode();
+        break;
     }
   }
 
@@ -420,6 +444,51 @@ export class DashboardState {
       focusedField: "branch",
     };
     this.emit();
+  }
+
+  // --- View mode ---
+
+  private enterViewMode(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task) return;
+
+    this.data.viewMode = {
+      active: true,
+      task,
+      scrollOffset: 0,
+    };
+    this.emit();
+  }
+
+  private exitViewMode(): void {
+    this.data.viewMode = {
+      active: false,
+      task: null,
+      scrollOffset: 0,
+    };
+    this.emit();
+  }
+
+  private handleViewInput(key: string): void {
+    switch (key) {
+      case "escape":
+      case "v":
+      case "q":
+        this.exitViewMode();
+        break;
+      case "j":
+      case "down":
+        this.data.viewMode.scrollOffset++;
+        this.emit();
+        break;
+      case "k":
+      case "up":
+        if (this.data.viewMode.scrollOffset > 0) {
+          this.data.viewMode.scrollOffset--;
+          this.emit();
+        }
+        break;
+    }
   }
 
   private handleConfirmInput(key: string): void {
@@ -1312,6 +1381,10 @@ export class DashboardState {
    * Get context-aware keybindings label based on selected task.
    */
   getContextKeys(): string {
+    if (this.data.viewMode.active) {
+      return " j/k:scroll  Esc:close";
+    }
+
     if (this.data.createMode.active) {
       return " Tab:switch field  Enter:submit  Escape:cancel";
     }
@@ -1325,7 +1398,7 @@ export class DashboardState {
     const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
     const hasLiveSession = task.tmux_session && !isDead;
 
-    let keys = " j/k:nav  y:copy";
+    let keys = " j/k:nav  v:view  y:copy";
     if (task.status === "pending") {
       keys += "  Enter:spawn  x:cancel";
     } else if (task.status === "done") {
