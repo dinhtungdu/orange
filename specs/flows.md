@@ -208,6 +208,10 @@ Status: done
 
 Dashboard polls PR status. When PR merged externally, auto-triggers cleanup.
 
+### Auto-Cancel on PR Close
+
+Dashboard polls PR status. When PR closed without merge, auto-cancels task (kills session, releases workspace, status → `cancelled`).
+
 ## 7. Cancel Flow
 
 User cancels active task.

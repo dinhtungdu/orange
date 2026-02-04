@@ -66,7 +66,7 @@ Cleanup is always: release workspace, kill tmux session, delete remote branch, s
 
 ### Dashboard PR Polling
 
-Dashboard polls PR statuses every 30s. When a PR is detected as merged for any active task (`working`, `reviewing`, `stuck`), it auto-triggers merge cleanup.
+Dashboard polls PR statuses every 30s. When a PR is detected as merged for any active task (`working`, `reviewing`, `stuck`), it auto-triggers merge cleanup. When a PR is detected as closed without merge, it auto-cancels the task (kills tmux session, releases workspace, status → `cancelled`).
 
 ### Task Metadata
 
@@ -107,6 +107,6 @@ orange task merge <task_id> [--strategy ff|merge] [--local]  # --local: bypass P
 
 - **No remote** — push fails, PR creation errors
 - **`gh` not installed** — all PR features disabled, local workflow works
-- **PR closed without merge** — leave task as-is, user decides
+- **PR closed without merge** — dashboard auto-cancels task; `orange task merge` errors
 - **PR merge conflicts** — user resolves on GitHub, orange detects the merge
 - **Auth expired** — treated as `gh` unavailable for that call

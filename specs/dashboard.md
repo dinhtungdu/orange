@@ -194,6 +194,7 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 - Poll status for tasks with existing pr_url
 - Discover PRs for tasks with branch but no pr_url (auto-populate)
 - Auto-trigger merge cleanup when PR detected as merged
+- Auto-cancel task when PR detected as closed without merge
 
 **Diff stats:**
 - Refreshed on each task reload (async, non-blocking)

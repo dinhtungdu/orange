@@ -673,6 +673,7 @@ export class DashboardState {
     const ghAvailableByProject = new Map<string, boolean>();
 
     const mergedTasks: Task[] = [];
+    const closedTasks: Task[] = [];
     const discoveredPRs: Array<{ task: Task; url: string }> = [];
 
     // Process all non-terminal tasks (both with and without PR)
@@ -707,6 +708,11 @@ export class DashboardState {
             const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
             if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
               mergedTasks.push(task);
+            }
+
+            // Auto-cancel when PR is closed without merge
+            if (status.state === "CLOSED" && activeStatuses.includes(task.status)) {
+              closedTasks.push(task);
             }
           }
         } catch {
@@ -746,6 +752,30 @@ export class DashboardState {
           this.data.error = `Auto-merge failed for ${task.branch}: ${cleanErrorMessage(stderr) || "Unknown error"}`;
         } else {
           this.data.message = `Auto-merged ${task.branch} (PR merged on GitHub)`;
+        }
+        await this.refreshTasks();
+        this.emit();
+      });
+    }
+
+    // Auto-cancel tasks whose PRs were closed without merge
+    for (const task of closedTasks) {
+      if (this.data.pendingOps.has(task.id)) continue;
+      this.data.pendingOps.add(task.id);
+      this.emit();
+
+      const proc = Bun.spawn(this.getOrangeCommand(["task", "cancel", task.id]), {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      proc.exited.then(async (exitCode) => {
+        this.data.pendingOps.delete(task.id);
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          this.data.error = `Auto-cancel failed for ${task.branch}: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+        } else {
+          this.data.message = `Auto-cancelled ${task.branch} (PR closed without merge)`;
         }
         await this.refreshTasks();
         this.emit();

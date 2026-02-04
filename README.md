@@ -119,6 +119,7 @@ pending → working → reviewing → done
 - **Storage**: File-based (`~/orange/`)
 - **Workspace pool**: Reusable git worktrees per project
 - **Multi-harness**: Supports pi, claude, opencode, codex
+- **PR auto-detection**: Dashboard polls PR status — auto-merges on merge, auto-cancels on close
 
 ## Data Storage
 
