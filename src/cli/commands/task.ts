@@ -38,6 +38,21 @@ import { requireProject, detectProject } from "../../core/cwd.js";
 import { buildPRBody } from "../../core/github.js";
 
 /**
+ * Output JSON to stdout and exit.
+ */
+function outputJson(data: unknown, exitCode = 0): never {
+  console.log(JSON.stringify(data));
+  process.exit(exitCode);
+}
+
+/**
+ * Output JSON error and exit with non-zero code.
+ */
+function outputJsonError(message: string): never {
+  outputJson({ error: message }, 1);
+}
+
+/**
  * Prompt user for confirmation. Returns true if user confirms.
  */
 async function confirm(message: string): Promise<boolean> {
@@ -127,6 +142,7 @@ export async function runTaskCommand(
  */
 async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
+  const jsonOutput = parsed.options.json === true;
 
   // Branch and summary are optional
   // If branch not provided, use auto-generated task ID
@@ -144,6 +160,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   let status: "pending" | "clarification" | "reviewing" | undefined;
   if (statusArg) {
     if (statusArg !== "pending" && statusArg !== "clarification" && statusArg !== "reviewing") {
+      if (jsonOutput) outputJsonError("Invalid status. Use 'pending', 'clarification', or 'reviewing'");
       console.error("Invalid status. Use 'pending', 'clarification', or 'reviewing'");
       process.exit(1);
     }
@@ -175,11 +192,17 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     project = projects.find((p) => p.name === projectName);
     if (!project) {
       log.error("Project not found", { project: projectName });
+      if (jsonOutput) outputJsonError(`Project '${projectName}' not found`);
       console.error(`Project '${projectName}' not found`);
       process.exit(1);
     }
   } else {
-    project = await requireProject(deps);
+    try {
+      project = await requireProject(deps);
+    } catch (err) {
+      if (jsonOutput) outputJsonError(err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }
 
   let task: Task;
@@ -188,17 +211,26 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });
+    if (jsonOutput) outputJsonError(err instanceof Error ? err.message : String(err));
     console.error(err instanceof Error ? err.message : String(err));
     console.error(`Use 'orange task list' to see existing tasks.`);
     process.exit(1);
   }
 
-  console.log(`Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`);
+  const message = `Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`;
+  console.log(message);
 
   // Auto-spawn agent unless --no-spawn or status is reviewing
   if (task.status !== "reviewing" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
+  }
+
+  if (jsonOutput) {
+    // Re-read task to get updated state after spawn
+    const tasks = await listTasks(deps, {});
+    const updatedTask = tasks.find((t) => t.id === task.id) ?? task;
+    outputJson({ task: updatedTask, message });
   }
 }
 
@@ -210,6 +242,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
   const showAll = parsed.options.all === true;
+  const jsonOutput = parsed.options.json === true;
   const statusFilter = parsed.options.status as TaskStatus | undefined;
   const explicitProject = parsed.options.project as string | undefined;
 
@@ -230,6 +263,10 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tasks = await listTasks(deps, { project: projectFilter, status: statusFilter });
 
   log.debug("Listing tasks", { project: projectFilter, status: statusFilter, count: tasks.length });
+
+  if (jsonOutput) {
+    outputJson({ tasks });
+  }
 
   if (tasks.length === 0) {
     if (projectFilter) {
@@ -266,8 +303,10 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
  */
 async function showTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
+  const jsonOutput = parsed.options.json === true;
 
   if (parsed.args.length < 1) {
+    if (jsonOutput) outputJsonError("Usage: orange task show <task_id>");
     console.error("Usage: orange task show <task_id>");
     process.exit(1);
   }
@@ -279,8 +318,13 @@ async function showTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
     log.error("Task not found", { taskId });
+    if (jsonOutput) outputJsonError(`Task '${taskId}' not found`);
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
+  }
+
+  if (jsonOutput) {
+    outputJson({ task });
   }
 
   // Load history
@@ -343,8 +387,10 @@ async function showTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  */
 async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
+  const jsonOutput = parsed.options.json === true;
 
   if (parsed.args.length < 1) {
+    if (jsonOutput) outputJsonError("Usage: orange task spawn <task_id>");
     console.error("Usage: orange task spawn <task_id>");
     process.exit(1);
   }
@@ -360,9 +406,15 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     const tasks = await listTasks(deps, {});
     const task = tasks.find((t) => t.id === taskId);
     log.info("Task spawned", { taskId, session: task?.tmux_session });
-    console.log(`Spawned agent for task ${taskId} in ${task?.tmux_session ?? "unknown"}`);
+    const message = `Spawned agent for task ${taskId} in ${task?.tmux_session ?? "unknown"}`;
+    console.log(message);
+
+    if (jsonOutput) {
+      outputJson({ task, message });
+    }
   } catch (err) {
     log.error("Spawn failed", { taskId, error: String(err) });
+    if (jsonOutput) outputJsonError(err instanceof Error ? err.message : String(err));
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
@@ -580,12 +632,14 @@ async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
  */
 async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
+  const jsonOutput = parsed.options.json === true;
 
   let branchOption = parsed.options.branch;
   const newSummary = parsed.options.summary as string | undefined;
   const newStatus = parsed.options.status as string | undefined;
 
   if (!branchOption && newSummary === undefined && !newStatus) {
+    if (jsonOutput) outputJsonError("At least one of --branch, --summary, or --status is required");
     console.error("At least one of --branch, --summary, or --status is required");
     process.exit(1);
   }
@@ -594,6 +648,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (newStatus) {
     const validStatuses = ["clarification", "working", "reviewing", "stuck"];
     if (!validStatuses.includes(newStatus)) {
+      if (jsonOutput) outputJsonError(`Invalid status. Use: ${validStatuses.join(", ")}`);
       console.error(`Invalid status. Use: ${validStatuses.join(", ")}`);
       process.exit(1);
     }
@@ -604,6 +659,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (!taskId) {
     taskId = await getTaskIdFromWorkspace(deps) ?? "";
     if (!taskId) {
+      if (jsonOutput) outputJsonError("Task ID required when not running inside a workspace");
       console.error("Usage: orange task update [task_id] --branch [name] --summary <text> --status <status>");
       console.error("Task ID required when not running inside a workspace");
       process.exit(1);
@@ -614,6 +670,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
+    if (jsonOutput) outputJsonError(`Task '${taskId}' not found`);
     console.error(`Task '${taskId}' not found`);
     process.exit(1);
   }
@@ -725,7 +782,12 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (newBranch && newBranch !== oldBranch) changes.push(`branch: ${oldBranch} → ${newBranch}`);
   if (newSummary !== undefined) changes.push("summary updated");
   if (newStatus && newStatus !== oldStatus) changes.push(`status: ${oldStatus} → ${newStatus}`);
-  console.log(`Updated task ${taskId}: ${changes.join(", ")}`);
+  const message = `Updated task ${taskId}: ${changes.join(", ")}`;
+  console.log(message);
+
+  if (jsonOutput) {
+    outputJson({ task, message });
+  }
 }
 
 /**

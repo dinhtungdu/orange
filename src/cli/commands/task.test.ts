@@ -1232,4 +1232,178 @@ describe("MockTmux availability", () => {
   });
 });
 
+describe("JSON output", () => {
+  let tempDir: string;
+  let deps: Deps;
+  let consoleLogs: string[];
+  let originalLog: typeof console.log;
+  let originalError: typeof console.error;
+  let originalExit: typeof process.exit;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-json-test-"));
+    deps = {
+      tmux: new MockTmux(),
+      git: new MockGit(),
+      github: new MockGitHub(),
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      dataDir: tempDir,
+      logger: new NullLogger(),
+    };
+
+    const projects: Project[] = [
+      { name: "testproj", path: "/path/testproj", default_branch: "main", pool_size: 2 },
+    ];
+    await saveProjects(deps, projects);
+
+    consoleLogs = [];
+    originalLog = console.log;
+    originalError = console.error;
+    originalExit = process.exit;
+    console.log = (...args: unknown[]) => {
+      consoleLogs.push(args.map(String).join(" "));
+    };
+    console.error = () => {}; // suppress
+    process.exit = ((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as typeof process.exit;
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.log = originalLog;
+    console.error = originalError;
+    process.exit = originalExit;
+  });
+
+  /** Parse last JSON line from console output (outputJson writes before exit). */
+  function getJsonOutput(): unknown {
+    // outputJson writes console.log then process.exit, so JSON is the last log line
+    for (let i = consoleLogs.length - 1; i >= 0; i--) {
+      try {
+        return JSON.parse(consoleLogs[i]);
+      } catch {
+        continue;
+      }
+    }
+    throw new Error(`No JSON found in output: ${consoleLogs.join("\n")}`);
+  }
+
+  test("task list --json returns tasks array", async () => {
+    // Create a task first
+    await runTaskCommand(
+      parseArgs(["bun", "s", "task", "create", "--no-spawn", "--project", "testproj", "feat-1", "Feature one"]),
+      deps
+    );
+    consoleLogs = [];
+
+    // list --json calls process.exit(0) via outputJson
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "list", "--all", "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { tasks: unknown[] };
+    expect(result.tasks).toBeArray();
+    expect(result.tasks.length).toBe(1);
+    expect((result.tasks[0] as { branch: string }).branch).toBe("feat-1");
+  });
+
+  test("task list --json returns empty array when no tasks", async () => {
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "list", "--all", "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { tasks: unknown[] };
+    expect(result.tasks).toBeArray();
+    expect(result.tasks.length).toBe(0);
+  });
+
+  test("task show --json returns task object", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "s", "task", "create", "--no-spawn", "--project", "testproj", "feat-2", "Feature two"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "feat-2");
+    consoleLogs = [];
+
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "show", taskId, "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { task: { id: string; summary: string } };
+    expect(result.task).toBeDefined();
+    expect(result.task.id).toBe(taskId);
+    expect(result.task.summary).toBe("Feature two");
+  });
+
+  test("task show --json returns error for missing task", async () => {
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "show", "nonexistent", "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { error: string };
+    expect(result.error).toContain("not found");
+  });
+
+  test("task create --json returns created task", async () => {
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "create", "--no-spawn", "--project", "testproj", "feat-3", "Feature three", "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { task: { branch: string; summary: string }; message: string };
+    expect(result.task).toBeDefined();
+    expect(result.task.branch).toBe("feat-3");
+    expect(result.task.summary).toBe("Feature three");
+    expect(result.message).toContain("Created");
+  });
+
+  test("task update --json returns updated task", async () => {
+    await runTaskCommand(
+      parseArgs(["bun", "s", "task", "create", "--no-spawn", "--project", "testproj", "feat-4", "Old summary"]),
+      deps
+    );
+    const taskId = await getTaskIdByBranch(deps, "feat-4");
+    consoleLogs = [];
+
+    try {
+      await runTaskCommand(
+        parseArgs(["bun", "s", "task", "update", taskId, "--summary", "New summary", "--json"]),
+        deps
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    const result = getJsonOutput() as { task: { summary: string }; message: string };
+    expect(result.task).toBeDefined();
+    expect(result.task.summary).toBe("New summary");
+    expect(result.message).toContain("Updated");
+  });
+});
+
 
