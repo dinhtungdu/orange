@@ -454,6 +454,13 @@ function buildDashboard(
     }
     taskRows = [];
 
+    // Calculate visible task count based on terminal height
+    // Chrome: header(1) + col-headers(1) + separator(1) + footer-sep(1) + footer-keys(1) = 5
+    // Each task takes 2 rows (task row + summary line)
+    const chromeHeight = 5;
+    const availableTaskHeight = Math.max(2, renderer.height - chromeHeight);
+    const maxVisibleTasks = Math.floor(availableTaskHeight / 2);
+
     if (s.tasks.length === 0) {
       const projectMsg = s.projectFilter
         ? ` for project '${s.projectFilter}'`
@@ -468,7 +475,21 @@ function buildDashboard(
       return;
     }
 
-    for (let i = 0; i < s.tasks.length; i++) {
+    // Calculate scroll window to keep cursor visible
+    let scrollStart = 0;
+    if (s.tasks.length > maxVisibleTasks) {
+      // Keep cursor in view with some context
+      const cursorPos = s.cursor;
+      if (cursorPos >= scrollStart + maxVisibleTasks) {
+        scrollStart = cursorPos - maxVisibleTasks + 1;
+      }
+      if (cursorPos < scrollStart) {
+        scrollStart = cursorPos;
+      }
+    }
+    const scrollEnd = Math.min(scrollStart + maxVisibleTasks, s.tasks.length);
+
+    for (let i = scrollStart; i < scrollEnd; i++) {
       const task = s.tasks[i];
       const selected = i === s.cursor;
       const pending = s.pendingOps.has(task.id);
