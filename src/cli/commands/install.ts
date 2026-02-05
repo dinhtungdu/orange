@@ -18,6 +18,10 @@ import { HARNESSES, getInstalledHarnesses } from "../../core/harness.js";
 import type { ParsedArgs } from "../args.js";
 
 const SKILLS_DIR = join(import.meta.dir, "../../../skills");
+const EXTENSIONS_DIR = join(import.meta.dir, "../../../extensions");
+
+// Pi-specific paths for extensions
+const PI_EXTENSIONS_DIR = join(homedir(), ".pi/agent/extensions");
 
 // Claude-specific paths for permissions
 const CLAUDE_DIR = join(homedir(), ".claude");
@@ -164,4 +168,44 @@ export async function runInstallCommand(parsed?: ParsedArgs): Promise<void> {
     console.log("Claude Code:");
     await installClaudePermission();
   }
+
+  // Install pi-specific extras (extensions)
+  if (harnesses.includes("pi")) {
+    console.log();
+    console.log("Pi extensions:");
+    await installPiExtension();
+  }
+}
+
+/**
+ * Install the pi extension for Orange.
+ */
+async function installPiExtension(): Promise<void> {
+  const sourcePath = join(EXTENSIONS_DIR, "pi");
+  const destPath = join(PI_EXTENSIONS_DIR, "orange");
+
+  // Ensure extensions directory exists
+  await mkdir(PI_EXTENSIONS_DIR, { recursive: true });
+
+  // Remove existing symlink/directory if present
+  try {
+    const stats = await lstat(destPath);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
+      await rm(destPath, { recursive: true, force: true });
+    }
+  } catch {
+    // Doesn't exist, that's fine
+  }
+
+  // Check if source exists
+  if (!existsSync(sourcePath)) {
+    console.log(`  Extension source not found: ${sourcePath}`);
+    return;
+  }
+
+  // Create relative symlink
+  const relPath = relative(dirname(destPath), sourcePath);
+  await symlink(relPath, destPath);
+
+  console.log(`  orange -> ${sourcePath}`);
 }
