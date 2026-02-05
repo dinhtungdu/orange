@@ -126,9 +126,42 @@ const result = await pi.exec("orange", ["task", "list", "--json"], { signal });
 
 ### JSON Output
 
-Requires `--json` flag support on CLI commands that the extension calls. If not yet supported, the extension parses the existing human-readable output.
+The extension requires `--json` flag on CLI commands to get structured data.
 
-**Preferred approach:** Add `--json` to relevant CLI commands (`task list`, `task show`, `task create`, `task update`) so the extension gets clean structured data.
+#### Commands that need `--json`
+
+| Command | JSON Output |
+|---------|-------------|
+| `orange task list --json` | `{ tasks: Task[] }` |
+| `orange task show <id> --json` | `{ task: Task }` |
+| `orange task create ... --json` | `{ task: Task, message: string }` |
+| `orange task update ... --json` | `{ task: Task, message: string }` |
+| `orange task spawn <id> --json` | `{ task: Task, message: string }` |
+
+#### Task JSON Shape
+
+Matches the `Task` type from `src/core/types.ts`:
+
+```json
+{
+  "id": "abc123",
+  "project": "myproject",
+  "branch": "fix-auth",
+  "harness": "pi",
+  "status": "working",
+  "workspace": "myproject--1",
+  "tmux_session": "myproject/fix-auth",
+  "summary": "Fix auth redirect",
+  "body": "## Context\n...",
+  "created_at": "2026-02-04T10:00:00.000Z",
+  "updated_at": "2026-02-04T10:05:00.000Z",
+  "pr_url": null
+}
+```
+
+#### Implementation
+
+Add `--json` flag to `task list`, `task show`, `task create`, `task update`, `task spawn`. When set, output `JSON.stringify(result)` to stdout instead of human-readable text. Errors output `{ "error": "message" }` with non-zero exit code.
 
 ## What This Does NOT Do
 

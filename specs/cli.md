@@ -47,6 +47,23 @@ orange install [--harness <name>]           # Install agent skill
 orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 ```
 
+## JSON Output
+
+Task commands support `--json` for machine-readable output. Used by the pi extension (see [pi-extension.md](./pi-extension.md)).
+
+```bash
+orange task list --json
+orange task show <id> --json
+orange task create ... --json
+orange task update ... --json
+orange task spawn <id> --json
+```
+
+When `--json` is set:
+- Success: JSON object to stdout
+- Error: `{ "error": "message" }` to stdout with non-zero exit code
+- No color codes or human-readable formatting
+
 ## Task Create
 
 - Auto-spawns agent unless `--no-spawn` or `--status=reviewing`
