@@ -746,7 +746,8 @@ export class DashboardState {
     const discoveredPRs: Array<{ task: Task; url: string }> = [];
 
     // Process all non-terminal tasks (both with and without PR)
-    const tasksToCheck = this.data.tasks.filter(
+    // Use allTasks, not filtered tasks, so PR discovery works regardless of current view
+    const tasksToCheck = this.data.allTasks.filter(
       (t) => !TERMINAL_STATUSES.includes(t.status)
     );
 
