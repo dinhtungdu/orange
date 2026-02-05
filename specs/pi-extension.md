@@ -80,17 +80,31 @@ tasks update abc123 --status reviewing
 
 ## Command: `/tasks`
 
-Slash command for interactive task browsing.
+Interactive TUI for task browsing (similar to mitsuhiko's `/todos`).
 
-### Behavior
+### Features
 
-1. `/tasks` — list active tasks inline (non-interactive, text output)
-2. Shows task ID, branch, status, summary for each task
-3. Agent can read the output and act on it
+- Fuzzy search across task ID, branch, summary, status
+- Task list with colored status indicators
+- Detail overlay showing TASK.md body (scrollable)
+- Spawn pending tasks directly
 
-### Why not interactive TUI?
+### Keybindings
 
-The dashboard (`orange`) already provides the full interactive experience. The slash command is just a quick peek without leaving the conversation.
+| Key | Action |
+|-----|--------|
+| Type | Fuzzy search filter |
+| ↑/↓ | Navigate task list |
+| Enter | View task detail (TASK.md body overlay) |
+| s | Spawn task (pending only) |
+| y | Copy task ID to clipboard |
+| Esc | Close (or back from overlay) |
+
+### Detail Overlay
+
+Shows full TASK.md body with scroll support. From the overlay:
+- **Esc** — back to list
+- **j/k** — scroll
 
 ## Installation
 
