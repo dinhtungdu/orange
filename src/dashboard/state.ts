@@ -592,7 +592,7 @@ export class DashboardState {
       return;
     }
 
-    // Exit create mode but don't emit yet — wait until task is saved
+    // Exit create mode and show progress
     this.data.createMode = {
       active: false,
       branch: "",
@@ -602,6 +602,8 @@ export class DashboardState {
       status: "pending",
       focusedField: "branch",
     };
+    this.data.message = `Creating ${branch}...`;
+    this.emit();
 
     try {
       const { task } = await createTaskRecord(this.deps, {
