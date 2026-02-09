@@ -510,8 +510,12 @@ function buildDashboard(
       const taskName = s.projectFilter
         ? task.branch
         : `${task.project}/${task.branch}`;
-      // Show task ID when selected
-      const taskDisplay = selected ? `${taskName} (${task.id})` : taskName;
+      // Show workspace ID if assigned, task ID when selected
+      const workspaceNum = task.workspace?.split("--")[1] ?? null;
+      const workspacePrefix = workspaceNum ? `[${workspaceNum}] ` : "";
+      const taskDisplay = selected
+        ? `${workspacePrefix}${taskName} (${task.id})`
+        : `${workspacePrefix}${taskName}`;
 
       // Status column: always task stage
       let statusCol: string = pending ? "processing…" : task.status;
