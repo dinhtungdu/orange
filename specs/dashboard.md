@@ -53,9 +53,9 @@ Tasks sorted by:
  Orange Dashboard (all) [active]
  Task                          Status      PR             Commits  Changes   Activity
 ───────────────────────────────────────────────────────────────────────────────────────
- ● coffee/login-fix            working                    3        +144 -12  2m ago
+ ● [1] coffee/login-fix        working                    3        +144 -12  2m ago
  └ Fix OAuth redirect loop on mobile
- ✗ coffee/crashed-task         working                                       10m ago
+ ✗ [2] coffee/crashed-task     working                                       10m ago
  ○ coffee/password-reset       reviewing   #123 open ✓   7        +89 -34   15m ago
  ○ orange/dark-mode            done        #456 merged                       1h ago
 ───────────────────────────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ Tasks sorted by:
 ```
 
 **Columns:**
-- Task: session icon + project/branch (or just branch if project-scoped)
+- Task: session icon + workspace number (if assigned) + project/branch (or just branch if project-scoped)
 - Status: task stage (pending/working/reviewing/stuck/done/cancelled)
 - PR: PR number + state + checks (blank if no PR)
 - Commits: number of commits ahead of default branch (blank if none)
