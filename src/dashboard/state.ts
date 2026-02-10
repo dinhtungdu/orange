@@ -219,8 +219,6 @@ export class DashboardState {
   private attachListeners: AttachListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
-  /** Track previous status per task to detect transitions */
-  private previousStatuses: Map<string, TaskStatus> = new Map();
 
   constructor(deps: Deps, options: DashboardOptions = {}) {
     this.deps = deps;
@@ -652,22 +650,6 @@ export class DashboardState {
       this.data.allTasks = await listTasks(this.deps, {
         project: this.data.projectFilter ?? undefined,
       });
-
-      // Detect tasks that just entered agent-review and auto-spawn review agent
-      // Skip if task was already spawned (has workspace + session from spawnTaskById)
-      for (const task of this.data.allTasks) {
-        const prevStatus = this.previousStatuses.get(task.id);
-        if (task.status === "agent-review" && prevStatus !== "agent-review" && prevStatus !== undefined) {
-          // Only auto-trigger for mid-task transitions (prevStatus exists = we've seen this task before)
-          // Fresh creates (prevStatus undefined) are handled by spawnTaskById
-          this.spawnReviewAgent(task);
-        }
-        // Detect review failed → working transition, auto-respawn worker
-        if (task.status === "working" && prevStatus === "agent-review" && task.review_round > 0) {
-          this.respawnWorkerAfterReview(task);
-        }
-        this.previousStatuses.set(task.id, task.status);
-      }
 
       this.applyStatusFilter();
       if (this.data.cursor >= this.data.tasks.length) {
@@ -1298,147 +1280,6 @@ export class DashboardState {
         }
       }
     });
-  }
-
-  /**
-   * Auto-spawn review agent when task enters agent-review status.
-   * Creates a new named window in the existing tmux session.
-   */
-  private spawnReviewAgent(task: Task): void {
-    if (this.data.pendingOps.has(task.id)) return;
-
-    this.data.pendingOps.add(task.id);
-    this.emit();
-
-    (async () => {
-      try {
-        const { buildReviewPrompt } = await import("../core/agent.js");
-        const { HARNESSES } = await import("../core/harness.js");
-        const { saveTask, appendHistory, loadProjects } = await import("../core/state.js");
-        const { join } = await import("node:path");
-
-        // If no workspace yet (created with --status agent-review), acquire one
-        if (!task.workspace) {
-          const { acquireWorkspace, getWorkspacePath } = await import("../core/workspace.js");
-          const projects = await loadProjects(this.deps);
-          const project = projects.find((p) => p.name === task.project);
-          if (!project) throw new Error(`Project '${task.project}' not found`);
-
-          const workspace = await acquireWorkspace(this.deps, task.project, `${task.project}/${task.branch}`);
-          const workspacePath = getWorkspacePath(this.deps, workspace);
-
-          // Setup git branch
-          try {
-            await this.deps.git.fetch(workspacePath);
-            await this.deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
-          } catch { /* no remote */ }
-
-          const branchExists = await this.deps.git.branchExists(workspacePath, task.branch);
-          if (branchExists) {
-            try {
-              await this.deps.git.checkout(workspacePath, task.branch);
-            } catch {
-              await this.deps.git.createBranch(workspacePath, task.branch, `origin/${task.branch}`);
-            }
-          } else {
-            await this.deps.git.createBranch(workspacePath, task.branch);
-          }
-
-          // Symlink TASK.md
-          const { linkTaskFile } = await import("../core/spawn.js");
-          await linkTaskFile(this.deps, workspacePath, task.project, task.id);
-
-          task.workspace = workspace;
-        }
-
-        // Increment review round
-        task.review_round += 1;
-        const now = this.deps.clock.now();
-        task.updated_at = now;
-
-        const prompt = buildReviewPrompt(task);
-        const harnessConfig = HARNESSES[task.review_harness];
-        const command = harnessConfig.spawnCommand(prompt);
-        const workspacePath = join(this.deps.dataDir, "workspaces", task.workspace!);
-        const windowName = `review-${task.review_round}`;
-        const tmuxSession = task.tmux_session || `${task.project}/${task.branch}`;
-
-        // Check if session exists
-        const sessionExists = task.tmux_session ? await this.deps.tmux.sessionExists(task.tmux_session) : false;
-        if (!sessionExists) {
-          // No session or died — create new session
-          await this.deps.tmux.newSession(tmuxSession, workspacePath, command);
-          // Name the window
-          try {
-            await this.deps.tmux.renameWindow(tmuxSession, windowName);
-          } catch { /* best-effort */ }
-        } else {
-          await this.deps.tmux.newWindow(tmuxSession, windowName, workspacePath, command);
-        }
-
-        task.tmux_session = tmuxSession;
-        await saveTask(this.deps, task);
-
-        await appendHistory(this.deps, task.project, task.id, {
-          type: "review.started",
-          timestamp: now,
-          attempt: task.review_round,
-        });
-
-        this.data.pendingOps.delete(task.id);
-        this.data.message = `Review agent spawned for ${task.branch} (round ${task.review_round})`;
-        await this.refreshTasks();
-        this.emit();
-      } catch (err) {
-        this.data.pendingOps.delete(task.id);
-        this.data.error = `Review spawn failed: ${err instanceof Error ? err.message : "Unknown error"}`;
-        await this.refreshTasks();
-        this.emit();
-      }
-    })();
-  }
-
-  /**
-   * Auto-respawn worker agent after review failed.
-   * Creates a new named window for the fix round.
-   */
-  private respawnWorkerAfterReview(task: Task): void {
-    if (this.data.pendingOps.has(task.id)) return;
-    if (!task.tmux_session || !task.workspace) return;
-
-    this.data.pendingOps.add(task.id);
-    this.emit();
-
-    (async () => {
-      try {
-        const { buildRespawnPrompt } = await import("../core/agent.js");
-        const { HARNESSES } = await import("../core/harness.js");
-        const { join } = await import("node:path");
-
-        const prompt = buildRespawnPrompt(task);
-        const harnessConfig = HARNESSES[task.harness];
-        const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
-        const workspacePath = join(this.deps.dataDir, "workspaces", task.workspace!);
-        const windowName = `worker-${task.review_round + 1}`;
-
-        const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session!);
-        if (!sessionExists) {
-          await this.deps.tmux.newSession(task.tmux_session!, workspacePath, command);
-        } else {
-          await this.deps.tmux.newWindow(task.tmux_session!, windowName, workspacePath, command);
-        }
-
-        this.data.pendingOps.delete(task.id);
-        this.data.message = `Worker respawned for ${task.branch} (fix round)`;
-        await this.refreshTasks();
-        this.emit();
-      } catch (err) {
-        this.data.pendingOps.delete(task.id);
-        this.data.error = `Worker respawn failed: ${err instanceof Error ? err.message : "Unknown error"}`;
-        await this.refreshTasks();
-        this.emit();
-      }
-    })();
   }
 
   private spawnTask(): void {

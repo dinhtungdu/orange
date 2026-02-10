@@ -35,6 +35,71 @@ import { releaseWorkspace } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
 
+/**
+ * Spawn review agent in a new tmux window for a task in agent-review status.
+ * Increments review_round and saves task.
+ */
+async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof deps.logger.child>): Promise<void> {
+  if (!task.tmux_session || !task.workspace) return;
+
+  const { buildReviewPrompt } = await import("../../core/agent.js");
+  const { HARNESSES } = await import("../../core/harness.js");
+
+  task.review_round += 1;
+  task.updated_at = deps.clock.now();
+  await saveTask(deps, task);
+
+  const prompt = buildReviewPrompt(task);
+  const harnessConfig = HARNESSES[task.review_harness];
+  const command = harnessConfig.spawnCommand(prompt);
+  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const windowName = `review-${task.review_round}`;
+
+  const sessionExists = await deps.tmux.sessionExists(task.tmux_session);
+  if (sessionExists) {
+    await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
+  } else {
+    await deps.tmux.newSession(task.tmux_session, workspacePath, command);
+    try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
+  }
+
+  await appendHistory(deps, task.project, task.id, {
+    type: "review.started",
+    timestamp: deps.clock.now(),
+    attempt: task.review_round,
+  });
+
+  log.info("Review agent spawned", { taskId: task.id, round: task.review_round });
+  console.log(`Review agent spawned (round ${task.review_round})`);
+}
+
+/**
+ * Respawn worker agent in a new tmux window after review failure.
+ */
+async function spawnWorkerWindow(deps: Deps, task: Task, log: ReturnType<typeof deps.logger.child>): Promise<void> {
+  if (!task.tmux_session || !task.workspace) return;
+
+  const { buildRespawnPrompt } = await import("../../core/agent.js");
+  const { HARNESSES } = await import("../../core/harness.js");
+
+  const prompt = buildRespawnPrompt(task);
+  const harnessConfig = HARNESSES[task.harness];
+  const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
+  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
+  const windowName = `worker-${task.review_round + 1}`;
+
+  const sessionExists = await deps.tmux.sessionExists(task.tmux_session);
+  if (sessionExists) {
+    await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
+  } else {
+    await deps.tmux.newSession(task.tmux_session, workspacePath, command);
+    try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
+  }
+
+  log.info("Worker respawned after review", { taskId: task.id, round: task.review_round });
+  console.log(`Worker respawned (fix round ${task.review_round})`);
+}
+
 import { buildPRBody } from "../../core/github.js";
 
 /**
@@ -786,6 +851,27 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     });
   }
 
+  // Auto-spawn on status transitions
+  if (newStatus && newStatus !== oldStatus) {
+    // working → agent-review: spawn review agent in new window
+    if (newStatus === "agent-review") {
+      try {
+        await spawnReviewWindow(deps, task, log);
+      } catch (err) {
+        console.error(`Warning: failed to spawn review agent: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // agent-review → working (review failed): respawn worker in new window
+    if (newStatus === "working" && oldStatus === "agent-review" && task.review_round > 0) {
+      try {
+        await spawnWorkerWindow(deps, task, log);
+      } catch (err) {
+        console.error(`Warning: failed to respawn worker: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   const changes: string[] = [];
   if (newBranch && newBranch !== oldBranch) changes.push(`branch: ${oldBranch} → ${newBranch}`);
   if (newSummary !== undefined) changes.push("summary updated");
@@ -841,12 +927,15 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   });
 
   console.log(`Task ${taskId} marked as agent-review`);
+
+  // Auto-spawn review agent
+  try {
+    await spawnReviewWindow(deps, task, log);
+  } catch (err) {
+    console.error(`Warning: failed to spawn review agent: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
-/**
- * Mark task as reviewed (human approved).
- * Also pushes branch and creates a GitHub PR if gh is available.
- */
 /**
  * Mark task as stuck (called by hook).
  */
