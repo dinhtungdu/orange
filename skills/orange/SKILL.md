@@ -1,6 +1,6 @@
 ---
 name: orange
-description: Orange agent orchestration. Use when TASK.md present (worker mode) OR when user says "orange task", "add task", "create task", or wants parallel tasks (orchestrator mode).
+description: Orange agent orchestration. Use when TASK.md present (worker mode) OR when user says "orange task", "add task", "create task", "review PR", "review branch", or wants parallel tasks (orchestrator mode).
 ---
 
 # Orange
@@ -165,13 +165,15 @@ Use `orange task show <id>` to see task details, plan, notes, and history. Usefu
 
 ### Creating Review Tasks
 
-To have a review agent evaluate an existing branch (e.g., coworker's PR):
+When user asks to review a PR or branch (e.g., "review PR #123", "review the auth branch"):
 
-```bash
-orange task create feature-branch "Review auth changes" --status agent-review
-```
+1. Identify the branch name (from PR or user input)
+2. Create a review task:
+   ```bash
+   orange task create feature-branch "Review: <brief description>" --status agent-review
+   ```
 
-This spawns a review agent directly — no worker involved.
+This spawns a review agent directly — no worker involved. The review agent will check out the branch, review the diff, and write feedback to TASK.md.
 
 ### Handling Issues
 
