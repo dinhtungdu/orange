@@ -1258,8 +1258,9 @@ export class DashboardState {
     const isAgentReview = task.status === "agent-review";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: working/agent-review with dead session, stuck, cancelled, or reviewing without workspace/dead session
-    const canRespawn = ((isWorking || isAgentReview) && sessionDead) || isStuck || isCancelled || (isReviewing && (noWorkspace || sessionDead));
+    // Allow: working/agent-review with dead session, stuck, cancelled
+    // Reviewing without session: no respawn (human merges/creates PR, no agent needed)
+    const canRespawn = ((isWorking || isAgentReview) && sessionDead) || isStuck || isCancelled;
     if (!canRespawn) {
       this.data.error = "Cannot respawn this task.";
       this.emit();
@@ -1594,7 +1595,7 @@ export class DashboardState {
     } else if (task.status === "agent-review") {
       keys += "  Enter:attach  m:force merge  x:cancel";
     } else if (task.status === "reviewing") {
-      keys += "  Enter:attach";
+      if (hasLiveSession) keys += "  Enter:attach";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {
