@@ -183,10 +183,9 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 - Triggers immediate refresh on file change
 - Status updates via `orange task update --status` are detected automatically
 
-**Agent review auto-trigger:**
-- On refresh, detect tasks that just entered `agent-review` status
-- Auto-spawn review agent in same tmux session (new named window)
-- Track previous status to avoid re-triggering on subsequent refreshes
+**Agent review spawning:**
+- Review agent spawning is handled by CLI (`orange task update --status agent-review`)
+- Dashboard only watches for TASK.md changes and updates UI
 
 **Health check** (30s interval):
 - Single `tmux list-sessions` call (not N `has-session` calls)

@@ -84,7 +84,7 @@ Separate review agent evaluates worker's changes.
 ```
 Worker sets --status agent-review
     ↓
-Orange auto-spawns review agent
+CLI auto-spawns review agent
   - New agent session in same tmux session (new named window)
   - Harness: review_harness (default: claude)
   - review_round incremented
@@ -111,11 +111,11 @@ reviewing          working (feedback in ## Review)
                    reviewing    stuck
 ```
 
-**Status transitions:**
+**Status transitions (all via CLI `orange task update --status`):**
+- `working` → `agent-review` (CLI auto-spawns review agent in new window)
 - `agent-review` → `reviewing` (review passed)
-- `agent-review` → `working` (review failed, round < 2)
+- `agent-review` → `working` (review failed, round < 2; CLI auto-respawns worker in new window)
 - `agent-review` → `stuck` (review failed, round 2)
-- `working` (with `review_round > 0`) → auto-respawn worker
 
 **Tmux windows:**
 - Each agent session gets a named window: `worker`, `review-1`, `worker-2`, `review-2`

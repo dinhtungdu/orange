@@ -102,7 +102,7 @@ This prevents agents from going down wrong paths or expanding scope unilaterally
 Review is handled by a separate review agent, not the worker. When worker finishes implementation:
 
 1. Worker sets `orange task update --status agent-review`
-2. Orange auto-spawns review agent in same tmux session (new named window)
+2. CLI auto-spawns review agent in same tmux session (new named window)
 3. Review agent uses `review_harness` (default: `claude`)
 
 ### Review Agent Behavior
