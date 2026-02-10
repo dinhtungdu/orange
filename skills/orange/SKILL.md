@@ -163,6 +163,16 @@ Use `orange task show <id>` to see task details, plan, notes, and history. Usefu
 - Planning an alternative approach for a similar problem
 - Reviewing what context was provided to a worker
 
+### Creating Review Tasks
+
+To have a review agent evaluate an existing branch (e.g., coworker's PR):
+
+```bash
+orange task create feature-branch "Review auth changes" --status agent-review
+```
+
+This spawns a review agent directly — no worker involved.
+
 ### Handling Issues
 
 | Issue | Action |
