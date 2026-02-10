@@ -157,11 +157,11 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Parse --status flag (default: pending, auto-set to clarification if empty summary)
   const statusArg = parsed.options.status as string | undefined;
-  let status: "pending" | "clarification" | "reviewing" | undefined;
+  let status: "pending" | "clarification" | "agent-review" | "reviewing" | undefined;
   if (statusArg) {
-    if (statusArg !== "pending" && statusArg !== "clarification" && statusArg !== "reviewing") {
-      if (jsonOutput) outputJsonError("Invalid status. Use 'pending', 'clarification', or 'reviewing'");
-      console.error("Invalid status. Use 'pending', 'clarification', or 'reviewing'");
+    if (statusArg !== "pending" && statusArg !== "clarification" && statusArg !== "agent-review" && statusArg !== "reviewing") {
+      if (jsonOutput) outputJsonError("Invalid status. Use 'pending', 'clarification', 'agent-review', or 'reviewing'");
+      console.error("Invalid status. Use 'pending', 'clarification', 'agent-review', or 'reviewing'");
       process.exit(1);
     }
     status = statusArg;
@@ -220,8 +220,9 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const message = `Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`;
   console.log(message);
 
-  // Auto-spawn agent unless --no-spawn or status is reviewing
-  if (task.status !== "reviewing" && !parsed.options["no-spawn"]) {
+  // Auto-spawn agent unless --no-spawn, reviewing, or agent-review
+  // agent-review: dashboard auto-triggers spawn + review agent
+  if (task.status !== "reviewing" && task.status !== "agent-review" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
   }

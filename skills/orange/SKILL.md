@@ -155,7 +155,7 @@ Use `orange task show <id>` to see task details, plan, notes, and history. Usefu
 orange [--all] [--project <name>]
 
 # Task lifecycle
-orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|reviewing] [--project <name>]
+orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|agent-review|reviewing] [--project <name>]
 orange task spawn <task_id>
 orange task respawn <task_id>
 orange task attach <task_id>
@@ -187,6 +187,7 @@ orange task list [--status <status>] [--all]
 | `--context -` | Read context from stdin → `## Context` in body (read-only for agent) |
 | `--no-spawn` | Create without starting agent |
 | `--status clarification` | For empty summary (auto-set when summary omitted) |
+| `--status agent-review` | Trigger review agent (e.g., review coworker's PR) |
 | `--status reviewing` | For existing work, skip agent spawn |
 | `--project <name>` | Explicit project (otherwise inferred from cwd) |
 

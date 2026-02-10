@@ -17,7 +17,7 @@ export interface CreateTaskOptions {
   /** Optional context to include in body as ## Context section */
   context?: string | null;
   /** Initial status. Defaults to "pending". "clarification" auto-set for empty summary. */
-  status?: "pending" | "clarification" | "reviewing";
+  status?: "pending" | "clarification" | "agent-review" | "reviewing";
   /** Harness to use. If omitted, auto-detects first installed. */
   harness?: Harness | string;
   /** Task ID. If omitted, auto-generates. */

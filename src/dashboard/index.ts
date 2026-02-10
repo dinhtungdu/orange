@@ -371,8 +371,7 @@ function buildDashboard(
       createHarnessLabel.content = `Harness:     [${harnessDisplay}]`;
       createHarnessLabel.fg = harnessHighlight;
       // Status field: show as toggleable with indicator
-      const statusDisplay = cm.status === "pending" ? "pending ◀" : "reviewing ◀";
-      createStatusLabel.content = `Status:      [${statusDisplay}]`;
+      createStatusLabel.content = `Status:      [${cm.status} ◀]`;
       createStatusLabel.fg = statusHighlight;
     }
 
