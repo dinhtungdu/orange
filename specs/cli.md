@@ -26,7 +26,7 @@ orange task update [task_id] [--branch [name]] [--summary <text>] [--status <sta
   # --branch: if name exists → checkout + delete old; else → rename current
   # --branch (no value): sync task to current git branch
   # --summary: update frontmatter summary field
-  # --status: update task status (clarification, working, reviewing, stuck)
+  # --status: update task status (clarification, working, agent-review, reviewing, stuck)
 orange task merge <task_id> [--strategy ff|merge] [--local]
 orange task cancel <task_id> [--yes]
 orange task delete <task_id> [--yes] # done/cancelled only

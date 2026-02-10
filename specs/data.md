@@ -45,7 +45,9 @@ id: abc123
 project: orange
 branch: dark-mode
 harness: pi
+review_harness: claude
 status: working
+review_round: 0
 summary: Implement dark mode for dashboard
 workspace: orange--1
 tmux_session: orange/dark-mode
@@ -74,6 +76,7 @@ Agent working notes, discoveries, session handoff...
 - `## Context` — Implementation context from `--context -` (orchestrator-controlled, read-only for agent)
 - `## Questions` — Agent's clarifying questions (agent-controlled)
 - `## Notes` — Working notes, plan, session handoff (agent-controlled)
+- `## Review` — Agent review summary (written by review agent during `agent-review`)
 
 ### Notes Format
 
@@ -123,9 +126,10 @@ Append-only event log:
 |--------|-------------|
 | `pending` | Created, not yet spawned |
 | `clarification` | Agent waiting for user input (empty/vague summary, or scope change) |
-| `working` | Agent actively working (includes self-review) |
-| `reviewing` | Self-review passed, awaiting human review/merge |
-| `stuck` | Agent gave up after max review attempts |
+| `working` | Agent actively implementing |
+| `agent-review` | Review agent evaluating work |
+| `reviewing` | Agent review passed, awaiting human review/merge |
+| `stuck` | Failed after 2 review rounds or 2 crashes in review |
 | `done` | Merged/completed |
 | `cancelled` | User cancelled or errored |
 

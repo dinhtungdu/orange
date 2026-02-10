@@ -177,6 +177,13 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     log.debug("Creating tmux session", { session: tmuxSession, interactive: !prompt });
     await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
+    // Name the initial window "worker" for consistency with review windows
+    try {
+      await deps.tmux.renameWindow(tmuxSession, "worker");
+    } catch {
+      // Non-critical — window naming is best-effort
+    }
+
     // Update task
     const now = deps.clock.now();
     const previousStatus = task.status;

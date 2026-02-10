@@ -73,7 +73,9 @@ When no branch name provided, defaults to `orange-tasks/<id>`. Agent renames bas
 For dead sessions reusing existing workspace:
 - Check TASK.md status first
 - If already `reviewing` → stop (nothing to do)
+- If `agent-review` → respawn review agent (not worker)
 - If `stuck` or `working` → continue implementation
+- If `working` with `review_round > 0` → read `## Review` feedback, fix issues
 - If `clarification` → wait for user input
 - Uses reduced permissions where supported (see [harness.md](./harness.md))
 
@@ -95,23 +97,58 @@ If agent discovers task is larger or different than expected while working:
 
 This prevents agents from going down wrong paths or expanding scope unilaterally.
 
-## 5. Self-Review Loop
+## 5. Agent Review
+
+Review is handled by a separate review agent, not the worker. When worker finishes implementation:
+
+1. Worker sets `orange task update --status agent-review`
+2. Orange auto-spawns review agent in same tmux session (new named window)
+3. Review agent uses `review_harness` (default: `claude`)
+
+### Review Agent Behavior
 
 ```
-implement → /code-review → feedback
-                              ↓
-                        pass? ────→ stop (passed)
-                              ↓
-                        fail + <2 → fix → re-review
-                              ↓
-                        fail + ≥2 → stop (stuck)
+Read diff (branch vs default branch)
+    ↓
+Read TASK.md (summary, context, notes)
+    ↓
+Use PR review toolkit if available
+    ↓
+Write ## Review to TASK.md
+    ↓
+Pass → orange task update --status reviewing
+Fail → orange task update --status working (round < 2)
+Fail → orange task update --status stuck (round 2)
 ```
+
+### Review Rounds
+
+- `review_round` in frontmatter tracks current round (0–2)
+- Round 1: review fails → worker respawned to fix → worker sets `agent-review` again
+- Round 2: review fails → `stuck`
+- Max 4 agent sessions per task: worker → reviewer → worker → reviewer
+
+### Crash Handling
+
+- Review agent crashes in `agent-review` → respawn review agent (same round)
+- 2 crashes in same round → `stuck`
+
+### Tmux Windows
+
+Named windows per agent session:
+- `worker` — initial spawn
+- `review-1` — first review
+- `worker-2` — fix round
+- `review-2` — second review
+
+Windows kept open (history preserved). Named for future targeting.
 
 ## 6. Completion
 
-Agent updates status via CLI before stopping:
-- `orange task update --status reviewing` — self-review passed
-- `orange task update --status stuck` — gave up after max attempts
+Worker sets `orange task update --status agent-review` when done implementing. Review agent sets final status:
+- `orange task update --status reviewing` — review passed
+- `orange task update --status working` — review failed (worker will be respawned)
+- `orange task update --status stuck` — review failed on round 2
 
 TASK.md is the source of truth. Dashboard watches for changes.
 

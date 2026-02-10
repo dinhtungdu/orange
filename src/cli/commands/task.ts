@@ -282,6 +282,7 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     pending: "○",
     clarification: "?",
     working: "●",
+    "agent-review": "◎",
     reviewing: "◉",
     stuck: "⚠",
     done: "✓",
@@ -446,7 +447,7 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   // Check task has an active session
-  const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
+  const activeStatuses: TaskStatus[] = ["working", "agent-review", "reviewing", "stuck"];
   if (!activeStatuses.includes(task.status)) {
     log.error("Task not active for attach", { taskId, status: task.status });
     console.error(`Task '${taskId}' is ${task.status}, not active`);
@@ -573,20 +574,26 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Create new tmux session
   const tmuxSession = `${task.project}/${task.branch}`;
-  const { buildRespawnPrompt } = await import("../../core/agent.js");
+  const { buildRespawnPrompt, buildReviewPrompt } = await import("../../core/agent.js");
   const { HARNESSES } = await import("../../core/harness.js");
-  const prompt = buildRespawnPrompt(task);
-  const harnessConfig = HARNESSES[task.harness];
+
+  // If agent-review, respawn review agent instead of worker
+  const isReview = task.status === "agent-review";
+  const prompt = isReview ? buildReviewPrompt(task) : buildRespawnPrompt(task);
+  const harness = isReview ? task.review_harness : task.harness;
+  const harnessConfig = HARNESSES[harness];
   // Empty prompt = interactive session, just spawn harness without args
   const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
 
-  log.info("Respawning task", { taskId, session: tmuxSession, interactive: !prompt });
+  log.info("Respawning task", { taskId, session: tmuxSession, interactive: !prompt, isReview });
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
-  // Update task
+  // Update task — keep agent-review status if respawning review agent
   const now = deps.clock.now();
   task.tmux_session = tmuxSession;
-  task.status = "working";
+  if (!isReview) {
+    task.status = "working";
+  }
   task.updated_at = now;
 
   await saveTask(deps, task);
@@ -646,7 +653,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   // Validate status if provided
   if (newStatus) {
-    const validStatuses = ["clarification", "working", "reviewing", "stuck"];
+    const validStatuses = ["clarification", "working", "agent-review", "reviewing", "stuck"];
     if (!validStatuses.includes(newStatus)) {
       if (jsonOutput) outputJsonError(`Invalid status. Use: ${validStatuses.join(", ")}`);
       console.error(`Invalid status. Use: ${validStatuses.join(", ")}`);
@@ -814,10 +821,10 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   const now = deps.clock.now();
   const previousStatus = task.status;
-  task.status = "reviewing";
+  task.status = "agent-review";
   task.updated_at = now;
 
-  log.info("Task completed", { taskId, from: previousStatus, to: "reviewing" });
+  log.info("Task completed", { taskId, from: previousStatus, to: "agent-review" });
 
   await saveTask(deps, task);
   await appendHistory(deps, task.project, task.id, {
@@ -829,10 +836,10 @@ async function completeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     type: "status.changed",
     timestamp: now,
     from: previousStatus,
-    to: "reviewing",
+    to: "agent-review",
   });
 
-  console.log(`Task ${taskId} marked as reviewing`);
+  console.log(`Task ${taskId} marked as agent-review`);
 }
 
 /**

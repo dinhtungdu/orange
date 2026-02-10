@@ -146,7 +146,9 @@ describe("CWD detection", () => {
         body: "",
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
-        pr_url: null,
+        review_harness: "claude",
+    review_round: 0,
+    pr_url: null,
       };
       await saveTask(deps, task);
 

@@ -534,7 +534,7 @@ describe("task complete command", () => {
     process.exit = originalExit;
   });
 
-  test("marks task as reviewing", async () => {
+  test("marks task as agent-review", async () => {
     // Setup: create and spawn task
     await runTaskCommand(
       parseArgs(["bun", "script.ts", "task", "create", "--no-spawn", "--project", "testproj", "complete-feature", "Work"]),
@@ -552,8 +552,8 @@ describe("task complete command", () => {
 
     // Load by task ID
     const task = await loadTask(deps, "testproj", taskId);
-    expect(task!.status).toBe("reviewing");
-    expect(consoleLogs[0]).toContain("reviewing");
+    expect(task!.status).toBe("agent-review");
+    expect(consoleLogs[0]).toContain("agent-review");
   });
 
   test("creates history events on complete", async () => {
@@ -568,7 +568,7 @@ describe("task complete command", () => {
     // Load history by task ID
     const history = await loadHistory(deps, "testproj", taskId);
     expect(history.some(e => e.type === "agent.stopped" && (e as AgentStoppedEvent).outcome === "passed")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "reviewing")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "agent-review")).toBe(true);
   });
 });
 

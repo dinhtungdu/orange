@@ -31,7 +31,8 @@ Colors: ● green, ✗ red, ○ gray
 | pending | waiting to spawn |
 | clarification | agent waiting for user input |
 | working | agent assigned and should be running |
-| reviewing | agent done, awaiting human review/merge |
+| agent-review | review agent evaluating work |
+| reviewing | agent review passed, awaiting human review/merge |
 | stuck | agent needs help |
 | done | merged/completed |
 | cancelled | user cancelled or errored |
@@ -82,6 +83,7 @@ Footer shows relevant actions based on selected task's state:
 | Pending | j/k:nav  v:view  Enter:spawn  x:cancel  c:create  f:filter  q:quit |
 | Clarification | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Working | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
+| Agent-review | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (no PR) | j/k:nav  v:view  Enter:attach  m:merge  p:create PR  x:cancel  c:create  f:filter  q:quit |
 | Reviewing (with PR) | j/k:nav  v:view  Enter:attach  p:open PR  x:cancel  c:create  f:filter  q:quit |
 | Stuck | j/k:nav  v:view  Enter:attach  x:cancel  c:create  f:filter  q:quit |
@@ -99,7 +101,7 @@ Footer shows relevant actions based on selected task's state:
 | c | Create new task | Always (project-scoped only) |
 | Enter | Work on task | Context-dependent (see below) |
 | R | Refresh PR status | Any task (checks GitHub for PR) |
-| m | Merge task | Reviewing tasks (no PR) |
+| m | Merge task | Reviewing tasks (no PR); force confirm from other active statuses |
 | p | Create PR / Open PR in browser | Reviewing (no PR) creates, any with PR opens |
 | x | Cancel task (shows confirmation) | Active tasks |
 | d | Delete task folder (shows confirmation) | Cancelled or done tasks |
@@ -180,6 +182,11 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 - Watches `~/orange/tasks/` for `TASK.md` changes
 - Triggers immediate refresh on file change
 - Status updates via `orange task update --status` are detected automatically
+
+**Agent review auto-trigger:**
+- On refresh, detect tasks that just entered `agent-review` status
+- Auto-spawn review agent in same tmux session (new named window)
+- Track previous status to avoid re-triggering on subsequent refreshes
 
 **Health check** (30s interval):
 - Single `tmux list-sessions` call (not N `has-session` calls)

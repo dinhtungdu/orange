@@ -133,6 +133,38 @@ export class RealTmux implements TmuxExecutor {
     }
   }
 
+  async newWindow(session: string, name: string, cwd: string, command: string): Promise<void> {
+    const wrappedCommand = `bash -c '${command.replace(/'/g, "'\\''")}; exec \${SHELL:-bash}'`;
+
+    const { exitCode, stderr } = await exec("tmux", [
+      "new-window",
+      "-t",
+      session,
+      "-n",
+      name,
+      "-c",
+      cwd,
+      wrappedCommand,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to create window '${name}' in session '${session}': ${stderr}`);
+    }
+  }
+
+  async renameWindow(session: string, name: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "rename-window",
+      "-t",
+      session,
+      name,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to rename window in session '${session}': ${stderr}`);
+    }
+  }
+
   async sendKeys(session: string, keys: string): Promise<void> {
     const { exitCode, stderr } = await exec("tmux", [
       "send-keys",
@@ -261,6 +293,22 @@ export class MockTmux implements TmuxExecutor {
       return null;
     }
     return sessionData.output.slice(-lines).join("\n");
+  }
+
+  async newWindow(session: string, name: string, cwd: string, command: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[window: ${name} cmd: ${command}]`);
+  }
+
+  async renameWindow(session: string, name: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[rename-window: ${name}]`);
   }
 
   async sendKeys(session: string, keys: string): Promise<void> {

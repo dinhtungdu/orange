@@ -22,8 +22,7 @@ Your mode depends on context:
 4. **Evaluate clarity** — empty/vague? Add `## Questions` with 2-3 specific questions, set `--status clarification`, wait. Don't assume scope or make up requirements.
 5. **Plan** — if no `## Context`, document approach in `## Notes` before coding
 6. **Implement** — read project rules, code, test, commit
-7. **Self-review** — use `/code-review` skill, fix issues (max 2 attempts)
-8. **Complete** — `--status reviewing` (passed) or `--status stuck` (gave up)
+7. **Complete** — `--status agent-review` (hands off to review agent)
 
 ### Respawn Behavior
 
@@ -32,6 +31,8 @@ When resuming (session restarted), check TASK.md status first:
 | Status | Action |
 |--------|--------|
 | `reviewing` | Stop — nothing to do |
+| `agent-review` | Stop — review agent will be spawned separately |
+| `working` (review_round > 0) | Read `## Review` feedback, fix issues, then `--status agent-review` |
 | `working` | Continue implementation |
 | `stuck` | Continue implementation |
 | `clarification` | Wait for user input |
@@ -91,7 +92,7 @@ BLOCKER: (if any)
 
 - Don't push or merge — human handles that
 - Update status via CLI before stopping
-- Use `/code-review` skill for self-review
+- Do NOT set `--status reviewing` directly — set `--status agent-review` to trigger review agent
 - `## Context` is read-only (orchestrator-provided)
 
 ---
@@ -198,8 +199,9 @@ orange task list [--status <status>] [--all]
 | `pending` | Created, not spawned |
 | `clarification` | Waiting for user input (empty/vague summary, or scope change) |
 | `working` | Actively implementing |
-| `reviewing` | Done, awaiting human review/merge |
-| `stuck` | Gave up after 2 attempts |
+| `agent-review` | Review agent evaluating work |
+| `reviewing` | Agent review passed, awaiting human review/merge |
+| `stuck` | Failed after 2 review rounds |
 | `done` | Merged |
 | `cancelled` | Cancelled or errored |
 
@@ -209,7 +211,10 @@ orange task list [--status <status>] [--all]
 pending → working (with summary)
 pending → clarification (empty summary)
 working ⇄ clarification
-working → reviewing | stuck
+working → agent-review (implementation done)
+agent-review → reviewing (review passed)
+agent-review → working (review failed)
+agent-review → stuck (round 2 failed)
 Any active → cancelled
 reviewing → done
 ```

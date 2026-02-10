@@ -60,7 +60,7 @@ orange task cancel <task_id> [--yes]
 orange task delete <task_id> [--yes]
 orange task create-pr <task_id>
 orange task show <task_id>          # Show task details, content, history
-orange task complete <task_id>      # Agent use: set status to reviewing
+orange task complete <task_id>      # Agent use: set status to agent-review
 orange task stuck <task_id>         # Agent use: set status to stuck
 ```
 
@@ -80,20 +80,22 @@ orange log [--level <level>] [--lines N]
 ## Task Status Flow
 
 ```
-pending → working → reviewing → done
-            ↕           ↓
-      clarification  cancelled
-            ↓
-          stuck
+pending → working → agent-review → reviewing → done
+            ↕            ↕              ↓
+      clarification   working       cancelled
+                      (fix cycle)
+                         ↓
+                       stuck
 ```
 
 | Status | Description |
 |--------|-------------|
 | pending | Created, waiting to spawn |
 | clarification | Agent waiting for user input |
-| working | Agent actively working |
-| reviewing | Self-review passed, awaiting human review |
-| stuck | Agent gave up after max attempts |
+| working | Agent actively implementing |
+| agent-review | Review agent evaluating work |
+| reviewing | Agent review passed, awaiting human review |
+| stuck | Failed after 2 review rounds |
 | done | Merged/completed |
 | cancelled | User cancelled |
 

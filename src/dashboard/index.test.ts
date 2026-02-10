@@ -27,7 +27,9 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   project: "testproj",
   branch: "feature-x",
   harness: "claude",
+  review_harness: "claude",
   status: "pending",
+  review_round: 0,
   workspace: null,
   tmux_session: null,
   summary: "Test task description",
@@ -707,7 +709,9 @@ describe("Dashboard Poll Cycle", () => {
       id: "pr-task",
       branch: "feature-x",
       status: "working",
-      pr_url: null,
+      review_harness: "claude",
+    review_round: 0,
+    pr_url: null,
     });
     await saveTask(deps, task);
 
@@ -764,7 +768,9 @@ describe("Dashboard Poll Cycle", () => {
       id: "done-task",
       branch: "done-branch",
       status: "done",
-      pr_url: null,
+      review_harness: "claude",
+    review_round: 0,
+    pr_url: null,
     });
     await saveTask(deps, task);
 

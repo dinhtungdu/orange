@@ -8,9 +8,10 @@ End-to-end workflows in Orange.
 |--------|-------------|
 | `pending` | Created, not spawned |
 | `clarification` | Agent waiting for user input |
-| `working` | Agent actively working |
-| `reviewing` | Self-review passed, awaiting human review/merge |
-| `stuck` | Agent gave up after max attempts |
+| `working` | Agent actively implementing |
+| `agent-review` | Review agent evaluating work |
+| `reviewing` | Agent review passed, awaiting human review/merge |
+| `stuck` | Failed after 2 review rounds or 2 crashes in review |
 | `done` | Merged/completed |
 | `cancelled` | User cancelled or errored |
 
@@ -49,7 +50,7 @@ Tasks reach reviewing → notify user
 
 ## 2. Worker Flow
 
-Agent receives task → evaluates → implements → self-reviews → completes.
+Agent receives task → evaluates → implements → hands off to review.
 
 ```
 Spawn with TASK.md
@@ -66,21 +67,81 @@ Implement (code, test, commit)
     ↓
 Scope expands? ─── yes ──→ Clarification Flow
     ↓ no
-Self-review (max 2 attempts)
+Set --status agent-review
     ↓
-┌─────────┴─────────┐
-Pass               Fail
-↓                   ↓
-reviewing          stuck
+(worker done — review agent auto-spawned, see Agent Review Flow)
 ```
 
 **Status transitions:**
 - `pending` → `working` (on spawn with summary)
 - `pending` → `clarification` (on spawn without summary)
-- `working` → `reviewing` (self-review passed)
-- `working` → `stuck` (gave up)
+- `working` → `agent-review` (implementation done)
 
-## 3. Clarification Flow
+## 3. Agent Review Flow
+
+Separate review agent evaluates worker's changes.
+
+```
+Worker sets --status agent-review
+    ↓
+Orange auto-spawns review agent
+  - New agent session in same tmux session (new named window)
+  - Harness: review_harness (default: claude)
+  - review_round incremented
+    ↓
+Review agent:
+  - Reads diff (branch vs default branch)
+  - Reads TASK.md (summary, context, notes)
+  - Uses PR review toolkit if available
+  - Writes ## Review section to TASK.md
+    ↓
+┌─────────┴─────────┐
+Pass               Fail
+↓                   ↓
+reviewing          working (feedback in ## Review)
+                     ↓
+                   Worker auto-respawned
+                   (reads ## Review, fixes, sets agent-review)
+                     ↓
+                   Review agent spawned again (round 2)
+                     ↓
+                   ┌──────┴──────┐
+                   Pass        Fail
+                   ↓             ↓
+                   reviewing    stuck
+```
+
+**Status transitions:**
+- `agent-review` → `reviewing` (review passed)
+- `agent-review` → `working` (review failed, round < 2)
+- `agent-review` → `stuck` (review failed, round 2)
+- `working` (with `review_round > 0`) → auto-respawn worker
+
+**Tmux windows:**
+- Each agent session gets a named window: `worker`, `review-1`, `worker-2`, `review-2`
+- Windows are kept open (agent process stays running but idle)
+- Named windows allow future cleanup/targeting
+
+**Crash handling:**
+- Review agent crashes in `agent-review` → respawn review agent, same round
+- 2 crashes in `agent-review` within same round → `stuck`
+
+**Task frontmatter fields:**
+- `review_harness`: harness for review agent (default: `claude`)
+- `review_round`: current review round (0–2), incremented on each review spawn
+
+**Review prompt:**
+- Focused on diff review against TASK.md requirements
+- Instructs agent to use PR review toolkit if available
+- Writes `## Review` section to TASK.md with verdict + feedback
+- Sets `--status reviewing` (pass) or `--status working` (fail)
+- On round 2 failure, sets `--status stuck`
+
+**Merge gate:**
+- From `reviewing`: normal merge
+- From any other status: force confirm — "Not reviewed. Force merge?"
+
+## 4. Clarification Flow
 
 Agent encounters ambiguity → asks questions → waits for user → continues.
 
@@ -117,7 +178,7 @@ Continue implementation
 - `working` → `clarification` (agent asks)
 - `clarification` → `working` (user answers)
 
-## 4. Review & Merge Flow
+## 5. Review & Merge Flow
 
 Task ready for review → human reviews → merges.
 
@@ -139,10 +200,14 @@ Cleanup: release workspace, kill session, delete remote branch
 Status: done
 ```
 
+**Merge gate:**
+- From `reviewing`: normal merge
+- From any other active status: force confirm — "Not reviewed. Force merge?"
+
 **Status transitions:**
 - `reviewing` → `done` (merged)
 
-## 5. Respawn Flow
+## 6. Respawn Flow
 
 Session dies unexpectedly → human respawns → agent continues.
 
@@ -155,10 +220,11 @@ Respawn in existing workspace
     ↓
 Agent reads TASK.md, checks status
     ↓
-┌──────────────────────┬────────────────┬──────────────┐
-reviewing              stuck/working     clarification
-↓                      ↓                 ↓
-Stop (nothing to do)   Continue work     Wait for user
+┌──────────────┬────────────────┬──────────────┬──────────────┐
+reviewing      stuck/working     clarification   agent-review
+↓              ↓                 ↓               ↓
+Stop           Continue work     Wait for user   Respawn review
+                                                 agent (same round)
 ```
 
 **Session states:**
@@ -166,7 +232,7 @@ Stop (nothing to do)   Continue work     Wait for user
 - ✗ crashed (tmux died, task active)
 - ○ inactive (no session expected)
 
-## 6. PR Flow
+## 7. PR Flow
 
 Integration with GitHub via `gh` CLI.
 
@@ -214,7 +280,7 @@ Dashboard polls PR status. When PR merged externally, auto-triggers cleanup.
 
 Dashboard polls PR status. When PR closed without merge, auto-cancels task (kills session, releases workspace, status → `cancelled`).
 
-## 7. Cancel Flow
+## 8. Cancel Flow
 
 User cancels active task.
 
@@ -246,14 +312,14 @@ Status: cancelled (terminal, not respawnable)
           ▼                   ↕                      │
       working ◄───────────────┘                      │
           │                                          │
-          ├──────────────────────────────────────────┤
-          ▼                                          │
-       stuck                                         │
-          │                                          │
-          │              reviewing ──────────────────┤
-          │                    │
-          │                    ▼
-          └──────────────►   done
+          ├──► agent-review ──► reviewing ───────────┤
+          │         │               │                │
+          │         ▼               ▼                │
+          │       stuck           done               │
+          │         ↑                                │
+          │         │                                │
+          └─────────┘                                │
+              (review fail → fix → review again)
 ```
 
 ## Future: Delegation Flow (Phase 2)

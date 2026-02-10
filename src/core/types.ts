@@ -15,19 +15,20 @@ export type Harness = "pi" | "opencode" | "claude" | "codex";
 /**
  * Task status represents the lifecycle state of a task.
  *
- * Flow: pending → working → reviewing → done
- *                    ↑↓
- *              clarification (vague task or scope change)
- *                    ↓
- *                  stuck
+ * Flow: pending → working → agent-review → reviewing → done
+ *                    ↑↓            ↕
+ *              clarification    working (fix cycle)
+ *                                  ↓
+ *                                stuck (after 2 rounds)
  *       cancelled (from any active state)
  */
 export type TaskStatus =
   | "pending" // Created but not spawned
   | "clarification" // Agent waiting for user input (vague task or scope change)
-  | "working" // Agent actively processing (includes self-review)
-  | "reviewing" // Self-review passed, awaiting human review/merge
-  | "stuck" // Agent gave up after max review attempts
+  | "working" // Agent actively implementing
+  | "agent-review" // Review agent evaluating work
+  | "reviewing" // Agent review passed, awaiting human review/merge
+  | "stuck" // Failed after 2 review rounds or 2 crashes in review
   | "done" // Successfully merged/completed
   | "cancelled"; // User cancelled or errored
 
@@ -44,8 +45,12 @@ export interface Task {
   branch: string;
   /** Which coding agent harness to use */
   harness: Harness;
+  /** Which harness to use for agent review (default: claude) */
+  review_harness: Harness;
   /** Current status of the task */
   status: TaskStatus;
+  /** Current review round (0 = no review yet, 1-2 = review rounds) */
+  review_round: number;
   /** Assigned workspace path (e.g., "orange--1"), null if not spawned */
   workspace: string | null;
   /** tmux session name (e.g., "orange/dark-mode"), null if not spawned */
@@ -100,6 +105,10 @@ export interface TmuxExecutor {
   capturePaneSafe(session: string, lines: number): Promise<string | null>;
   /** Send keys to a session */
   sendKeys(session: string, keys: string): Promise<void>;
+  /** Create a new named window in an existing session */
+  newWindow(session: string, name: string, cwd: string, command: string): Promise<void>;
+  /** Rename the current window in a session */
+  renameWindow(session: string, name: string): Promise<void>;
   /** Split window horizontally and run command in new pane */
   splitWindow(session: string, command: string): Promise<void>;
   /** Attach to session if exists, create and attach if not (tmux new-session -A) */

@@ -68,6 +68,7 @@ export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
   clarification: "#FF8800", // Orange — needs attention
   working: "#5599FF",
+  "agent-review": "#CC8800", // Orange — review in progress
   reviewing: "#D4A000",     // Yellow — needs human review
   stuck: "#DD4444",
   done: "#22BB22",
@@ -88,7 +89,7 @@ export const CHECKS_ICON: Record<string, string> = {
 
 export type StatusFilter = "all" | "active" | "done";
 
-const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "reviewing", "stuck"];
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "agent-review", "reviewing", "stuck"];
 const DONE_STATUSES: TaskStatus[] = ["done", "cancelled"];
 
 /** Sort tasks: active first, terminal last, by updated_at within groups */
@@ -218,6 +219,8 @@ export class DashboardState {
   private attachListeners: AttachListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
+  /** Track previous status per task to detect transitions */
+  private previousStatuses: Map<string, TaskStatus> = new Map();
 
   constructor(deps: Deps, options: DashboardOptions = {}) {
     this.deps = deps;
@@ -646,6 +649,20 @@ export class DashboardState {
       this.data.allTasks = await listTasks(this.deps, {
         project: this.data.projectFilter ?? undefined,
       });
+
+      // Detect tasks that just entered agent-review and auto-spawn review agent
+      for (const task of this.data.allTasks) {
+        const prevStatus = this.previousStatuses.get(task.id);
+        if (task.status === "agent-review" && prevStatus !== "agent-review") {
+          this.spawnReviewAgent(task);
+        }
+        // Detect review failed → working transition, auto-respawn worker
+        if (task.status === "working" && prevStatus === "agent-review" && task.review_round > 0) {
+          this.respawnWorkerAfterReview(task);
+        }
+        this.previousStatuses.set(task.id, task.status);
+      }
+
       this.applyStatusFilter();
       if (this.data.cursor >= this.data.tasks.length) {
         this.data.cursor = Math.max(0, this.data.tasks.length - 1);
@@ -777,7 +794,7 @@ export class DashboardState {
             }
 
             // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
-            const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
+            const activeStatuses: TaskStatus[] = ["working", "agent-review", "reviewing", "stuck"];
             if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
               mergedTasks.push(task);
             }
@@ -886,7 +903,7 @@ export class DashboardState {
   }
 
   private async captureOutputs(): Promise<void> {
-    const activeStatuses: TaskStatus[] = ["working", "reviewing", "stuck"];
+    const activeStatuses: TaskStatus[] = ["working", "agent-review", "reviewing", "stuck"];
     const activeTasks = this.data.tasks.filter(
       (t) => t.tmux_session && activeStatuses.includes(t.status)
     );
@@ -1043,8 +1060,8 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    // Session dead only matters for "working" tasks
-    const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
+    // Session dead only matters for "working"/"agent-review" tasks
+    const isDead = this.data.deadSessions.has(task.id) && (task.status === "working" || task.status === "agent-review");
 
     // Terminal states: no action
     if (task.status === "done" || task.status === "cancelled") {
@@ -1105,12 +1122,28 @@ export class DashboardState {
     const task = this.data.tasks[this.data.cursor];
     if (!task || this.data.pendingOps.has(task.id)) return;
 
-    if (task.status !== "reviewing") {
-      this.data.error = "Only reviewing tasks can be merged.";
+    // Terminal statuses can't be merged
+    if (task.status === "done" || task.status === "cancelled" || task.status === "pending") {
+      this.data.error = "Cannot merge this task.";
       this.emit();
       return;
     }
 
+    // Non-reviewing: force confirm
+    if (task.status !== "reviewing") {
+      this.data.confirmMode = {
+        active: true,
+        message: `Task not reviewed yet (${task.status}). Force merge ${task.project}/${task.branch}?`,
+        action: () => this.executeMerge(task),
+      };
+      this.emit();
+      return;
+    }
+
+    this.executeMerge(task);
+  }
+
+  private executeMerge(task: Task): void {
     const taskBranch = task.branch;
     this.data.pendingOps.add(task.id);
     this.emit();
@@ -1219,10 +1252,11 @@ export class DashboardState {
     const isCancelled = task.status === "cancelled";
     const isStuck = task.status === "stuck";
     const isWorking = task.status === "working";
+    const isAgentReview = task.status === "agent-review";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: working with dead session, stuck, cancelled, or reviewing without workspace/dead session
-    const canRespawn = (isWorking && sessionDead) || isStuck || isCancelled || (isReviewing && (noWorkspace || sessionDead));
+    // Allow: working/agent-review with dead session, stuck, cancelled, or reviewing without workspace/dead session
+    const canRespawn = ((isWorking || isAgentReview) && sessionDead) || isStuck || isCancelled || (isReviewing && (noWorkspace || sessionDead));
     if (!canRespawn) {
       this.data.error = "Cannot respawn this task.";
       this.emit();
@@ -1257,6 +1291,107 @@ export class DashboardState {
         }
       }
     });
+  }
+
+  /**
+   * Auto-spawn review agent when task enters agent-review status.
+   * Creates a new named window in the existing tmux session.
+   */
+  private spawnReviewAgent(task: Task): void {
+    if (this.data.pendingOps.has(task.id)) return;
+    if (!task.tmux_session || !task.workspace) return;
+
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    (async () => {
+      try {
+        const { buildReviewPrompt } = await import("../core/agent.js");
+        const { HARNESSES } = await import("../core/harness.js");
+        const { saveTask, appendHistory } = await import("../core/state.js");
+        const { join } = await import("node:path");
+
+        // Increment review round
+        task.review_round += 1;
+        const now = this.deps.clock.now();
+        task.updated_at = now;
+        await saveTask(this.deps, task);
+
+        const prompt = buildReviewPrompt(task);
+        const harnessConfig = HARNESSES[task.review_harness];
+        const command = harnessConfig.spawnCommand(prompt);
+        const workspacePath = join(this.deps.dataDir, "workspaces", task.workspace!);
+        const windowName = `review-${task.review_round}`;
+
+        // Check if session exists (might have died)
+        const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session!);
+        if (!sessionExists) {
+          // Session died — create new session instead
+          await this.deps.tmux.newSession(task.tmux_session!, workspacePath, command);
+        } else {
+          await this.deps.tmux.newWindow(task.tmux_session!, windowName, workspacePath, command);
+        }
+
+        await appendHistory(this.deps, task.project, task.id, {
+          type: "review.started",
+          timestamp: now,
+          attempt: task.review_round,
+        });
+
+        this.data.pendingOps.delete(task.id);
+        this.data.message = `Review agent spawned for ${task.branch} (round ${task.review_round})`;
+        await this.refreshTasks();
+        this.emit();
+      } catch (err) {
+        this.data.pendingOps.delete(task.id);
+        this.data.error = `Review spawn failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+        await this.refreshTasks();
+        this.emit();
+      }
+    })();
+  }
+
+  /**
+   * Auto-respawn worker agent after review failed.
+   * Creates a new named window for the fix round.
+   */
+  private respawnWorkerAfterReview(task: Task): void {
+    if (this.data.pendingOps.has(task.id)) return;
+    if (!task.tmux_session || !task.workspace) return;
+
+    this.data.pendingOps.add(task.id);
+    this.emit();
+
+    (async () => {
+      try {
+        const { buildRespawnPrompt } = await import("../core/agent.js");
+        const { HARNESSES } = await import("../core/harness.js");
+        const { join } = await import("node:path");
+
+        const prompt = buildRespawnPrompt(task);
+        const harnessConfig = HARNESSES[task.harness];
+        const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
+        const workspacePath = join(this.deps.dataDir, "workspaces", task.workspace!);
+        const windowName = `worker-${task.review_round + 1}`;
+
+        const sessionExists = await this.deps.tmux.sessionExists(task.tmux_session!);
+        if (!sessionExists) {
+          await this.deps.tmux.newSession(task.tmux_session!, workspacePath, command);
+        } else {
+          await this.deps.tmux.newWindow(task.tmux_session!, windowName, workspacePath, command);
+        }
+
+        this.data.pendingOps.delete(task.id);
+        this.data.message = `Worker respawned for ${task.branch} (fix round)`;
+        await this.refreshTasks();
+        this.emit();
+      } catch (err) {
+        this.data.pendingOps.delete(task.id);
+        this.data.error = `Worker respawn failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+        await this.refreshTasks();
+        this.emit();
+      }
+    })();
   }
 
   private spawnTask(): void {
@@ -1397,8 +1532,8 @@ export class DashboardState {
 
     if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
-    // Session dead only matters for "working" tasks - reviewing/reviewed tasks finished naturally
-    const isDead = this.data.deadSessions.has(task.id) && task.status === "working";
+    // Session dead only matters for "working"/"agent-review" tasks
+    const isDead = this.data.deadSessions.has(task.id) && (task.status === "working" || task.status === "agent-review");
     const hasLiveSession = task.tmux_session && !isDead;
 
     let keys = " j/k:nav  v:view  y:copy";
@@ -1409,17 +1544,19 @@ export class DashboardState {
     } else if (task.status === "cancelled") {
       keys += "  d:del";
     } else if (isDead) {
-      // Working task with dead session - needs respawn
+      // Working/agent-review task with dead session - needs respawn
       keys += "  Enter:respawn  x:cancel";
     } else if (task.status === "stuck") {
-      keys += "  Enter:attach  x:cancel";
+      keys += "  Enter:attach  m:force merge  x:cancel";
+    } else if (task.status === "agent-review") {
+      keys += "  Enter:attach  m:force merge  x:cancel";
     } else if (task.status === "reviewing") {
       keys += "  Enter:attach";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {
       // working, clarification
-      keys += "  Enter:attach  x:cancel";
+      keys += "  Enter:attach  m:force merge  x:cancel";
     }
     keys += `${createKey}  f:filter  q:quit`;
     return keys;

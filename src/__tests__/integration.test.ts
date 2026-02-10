@@ -220,7 +220,9 @@ describe("Integration: Workspace Pool", () => {
       body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
     await saveTask(deps, task);
     
@@ -278,7 +280,9 @@ describe("Integration: Full Task Lifecycle", () => {
       body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -308,7 +312,9 @@ describe("Integration: Full Task Lifecycle", () => {
       body: "",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
     const task2 = {
       id: "task2",
@@ -322,7 +328,9 @@ describe("Integration: Full Task Lifecycle", () => {
       body: "",
       created_at: "2024-01-02T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
 
     await saveTask(deps, task1);
@@ -347,7 +355,9 @@ describe("Integration: Full Task Lifecycle", () => {
       body: "",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
 
     await saveTask(deps, task);
@@ -362,7 +372,9 @@ describe("Integration: Full Task Lifecycle", () => {
       status: "working" as const,
       tmux_session: "test-repo/feature-y",
       updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
 
     await saveTask(deps, updatedTask);
@@ -453,13 +465,17 @@ describe("Integration: Multiple Projects", () => {
       id: "t1", project: "repo1", branch: "feat1", harness: "claude" as const, status: "pending" as const,
       workspace: null, tmux_session: null, summary: "Repo 1 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", harness: "claude" as const, status: "working" as const,
       workspace: null, tmux_session: null, summary: "Repo 2 task", body: "",
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      pr_url: null,
+      review_harness: "claude" as const,
+    review_round: 0,
+    pr_url: null,
     };
 
     await saveTask(deps, task1);
