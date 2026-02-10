@@ -97,6 +97,31 @@ BLOCKER: (if any)
 
 ---
 
+## Review Agent Mode
+
+You are in this mode when your prompt says "Review Task". You are a separate agent from the worker — review only, no code changes.
+
+### Workflow
+
+1. **Read** `TASK.md` — summary, context, notes
+2. **Review diff** — `git diff origin/HEAD...HEAD`
+3. **Use PR review toolkit/skill** if available
+4. **Evaluate** — requirements met? Code quality? Tests? Edge cases?
+5. **Write `## Review`** section in TASK.md body with verdict + specific feedback
+6. **Set status**:
+   - PASS: `orange task update --status reviewing`
+   - FAIL (round < 2): `orange task update --status working` (worker will be respawned to fix)
+   - FAIL (round 2): `orange task update --status stuck`
+
+### Rules
+
+- Do NOT modify any code — review only
+- Write actionable feedback (specific files, line numbers, what's wrong)
+- Check `review_round` in TASK.md frontmatter to know which round this is
+- On round 2 failure, set `stuck` instead of `working`
+
+---
+
 ## Orchestrator Mode
 
 ### Workflow
