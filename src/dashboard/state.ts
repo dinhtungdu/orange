@@ -625,9 +625,9 @@ export class DashboardState {
       await this.refreshTasks();
       this.emit();
 
-      // Auto-spawn agent unless status is reviewing or agent-review
-      // agent-review: dashboard auto-triggers review agent via refreshTasks
-      if (task.status !== "reviewing" && task.status !== "agent-review") {
+      // Auto-spawn agent unless status is reviewing
+      // agent-review: spawnTaskById handles spawning review agent
+      if (task.status !== "reviewing") {
         try {
           await spawnTaskById(this.deps, task.id);
           await this.refreshTasks();
@@ -654,9 +654,12 @@ export class DashboardState {
       });
 
       // Detect tasks that just entered agent-review and auto-spawn review agent
+      // Skip if task was already spawned (has workspace + session from spawnTaskById)
       for (const task of this.data.allTasks) {
         const prevStatus = this.previousStatuses.get(task.id);
-        if (task.status === "agent-review" && prevStatus !== "agent-review") {
+        if (task.status === "agent-review" && prevStatus !== "agent-review" && prevStatus !== undefined) {
+          // Only auto-trigger for mid-task transitions (prevStatus exists = we've seen this task before)
+          // Fresh creates (prevStatus undefined) are handled by spawnTaskById
           this.spawnReviewAgent(task);
         }
         // Detect review failed → working transition, auto-respawn worker

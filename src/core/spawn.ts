@@ -12,7 +12,7 @@ import type { Deps } from "./types.js";
 import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
-import { buildAgentPrompt } from "./agent.js";
+import { buildAgentPrompt, buildReviewPrompt } from "./agent.js";
 import { HARNESSES } from "./harness.js";
 
 /**
@@ -96,11 +96,12 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     throw new Error(`Task '${taskId}' not found`);
   }
 
-  // Allow spawning pending or clarification tasks
+  // Allow spawning pending, clarification, or agent-review tasks
   // clarification = empty summary, agent will ask user what to work on
-  if (task.status !== "pending" && task.status !== "clarification") {
+  // agent-review = spawn review agent directly (e.g., review coworker's PR)
+  if (task.status !== "pending" && task.status !== "clarification" && task.status !== "agent-review") {
     log.error("Task not spawnable", { taskId, status: task.status });
-    throw new Error(`Task '${taskId}' is not pending or clarification (status: ${task.status})`);
+    throw new Error(`Task '${taskId}' is not pending, clarification, or agent-review (status: ${task.status})`);
   }
 
   log.debug("Task loaded", { taskId, project: task.project, branch: task.branch });
@@ -161,25 +162,40 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     await linkTaskFile(deps, workspacePath, task.project, task.id);
     log.debug("Linked task file to worktree", { workspacePath });
 
+    // Determine if this is a review spawn or worker spawn
+    const isReview = task.status === "agent-review";
+    const harness = isReview ? task.review_harness : task.harness;
+    const harnessConfig = HARNESSES[harness];
+
     // Run harness-specific workspace setup
-    const harnessConfig = HARNESSES[task.harness];
     if (harnessConfig.workspaceSetup) {
       await harnessConfig.workspaceSetup(workspacePath);
-      log.debug("Harness workspace setup complete", { harness: task.harness });
+      log.debug("Harness workspace setup complete", { harness });
     }
 
     // Create tmux session
     const tmuxSession = `${task.project}/${task.branch}`;
-    const prompt = buildAgentPrompt(task);
+
+    let prompt: string;
+    let windowName: string;
+    if (isReview) {
+      task.review_round += 1;
+      prompt = buildReviewPrompt(task);
+      windowName = `review-${task.review_round}`;
+    } else {
+      prompt = buildAgentPrompt(task);
+      windowName = "worker";
+    }
+
     // Empty prompt = interactive session, just spawn harness without args
     const command = prompt ? harnessConfig.spawnCommand(prompt) : harnessConfig.binary;
 
-    log.debug("Creating tmux session", { session: tmuxSession, interactive: !prompt });
+    log.debug("Creating tmux session", { session: tmuxSession, interactive: !prompt, isReview });
     await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
-    // Name the initial window "worker" for consistency with review windows
+    // Name the initial window
     try {
-      await deps.tmux.renameWindow(tmuxSession, "worker");
+      await deps.tmux.renameWindow(tmuxSession, windowName);
     } catch {
       // Non-critical — window naming is best-effort
     }
@@ -187,8 +203,10 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Update task
     const now = deps.clock.now();
     const previousStatus = task.status;
-    // Keep clarification status if task had empty summary; otherwise set to working
-    const newStatus = previousStatus === "clarification" ? "clarification" : "working";
+    // Keep clarification/agent-review status; otherwise set to working
+    const newStatus = previousStatus === "clarification" ? "clarification"
+      : previousStatus === "agent-review" ? "agent-review"
+      : "working";
     task.status = newStatus;
     task.workspace = workspace;
     task.tmux_session = tmuxSession;

@@ -220,9 +220,9 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const message = `Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`;
   console.log(message);
 
-  // Auto-spawn agent unless --no-spawn, reviewing, or agent-review
-  // agent-review: dashboard auto-triggers spawn + review agent
-  if (task.status !== "reviewing" && task.status !== "agent-review" && !parsed.options["no-spawn"]) {
+  // Auto-spawn agent unless --no-spawn or reviewing
+  // agent-review: spawn with review agent via spawnTaskById
+  if (task.status !== "reviewing" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
     console.log(`Spawned agent in ${project.name}/${branch}`);
   }
