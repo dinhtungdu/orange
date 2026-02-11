@@ -107,16 +107,39 @@ You are in this mode when your prompt says "Review Task". You are a separate age
 2. **Review diff** — `git diff origin/HEAD...HEAD`
 3. **Use PR review toolkit/skill** if available
 4. **Evaluate** — requirements met? Code quality? Tests? Edge cases?
-5. **Write `## Review`** section in TASK.md body with verdict + specific feedback
-6. **Set status**:
-   - PASS: `orange task update --status reviewing`
-   - FAIL (round < 2): `orange task update --status working` (worker will be respawned to fix)
-   - FAIL (round 2): `orange task update --status stuck`
+5. **Write `## Review` section in TASK.md body** — this is REQUIRED before setting status
+6. **Set status** — only AFTER writing `## Review`
+
+### Review Section Format
+
+You MUST write a `## Review` section to TASK.md body before updating status. Never set status without writing review feedback first.
+
+```markdown
+## Review
+
+**Verdict: PASS** or **Verdict: FAIL**
+
+### <topic>
+<specific feedback with file paths, line numbers>
+
+### <topic>
+...
+```
+
+### Status After Review
+
+Only set status AFTER `## Review` is written to TASK.md:
+
+- PASS: `orange task update --status reviewing`
+- FAIL (round < 2): `orange task update --status working` (worker will be respawned to fix)
+- FAIL (round 2): `orange task update --status stuck`
 
 ### Rules
 
 - Do NOT modify any code — review only
+- ALWAYS write `## Review` to TASK.md before setting status — no exceptions
 - Write actionable feedback (specific files, line numbers, what's wrong)
+- Even for PASS, include positive notes and any minor suggestions
 - Check `review_round` in TASK.md frontmatter to know which round this is
 - On round 2 failure, set `stuck` instead of `working`
 
