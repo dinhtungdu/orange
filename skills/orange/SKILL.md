@@ -165,15 +165,21 @@ Use `orange task show <id>` to see task details, plan, notes, and history. Usefu
 
 ### Creating Review Tasks
 
-When user asks to review a PR or branch (e.g., "review PR #123", "review the auth branch"):
+When user asks to review PRs or branches:
 
-1. Identify the branch name (from PR or user input)
-2. Create a review task:
+**Single PR/branch:**
+```bash
+orange task create feature-branch "Review: <brief description>" --status agent-review
+```
+
+**Batch — review PRs assigned to user:**
+1. List PRs needing review: `gh pr list --reviewer @me --json number,title,headRefName`
+2. Create a review task for each:
    ```bash
-   orange task create feature-branch "Review: <brief description>" --status agent-review
+   orange task create <branch> "Review: <PR title>" --status agent-review --harness claude
    ```
 
-This spawns a review agent directly — no worker involved. The review agent will check out the branch, review the diff, and write feedback to TASK.md.
+This spawns a review agent per PR — no worker involved. Review agents check out branches, review diffs, and write feedback to TASK.md. User reviews the `## Review` summaries later.
 
 ### Handling Issues
 
