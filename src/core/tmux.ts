@@ -124,6 +124,95 @@ export class RealTmux implements TmuxExecutor {
     return stdout;
   }
 
+  async capturePaneAnsi(session: string, lines: number): Promise<string> {
+    const { stdout, exitCode, stderr } = await exec("tmux", [
+      "capture-pane",
+      "-t",
+      session,
+      "-p",
+      "-e", // Preserve ANSI escape sequences
+      "-S",
+      `-${lines}`,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to capture pane from session '${session}': ${stderr}`
+      );
+    }
+
+    return stdout;
+  }
+
+  async capturePaneAnsiSafe(session: string, lines: number): Promise<string | null> {
+    try {
+      return await this.capturePaneAnsi(session, lines);
+    } catch {
+      return null;
+    }
+  }
+
+  async queryPaneInfo(session: string): Promise<{
+    cursorX: number;
+    cursorY: number;
+    cursorVisible: boolean;
+    paneWidth: number;
+    paneHeight: number;
+  } | null> {
+    const { stdout, exitCode } = await exec("tmux", [
+      "display-message",
+      "-t",
+      session,
+      "-p",
+      "#{cursor_x},#{cursor_y},#{cursor_flag},#{pane_width},#{pane_height}",
+    ]);
+
+    if (exitCode !== 0) {
+      return null;
+    }
+
+    const parts = stdout.trim().split(",");
+    if (parts.length < 5) {
+      return null;
+    }
+
+    return {
+      cursorX: parseInt(parts[0], 10),
+      cursorY: parseInt(parts[1], 10),
+      cursorVisible: parts[2] !== "0",
+      paneWidth: parseInt(parts[3], 10),
+      paneHeight: parseInt(parts[4], 10),
+    };
+  }
+
+  async resizePane(session: string, width: number, height: number): Promise<void> {
+    // Set window-size to manual first
+    await exec("tmux", ["set-option", "-t", session, "window-size", "manual"]);
+
+    // Resize window
+    const { exitCode, stderr } = await exec("tmux", [
+      "resize-window",
+      "-t",
+      session,
+      "-x",
+      String(width),
+      "-y",
+      String(height),
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to resize pane '${session}': ${stderr}`);
+    }
+  }
+
+  async resizePaneSafe(session: string, width: number, height: number): Promise<void> {
+    try {
+      await this.resizePane(session, width, height);
+    } catch {
+      // Ignore errors
+    }
+  }
+
   async capturePaneSafe(session: string, lines: number): Promise<string | null> {
     try {
       return await this.capturePane(session, lines);
@@ -293,6 +382,52 @@ export class MockTmux implements TmuxExecutor {
       return null;
     }
     return sessionData.output.slice(-lines).join("\n");
+  }
+
+  async capturePaneAnsi(session: string, lines: number): Promise<string> {
+    // Mock: same as capturePane (no ANSI in mock)
+    return this.capturePane(session, lines);
+  }
+
+  async capturePaneAnsiSafe(session: string, lines: number): Promise<string | null> {
+    return this.capturePaneSafe(session, lines);
+  }
+
+  async queryPaneInfo(session: string): Promise<{
+    cursorX: number;
+    cursorY: number;
+    cursorVisible: boolean;
+    paneWidth: number;
+    paneHeight: number;
+  } | null> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      return null;
+    }
+    // Mock: return default values
+    return {
+      cursorX: 0,
+      cursorY: sessionData.output.length,
+      cursorVisible: true,
+      paneWidth: 80,
+      paneHeight: 24,
+    };
+  }
+
+  async resizePane(session: string, width: number, height: number): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[resize: ${width}x${height}]`);
+  }
+
+  async resizePaneSafe(session: string, width: number, height: number): Promise<void> {
+    try {
+      await this.resizePane(session, width, height);
+    } catch {
+      // Ignore
+    }
   }
 
   async newWindow(session: string, name: string, cwd: string, command: string): Promise<void> {

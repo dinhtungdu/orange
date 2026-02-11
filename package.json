@@ -22,6 +22,9 @@
     "nanoid": "^5.0.0",
     "proper-lockfile": "^4.1.2"
   },
+  "optionalDependencies": {
+    "ghostty-opentui": "^0.0.35"
+  },
   "devDependencies": {
     "@types/proper-lockfile": "^4.1.4",
     "bun-types": "latest",
