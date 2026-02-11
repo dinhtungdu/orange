@@ -14,70 +14,25 @@ Your mode depends on context:
 
 ## Worker Mode
 
-### Workflow
-
-1. **Read** `TASK.md` — summary in frontmatter, context in body
-2. **Check status** — behavior depends on current status (see Respawn Behavior)
-3. **Handle branch** — if `orange-tasks/<id>`, rename to meaningful name
-4. **Evaluate clarity** — empty/vague? Add `## Questions` with 2-3 specific questions, set `--status clarification`, wait. Don't assume scope or make up requirements.
-5. **Plan** — if no `## Context`, document approach in `## Notes` before coding
-6. **Implement** — read project rules, code, test, commit
-7. **Complete** — `--status agent-review` (hands off to review agent)
-
-### Respawn Behavior
-
-When resuming (session restarted), check TASK.md status first:
-
-| Status | Action |
-|--------|--------|
-| `reviewing` | Stop — nothing to do |
-| `agent-review` | Stop — review agent will be spawned separately |
-| `working` (review_round > 0) | Read `## Review` feedback, fix issues, then `--status agent-review` |
-| `working` | Continue implementation |
-| `stuck` | Continue implementation |
-| `clarification` | Wait for user input |
-
-### Branch Rename
-
-If branch is auto-generated (`orange-tasks/<id>`):
-
-```bash
-# Rename to meaningful name based on task
-git branch -m orange-tasks/abc123 fix-login-redirect
-# Sync task metadata to new branch
-orange task update --branch
-```
-
-### Planning (No Context)
-
-When task has summary but no `## Context`, document your approach before coding:
-
-```markdown
-## Notes
-
-PLAN: <your implementation approach>
-TOUCHING: <files/areas affected>
-```
-
-This helps with review prep and session handoff.
+Core workflow is in the spawn prompt. This section covers details.
 
 ### Clarification
 
 When summary is empty, vague, or scope expands mid-work:
 
 ```bash
-# Add questions to TASK.md body (e.g., "What would you like to work on?")
+# Add questions to TASK.md body
 orange task update --status clarification
 # Wait for user to attach and discuss
-# After resolved, update summary and notes:
+# After resolved:
 orange task update --summary "..." --status working
 ```
 
-**Mid-work discovery:** If you find the task requires more than expected (DB schema change, affects multiple modules), stop and clarify before proceeding.
+Triggers: empty summary, ambiguous requirements, scope larger than expected.
 
 ### Session Handoff
 
-Always update `## Notes` before stopping:
+Update `## Notes` before stopping:
 
 ```markdown
 ## Notes
@@ -91,28 +46,16 @@ BLOCKER: (if any)
 ### Rules
 
 - Don't push or merge — human handles that
-- Update status via CLI before stopping
-- Do NOT set `--status reviewing` directly — set `--status agent-review` to trigger review agent
 - `## Context` is read-only (orchestrator-provided)
+- Don't assume scope — clarify if unclear
 
 ---
 
 ## Review Agent Mode
 
-You are in this mode when your prompt says "Review Task". You are a separate agent from the worker — review only, no code changes.
-
-### Workflow
-
-1. **Read** `TASK.md` — summary, context, notes
-2. **Review diff** — `git diff origin/HEAD...HEAD`
-3. **Use PR review toolkit/skill** if available
-4. **Evaluate** — requirements met? Code quality? Tests? Edge cases?
-5. **Write `## Review` section in TASK.md body** — this is REQUIRED before setting status
-6. **Set status** — only AFTER writing `## Review`
+Core workflow is in the spawn prompt. This section covers details.
 
 ### Review Section Format
-
-You MUST write a `## Review` section to TASK.md body before updating status. Never set status without writing review feedback first.
 
 ```markdown
 ## Review
@@ -126,22 +69,13 @@ You MUST write a `## Review` section to TASK.md body before updating status. Nev
 ...
 ```
 
-### Status After Review
-
-Only set status AFTER `## Review` is written to TASK.md:
-
-- PASS: `orange task update --status reviewing`
-- FAIL (round < 2): `orange task update --status working` (worker will be respawned to fix)
-- FAIL (round 2): `orange task update --status stuck`
-
 ### Rules
 
 - Do NOT modify any code — review only
 - ALWAYS write `## Review` to TASK.md before setting status — no exceptions
 - Write actionable feedback (specific files, line numbers, what's wrong)
-- Even for PASS, include positive notes and any minor suggestions
-- Check `review_round` in TASK.md frontmatter to know which round this is
-- On round 2 failure, set `stuck` instead of `working`
+- Even for PASS, include positive notes and minor suggestions
+- Use PR review toolkit/skill if available
 
 ---
 

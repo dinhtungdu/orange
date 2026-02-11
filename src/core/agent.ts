@@ -22,7 +22,16 @@ export function buildAgentPrompt(task: Task): string {
 Project: ${task.project}
 Branch: ${task.branch}
 
-Read the orange skill for workflow instructions.`;
+Steps:
+1. Read TASK.md — summary in frontmatter, context in body
+2. If branch is orange-tasks/<id>, rename: git branch -m <old> <meaningful-name> && orange task update --branch
+3. If empty/vague summary: add ## Questions to TASK.md, set --status clarification, wait
+4. If no ## Context: document plan in ## Notes before coding
+5. Read project rules (AGENTS.md, etc.), implement, test, commit
+6. When done: orange task update --status agent-review (triggers review agent)
+
+Do NOT set --status reviewing directly — always use agent-review.
+Read the orange skill for full details.`;
 }
 
 /**
@@ -40,16 +49,18 @@ export function buildRespawnPrompt(task: Task): string {
 Project: ${task.project}
 Branch: ${task.branch}
 Status: ${task.status}
+Review round: ${task.review_round}
 
-Read the orange skill for workflow instructions.
-
-Check current status and continue accordingly:
-- reviewing → already done, stop
+Check status and act:
+- reviewing → stop, nothing to do
 - agent-review → stop, review agent will be spawned separately
-- stuck → continue implementation
+- stuck → continue implementation, then set --status agent-review
 - clarification → wait for user input
-- working (review_round > 0) → read ## Review feedback in TASK.md, fix issues, then set --status agent-review
-- working → continue implementation`;
+- working (review_round > 0) → read ## Review feedback in TASK.md, fix the issues, then set --status agent-review
+- working → continue implementation, then set --status agent-review
+
+Do NOT set --status reviewing directly — always use agent-review.
+Read the orange skill for full details.`;
 }
 
 /**
