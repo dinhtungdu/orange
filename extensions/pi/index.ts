@@ -73,6 +73,7 @@ const TasksParams = Type.Object({
   branch: Type.Optional(Type.String({ description: "Git branch name" })),
   harness: Type.Optional(Type.String({ description: "Agent harness (pi/claude/opencode/codex)" })),
   status: Type.Optional(Type.String({ description: "Task status filter or new status" })),
+  context: Type.Optional(Type.String({ description: "Context/plan to pass to worker (written to ## Context in TASK.md). Workers only see TASK.md — always pass context." })),
 });
 
 type TasksParamsType = Static<typeof TasksParams>;
@@ -87,6 +88,37 @@ async function execOrange(
   signal?: AbortSignal
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return await pi.exec("orange", [...args, "--json"], { signal });
+}
+
+/**
+ * Execute orange CLI with stdin input (for --context -).
+ * pi.exec doesn't support stdin, so we use Bun.spawn directly.
+ */
+async function execOrangeWithStdin(
+  args: string[],
+  stdin: string,
+  signal?: AbortSignal
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  const proc = Bun.spawn(["orange", ...args, "--json"], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  proc.stdin.write(stdin);
+  proc.stdin.end();
+
+  if (signal) {
+    signal.addEventListener("abort", () => proc.kill(), { once: true });
+  }
+
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  return { stdout, stderr, code };
 }
 
 function parseResult<T>(stdout: string): T | ErrorResult {
@@ -207,11 +239,15 @@ async function executeTool(
     }
 
     case "create": {
+      const { context } = params;
       const args = ["task", "create"];
       if (branch) args.push(branch);
       if (summary) args.push(summary);
       if (harness) args.push("--harness", harness);
-      const result = await execOrange(pi, args, signal);
+      if (context) args.push("--context", "-");
+      const result = context
+        ? await execOrangeWithStdin(args, context, signal)
+        : await execOrange(pi, args, signal);
       const parsed = parseResult<TaskResult>(result.stdout);
       if (isError(parsed)) {
         return {
