@@ -103,6 +103,22 @@ export interface TmuxExecutor {
   capturePane(session: string, lines: number): Promise<string>;
   /** Capture pane output, returning null if session doesn't exist */
   capturePaneSafe(session: string, lines: number): Promise<string | null>;
+  /** Capture pane output with ANSI escape sequences preserved */
+  capturePaneAnsi(session: string, lines: number): Promise<string>;
+  /** Capture pane output with ANSI, returning null if session doesn't exist */
+  capturePaneAnsiSafe(session: string, lines: number): Promise<string | null>;
+  /** Query pane info (cursor position, dimensions) */
+  queryPaneInfo(session: string): Promise<{
+    cursorX: number;
+    cursorY: number;
+    cursorVisible: boolean;
+    paneWidth: number;
+    paneHeight: number;
+  } | null>;
+  /** Resize pane to specified dimensions */
+  resizePane(session: string, width: number, height: number): Promise<void>;
+  /** Resize pane, ignoring errors */
+  resizePaneSafe(session: string, width: number, height: number): Promise<void>;
   /** Send keys to a session */
   sendKeys(session: string, keys: string): Promise<void>;
   /** Create a new named window in an existing session */
