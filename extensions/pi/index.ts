@@ -11,6 +11,7 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
 import { Type, type Static } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
+import { basename } from "node:path";
 import {
   Container,
   Text,
@@ -100,6 +101,15 @@ function isError(result: unknown): result is ErrorResult {
   return typeof result === "object" && result !== null && "error" in result;
 }
 
+async function getCurrentProject(pi: ExtensionAPI, ctx: ExtensionContext): Promise<string> {
+  const gitRoot = await pi.exec("git", ["rev-parse", "--show-toplevel"]);
+  if (gitRoot.code === 0) {
+    const root = gitRoot.stdout.trim();
+    if (root) return basename(root);
+  }
+  return basename(ctx.cwd);
+}
+
 // =============================================================================
 // Status Colors
 // =============================================================================
@@ -107,7 +117,7 @@ function isError(result: unknown): result is ErrorResult {
 const STATUS_COLOR: Record<string, string> = {
   pending: "muted",
   clarification: "warning",
-  working: "info",
+  working: "accent",
   reviewing: "accent",
   stuck: "error",
   done: "success",
@@ -116,6 +126,18 @@ const STATUS_COLOR: Record<string, string> = {
 
 function getStatusColor(status: string): string {
   return STATUS_COLOR[status] || "text";
+}
+
+const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+
+function normalizeArg(args: string): string {
+  return args.trim().toLowerCase().split(/\s+/)[0] || "";
+}
+
+function filterTasksForView(tasks: Task[], arg: string): Task[] {
+  if (!arg) return tasks.filter((task) => !TERMINAL_STATUSES.has(task.status));
+  if (arg === "all") return tasks;
+  return tasks.filter((task) => task.status === arg);
 }
 
 // =============================================================================
@@ -598,31 +620,38 @@ export default function orangeExtension(pi: ExtensionAPI) {
 
   // Register the /tasks command
   pi.registerCommand("tasks", {
-    description: "Browse Orange tasks interactively",
+    description: "Browse current project tasks. Usage: /tasks [all|<status>]",
     handler: async (args, ctx) => {
+      const currentProject = await getCurrentProject(pi, ctx);
+      const arg = normalizeArg(args || "");
+
+      const result = await execOrange(pi, ["task", "list", "--all"]);
+      const parsed = parseResult<TaskListResult>(result.stdout);
+      if (isError(parsed)) {
+        if (ctx.hasUI) ctx.ui.notify(parsed.error, "error");
+        else console.log(`Error: ${parsed.error}`);
+        return;
+      }
+
+      const projectTasks = parsed.tasks.filter((task) => task.project === currentProject);
+      const tasks = filterTasksForView(projectTasks, arg);
+
+      if (arg && arg !== "all" && tasks.length === 0) {
+        const available = Array.from(new Set(projectTasks.map((task) => task.status))).sort().join(", ");
+        const message = available
+          ? `No tasks with status '${arg}'. Available: ${available}`
+          : `No tasks with status '${arg}'`;
+        if (ctx.hasUI) ctx.ui.notify(message, "warning");
+        else console.log(message);
+      }
+
       if (!ctx.hasUI) {
-        // Non-interactive: just list tasks
-        const result = await execOrange(pi, ["task", "list", "--all"]);
-        const parsed = parseResult<TaskListResult>(result.stdout);
-        if (isError(parsed)) {
-          console.log(`Error: ${parsed.error}`);
-          return;
-        }
-        for (const task of parsed.tasks) {
+        for (const task of tasks) {
           console.log(`${task.id.slice(0, 8)} [${task.status}] ${task.project}/${task.branch} - ${task.summary}`);
         }
         return;
       }
 
-      // Fetch tasks
-      const result = await execOrange(pi, ["task", "list", "--all"]);
-      const parsed = parseResult<TaskListResult>(result.stdout);
-      if (isError(parsed)) {
-        ctx.ui.notify(parsed.error, "error");
-        return;
-      }
-
-      const tasks = parsed.tasks;
       let selectedTask: Task | null = null;
 
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {
