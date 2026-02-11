@@ -1,6 +1,6 @@
 ---
 name: orange
-description: Orange agent orchestration. Use when TASK.md present (worker mode) OR when user says "orange task", "add task", "create task", "review PR", "review branch", or wants parallel tasks (orchestrator mode).
+description: Orange agent orchestration. Use when TASK.md present (worker mode) OR when user says "orange task", "add task", "create task", "review PR", "pr-review", "review my PRs", or wants parallel tasks (orchestrator mode).
 ---
 
 # Orange
@@ -163,23 +163,25 @@ Use `orange task show <id>` to see task details, plan, notes, and history. Usefu
 - Planning an alternative approach for a similar problem
 - Reviewing what context was provided to a worker
 
-### Creating Review Tasks
+### Creating PR Review Tasks
 
-When user asks to review PRs or branches:
+When user asks to review PRs (e.g., "review my PRs", "review PR #123", "pr-review the auth branch"):
 
-**Single PR/branch:**
+**Single PR:**
 ```bash
-orange task create feature-branch "Review: <brief description>" --status agent-review
+orange task create feature-branch "PR review: <brief description>" --status agent-review
 ```
 
 **Batch — review PRs assigned to user:**
 1. List PRs needing review: `gh pr list --reviewer @me --json number,title,headRefName`
-2. Create a review task for each:
+2. Create a pr-review task for each:
    ```bash
-   orange task create <branch> "Review: <PR title>" --status agent-review --harness claude
+   orange task create <branch> "PR review: <PR title>" --status agent-review --harness claude
    ```
 
 This spawns a review agent per PR — no worker involved. Review agents check out branches, review diffs, and write feedback to TASK.md. User reviews the `## Review` summaries later.
+
+**Note:** PR review tasks are distinct from the agent-review status used in the normal worker flow. PR review = reviewing someone else's code. Agent-review = reviewing the worker's own output.
 
 ### Handling Issues
 
