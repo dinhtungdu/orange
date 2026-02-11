@@ -30,7 +30,10 @@ Steps:
 5. Read project rules (AGENTS.md, etc.), implement, test, commit
 6. When done: orange task update --status agent-review (triggers review agent)
 
-Do NOT set --status reviewing directly — always use agent-review.
+IMPORTANT:
+- Do NOT push to remote (no git push) — human handles that
+- Do NOT set --status reviewing directly — always use agent-review
+
 Read the orange skill for full details.`;
 }
 
@@ -59,7 +62,10 @@ Check status and act:
 - working (review_round > 0) → read ## Review feedback in TASK.md, fix the issues, then set --status agent-review
 - working → continue implementation, then set --status agent-review
 
-Do NOT set --status reviewing directly — always use agent-review.
+IMPORTANT:
+- Do NOT push to remote (no git push) — human handles that
+- Do NOT set --status reviewing directly — always use agent-review
+
 Read the orange skill for full details.`;
 }
 
@@ -85,6 +91,10 @@ Steps:
     ? "orange task update --status reviewing (pass) or --status stuck (fail, final round)"
     : "orange task update --status reviewing (pass) or --status working (fail)"}
 
-Do NOT set status without writing ## Review first.
+IMPORTANT:
+- Do NOT post comments or reviews to GitHub (no gh pr review, no gh pr comment)
+- Do NOT set status without writing ## Review first
+- Save ALL feedback to TASK.md only
+
 Read the orange skill for detailed review agent instructions.`;
 }

@@ -16,6 +16,8 @@ Your mode depends on context:
 
 Core workflow is in the spawn prompt. This section covers details.
 
+**Critical: Do NOT push to remote (no `git push`). Human handles all pushes and merges.**
+
 ### Clarification
 
 When summary is empty, vague, or scope expands mid-work:
@@ -72,10 +74,11 @@ Core workflow is in the spawn prompt. This section covers details.
 ### Rules
 
 - Do NOT modify any code — review only
+- Do NOT post comments or reviews to GitHub (no `gh pr review`, no `gh pr comment`)
 - ALWAYS write `## Review` to TASK.md before setting status — no exceptions
 - Write actionable feedback (specific files, line numbers, what's wrong)
 - Even for PASS, include positive notes and minor suggestions
-- Use PR review toolkit/skill if available
+- Save ALL feedback to TASK.md only — human will review and post to GitHub if needed
 
 ---
 
