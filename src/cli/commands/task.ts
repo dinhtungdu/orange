@@ -283,13 +283,13 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   }
 
   const message = `Created task ${task.id} (${project.name}/${branch}) [${task.status}] [${task.harness}]`;
-  console.log(message);
+  if (!jsonOutput) console.log(message);
 
   // Auto-spawn agent unless --no-spawn or reviewing
   // agent-review: spawn with review agent via spawnTaskById
   if (task.status !== "reviewing" && !parsed.options["no-spawn"]) {
     await spawnTaskById(deps, task.id);
-    console.log(`Spawned agent in ${project.name}/${branch}`);
+    if (!jsonOutput) console.log(`Spawned agent in ${project.name}/${branch}`);
   }
 
   if (jsonOutput) {
@@ -474,11 +474,11 @@ async function spawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     const task = tasks.find((t) => t.id === taskId);
     log.info("Task spawned", { taskId, session: task?.tmux_session });
     const message = `Spawned agent for task ${taskId} in ${task?.tmux_session ?? "unknown"}`;
-    console.log(message);
 
     if (jsonOutput) {
       outputJson({ task, message });
     }
+    console.log(message);
   } catch (err) {
     log.error("Spawn failed", { taskId, error: String(err) });
     if (jsonOutput) outputJsonError(err instanceof Error ? err.message : String(err));
@@ -877,11 +877,11 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (newSummary !== undefined) changes.push("summary updated");
   if (newStatus && newStatus !== oldStatus) changes.push(`status: ${oldStatus} → ${newStatus}`);
   const message = `Updated task ${taskId}: ${changes.join(", ")}`;
-  console.log(message);
 
   if (jsonOutput) {
     outputJson({ task, message });
   }
+  console.log(message);
 }
 
 /**
