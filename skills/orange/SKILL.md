@@ -106,6 +106,9 @@ Core workflow is in the spawn prompt. This section covers details.
 - Atomic (one clear objective)
 - Clear summary + plan (worker executes from TASK.md, must know what to do)
 - Never create tasks from vague requests — refine first
+- **Always pass context** — pipe the plan via `--context -`. Workers only see TASK.md.
+- **Summarize the plan** — derive a concise summary that tells the worker exactly what to do. Bad: `"Fix auth"`. Good: `"Fix auth redirect to preserve returnUrl after login"`.
+- **Branch name format** — all lowercase, no spaces, use hyphens (e.g. `fix-auth-redirect`)
 
 ### Passing Context
 
