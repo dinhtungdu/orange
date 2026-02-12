@@ -28,11 +28,13 @@ Steps:
 3. If empty/vague summary: add ## Questions to TASK.md, set --status clarification, wait
 4. If no ## Context: document plan in ## Notes before coding
 5. Read project rules (AGENTS.md, etc.), implement, test, commit
-6. When done: orange task update --status agent-review (triggers review agent)
+6. Write ## Handoff to TASK.md (DONE/REMAINING/DECISIONS/UNCERTAIN)
+7. orange task update --status agent-review (triggers review agent)
 
 IMPORTANT:
 - Do NOT push to remote (no git push) — human handles that
 - Do NOT set --status reviewing directly — always use agent-review
+- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
 
 Read the orange skill for full details.`;
 }
@@ -54,17 +56,20 @@ Branch: ${task.branch}
 Status: ${task.status}
 Review round: ${task.review_round}
 
+Read ## Handoff in TASK.md first — it has structured state from the previous session.
+
 Check status and act:
 - reviewing → ready for human review, assist with any questions or changes the reviewer requests
 - agent-review → stop, review agent will be spawned separately
-- stuck → continue implementation, then set --status agent-review
+- stuck → continue implementation, then write ## Handoff and set --status agent-review
 - clarification → wait for user input
-- working (review_round > 0) → read ## Review feedback in TASK.md, fix the issues, then set --status agent-review
-- working → continue implementation, then set --status agent-review
+- working (review_round > 0) → read ## Review feedback in TASK.md, fix the issues, then write ## Handoff and set --status agent-review
+- working → continue implementation, then write ## Handoff and set --status agent-review
 
 IMPORTANT:
 - Do NOT push to remote (no git push) — human handles that
 - Do NOT set --status reviewing directly — always use agent-review
+- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
 
 Read the orange skill for full details.`;
 }
@@ -84,9 +89,10 @@ Review round: ${task.review_round} of 2
 You MUST write a ## Review section to TASK.md body BEFORE setting status.
 
 Steps:
-1. Read TASK.md for requirements
+1. Read TASK.md for requirements and ## Handoff for implementation state
 2. Review diff: git diff origin/HEAD...HEAD
-3. Write ## Review to TASK.md with verdict (PASS/FAIL) and specific feedback
+3. Check ## Handoff UNCERTAIN items — flag any that affect correctness
+4. Write ## Review to TASK.md with verdict (PASS/FAIL) and specific feedback
 4. Then set status: ${isLastRound
     ? "orange task update --status reviewing (pass) or --status stuck (fail, final round)"
     : "orange task update --status reviewing (pass) or --status working (fail)"}
