@@ -1,6 +1,6 @@
-# Dashboard TUI
+# Task Manager
 
-Shows tasks from TASK.md files (including done/cancelled).
+Task list and management. One of two dashboard modules — the other is [Workspace View](./workspace-view.md) where users spend most of their time working with agents.
 
 ## Scoping
 
@@ -175,9 +175,9 @@ Transparent background — works with user's terminal background/wallpaper.
 
 Status colors defined in `state.ts` (`STATUS_COLOR`).
 
-## Workspace View
+## Workspace View (separate module)
 
-Press `w` on a task with a live session to enter workspace view. See [workspace-view.md](./workspace-view.md).
+Press `w` on a task with a live session to switch to the workspace module. See [workspace-view.md](./workspace-view.md). `Esc` from workspace returns here.
 
 ## Polling & Updates
 
