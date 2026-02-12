@@ -11,102 +11,133 @@ Parent spec: [workspace.md](./workspace.md) (layout, UX, keybindings).
 │ WorkspaceViewer                                     │
 │                                                     │
 │  ┌──── Sidebar ─────┐  ┌──── TerminalPanel ──────┐ │
-│  │ SidebarRenderer   │  │ GhosttyTerminalRenderer │ │
-│  │ (TextRenderable)  │  │ (GhosttyTerminal        │ │
-│  │                   │  │  Renderable, persistent) │ │
-│  │ ← DataPipeline    │  │                          │ │
-│  │   (poll + watch)  │  │ ← tmux capture loop      │ │
-│  │                   │  │ → tmux send-keys          │ │
+│  │ SidebarRenderer   │  │ GhosttyTerminal         │ │
+│  │ (TextRenderable)  │  │ Renderable (stateless)  │ │
+│  │                   │  │                          │ │
+│  │ ← DataPipeline    │  │ ← tmux capture-pane     │ │
+│  │   (poll + watch)  │  │ → tmux send-keys         │ │
+│  │                   │  │ ← tmux display (cursor)  │ │
 │  └───────────────────┘  └──────────────────────────┘ │
 │                                                     │
 │  ┌──── FocusManager ────────────────────────────┐   │
 │  │ terminal | sidebar                           │   │
 │  │ routes keyboard input to active panel        │   │
 │  └──────────────────────────────────────────────┘   │
+│                                                     │
+│  ┌──── Footer ──────────────────────────────────┐   │
+│  │ context-aware keybindings per focus state     │   │
+│  └──────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## Terminal Rendering
 
-### Why ghostty-opentui
+### Two rendering backends
 
-The existing `TerminalViewer` (in `terminal.ts`) uses `tmux capture-pane -e` → custom ANSI parser → `TextRenderable`. This approach has fundamental limits:
+**ghostty-opentui** (primary, optional dep) — Uses Ghostty's Zig VT emulator compiled as a native addon. Fed `capture-pane -e` output, it produces correctly rendered cells with full SGR support: 16/256/RGB colors, bold, italic, underline, dim, inverse, strikethrough. Significantly more robust than a hand-rolled ANSI parser.
 
-- **No cursor movement** — capture-pane gives final screen state, but ANSI parser doesn't handle cursor positioning sequences (CSI H, CSI A/B/C/D)
-- **No scrolling regions** — agents use tools that set scroll regions, insert/delete lines
-- **No alternate screen** — vim, less, fzf switch to alternate screen buffer
-- **Lossy rendering** — the custom parser handles SGR (colors/styles) but drops everything else
+**Custom ANSI parser** (fallback) — The existing `TerminalViewer` in `terminal.ts` with `ansi-parser.ts`. Handles basic SGR sequences. Used when `ghostty-opentui` is not installed.
 
-ghostty-opentui solves all of this. It's a full VT emulator (Ghostty's Zig parser compiled to native addon) that processes all escape sequences and outputs rendered cells.
+### What ghostty gives us (and what it doesn't)
 
-### Component: GhosttyTerminalRenderable
+Both backends consume `tmux capture-pane -e` output, which is a **rendered screen dump** — tmux has already processed all VT sequences (cursor movement, scroll regions, alternate screen) and re-encodes the final screen state with SGR color codes only.
 
-From `ghostty-opentui/terminal-buffer`:
+This means:
+
+| Feature | Handled by | Backend matters? |
+|---------|-----------|-----------------|
+| Colors (16/256/RGB) | SGR in capture output | Yes — ghostty handles edge cases the custom parser misses |
+| Text attributes (bold, italic, etc.) | SGR in capture output | Yes — ghostty handles all attributes correctly |
+| Cursor position | `tmux display -p` (separate query) | No — neither backend gets cursor from capture output |
+| Alternate screen (vim, less) | tmux (already switched) | No — capture-pane shows current screen |
+| Scroll regions | tmux (already processed) | No — capture-pane shows final result |
+
+**Cursor position** always comes from tmux via `queryPaneInfo()`, not from the rendering backend. Neither ghostty nor the custom parser can determine cursor position from capture-pane output (which has no cursor movement sequences).
+
+The ghostty advantage is **rendering correctness**: proper handling of complex SGR sequences (256-color, RGB, combined attributes) where the hand-rolled parser has gaps. Not full VT emulation — tmux already did that.
+
+### Component Setup
 
 ```typescript
 import { GhosttyTerminalRenderable } from "ghostty-opentui/terminal-buffer";
 
-// Register with opentui (if using composition API)
-// Or instantiate directly:
 const terminal = new GhosttyTerminalRenderable(renderContext, {
   cols: 120,
   rows: 40,
-  persistent: true,    // maintain state across feed() calls
-  showCursor: true,
-  cursorStyle: "block",
+  persistent: false,   // stateless — full capture-pane on each poll
+  showCursor: false,    // cursor rendered separately via tmux query
 });
 ```
 
-**Persistent mode** is critical. Instead of re-parsing the full capture buffer each poll, we `feed()` only new data. The terminal maintains internal state (cursor, scroll region, colors, alternate screen) across calls.
+Stateless mode: set `terminal.ansi = capturedOutput` on each poll cycle. Ghostty re-parses from scratch. At ~100MB/s parsing speed, a full screen (120×40 = ~5KB) takes <0.1ms. No need for persistent mode.
+
+### Cursor Rendering
+
+Cursor is rendered as an overlay based on tmux pane info:
+
+```typescript
+const info = await tmux.queryPaneInfo(session);
+if (info && info.cursorVisible) {
+  // Apply cursor highlight at (info.cursorX, info.cursorY)
+  terminal.highlights = [{
+    line: info.cursorY,
+    start: info.cursorX,
+    end: info.cursorX + 1,
+    backgroundColor: "#FFFFFF",  // or use terminal.cursorStyle for block/underline
+  }];
+}
+```
+
+This uses `GhosttyTerminalRenderable.highlights` to draw the cursor at the correct position, separate from the terminal content parsing.
 
 ### Capture Loop
 
-Replace `tmux capture-pane` with raw PTY output feeding into persistent terminal.
-
-```
-tmux pipe-pane -t <session> -o "cat >> /tmp/orange-pty-<session>.fifo"
-```
-
-Wait — `pipe-pane` sends raw PTY output to a file/pipe, which is exactly what `PersistentTerminal.feed()` needs. But there's a problem: `pipe-pane` captures ongoing output, not the screen state at connection time.
-
-**Hybrid approach:**
-
-1. **On enter**: `tmux capture-pane -p -e -S -` (full scrollback with ANSI) → feed as initial state
-2. **Ongoing**: poll with `tmux capture-pane -p -e` at adaptive intervals → diff against previous, feed delta
-
-Actually, simpler: just use the full capture approach but feed into `GhosttyTerminalRenderable` instead of the custom ANSI parser. The ghostty component handles everything internally.
-
 ```typescript
-// On each poll cycle:
-const raw = await tmux.capturePaneAnsi(session, scrollbackLines);
-terminal.ansi = raw;  // GhosttyTerminalRenderable re-parses
+async function poll(): Promise<void> {
+  // 1. Capture screen state (with ANSI SGR codes)
+  const output = await tmux.capturePaneAnsi(session, scrollbackLines);
+
+  // 2. Update terminal content
+  if (output !== null && output !== lastOutput) {
+    terminal.ansi = output;
+    lastOutput = output;
+  }
+
+  // 3. Update cursor position (separate query)
+  const info = await tmux.queryPaneInfo(session);
+  if (info) {
+    terminal.highlights = info.cursorVisible ? [{
+      line: info.cursorY,
+      start: info.cursorX,
+      end: info.cursorX + 1,
+      backgroundColor: "#FFFFFF",
+    }] : [];
+  }
+
+  // 4. Schedule next poll
+  schedulePoll(calculateInterval());
+}
 ```
-
-This is stateless (no persistent mode needed) but uses ghostty's full VT emulator for rendering. Simple, correct, no delta tracking.
-
-**Persistent mode optimization** (Phase 2): For reduced CPU on long-running sessions, switch to `PersistentTerminal` with incremental `feed()`. Requires tracking a byte offset or using `pipe-pane`. Not needed for v1 — the stateless approach is fast enough (ghostty processes ~100MB/s).
 
 ### Resize
 
 When the viewer panel resizes:
 
 ```typescript
-// 1. Update ghostty component dimensions
+// 1. Resize tmux pane to match (tmux redraws content)
+await tmux.resizePane(session, newCols, newRows);
+
+// 2. Update ghostty component dimensions
 terminal.cols = newCols;
 terminal.rows = newRows;
 
-// 2. Resize tmux pane to match
-await tmux.resizePane(session, newCols, newRows);
-
-// 3. Trigger immediate capture (tmux redraws after resize)
+// 3. Trigger immediate capture (tmux has redrawn)
 await poll();
 ```
 
-The tmux pane must match the viewer dimensions exactly. Mismatched sizes cause wrapping artifacts, misaligned cursor, and broken full-screen apps.
+The tmux pane must match the viewer dimensions exactly. Mismatched sizes cause wrapping artifacts and broken full-screen apps (vim, htop).
 
 ### Adaptive Polling
-
-Same strategy as existing `TerminalViewer`, applied to ghostty:
 
 | State | Interval | Trigger |
 |-------|----------|---------|
@@ -117,18 +148,9 @@ Same strategy as existing `TerminalViewer`, applied to ghostty:
 
 Timer resets on every keystroke. This gives snappy feel during interaction without burning CPU when idle.
 
-### Cursor
-
-`GhosttyTerminalRenderable` handles cursor rendering when `showCursor: true`:
-
-- Block cursor (default): inverts fg/bg at cursor position
-- Underline cursor: adds underline attribute
-
-Cursor position comes from ghostty's VT emulator — it tracks CSI cursor movement sequences correctly, unlike the capture-pane approach which requires a separate `tmux display -p` query.
-
 ### Fallback
 
-If `ghostty-opentui` is not installed (it's an optional dep), fall back to the existing `TerminalViewer` with custom ANSI parser. The workspace view still works, just with degraded rendering (no cursor movement, no alternate screen).
+If `ghostty-opentui` is not installed (it's an optional dep), fall back to the existing `TerminalViewer` with custom ANSI parser. The workspace view still works, just with potential rendering gaps for complex SGR sequences.
 
 ```typescript
 let TerminalComponent: typeof GhosttyTerminalRenderable | null = null;
@@ -139,6 +161,8 @@ try {
   // Fall back to existing TextRenderable + ansi-parser
 }
 ```
+
+No code deleted — `terminal.ts` and `ansi-parser.ts` remain as fallback path.
 
 ## Sidebar
 
@@ -168,10 +192,15 @@ interface SidebarData {
 
   // Task
   taskBody: string;            // first ~10 lines of TASK.md body
+
+  // Internal
+  workspacePath: string;       // resolved via getWorkspacePath(deps, task.workspace)
 }
 ```
 
 ### Data Sources
+
+All git commands run in the task's workspace directory: `getWorkspacePath(deps, task.workspace)`. If `task.workspace` is null (shouldn't happen for live tasks), git data is skipped and sidebar shows stale/empty values.
 
 | Field | Source | Refresh |
 |-------|--------|---------|
@@ -286,7 +315,7 @@ Extend the existing `sendKeyToTmux` from `terminal.ts`. Critical mappings:
 
 | Input | tmux send-keys |
 |-------|---------------|
-| Printable char | literal (via `sendKeys`) |
+| Printable char | literal via `send-keys -l` |
 | Enter | `Enter` |
 | Backspace | `BSpace` |
 | Tab | `Tab` |
@@ -301,6 +330,17 @@ Extend the existing `sendKeyToTmux` from `terminal.ts`. Critical mappings:
 | Page Up/Down | `PageUp`, `PageDown` |
 | Delete | `DC` |
 | F1–F12 | `F1`–`F12` |
+
+### Limitations of send-keys
+
+`tmux send-keys` is a tmux command (process fork per keystroke), not raw PTY input. Known limitations:
+
+- **Paste**: multi-character input must use `send-keys -l` (literal mode) to avoid tmux interpreting key names. For large pastes, buffer and send as a single `send-keys -l` call.
+- **Alt+key**: sends `ESC` followed by key. `send-keys` may misinterpret multi-byte sequences. Workaround: send `Escape` then the key as separate calls, or use `send-keys -H` with hex codes.
+- **Typing speed**: each keystroke = one `tmux send-keys` invocation. Fast typing generates many process forks. In practice this is fine for interactive use but not for bulk input.
+- **Mouse events**: not supported through send-keys. Mouse support would require raw PTY passthrough.
+
+`Ctrl+]` full-screen attach is the escape hatch for any interaction that doesn't work through the key forwarding layer.
 
 ### Sidebar Focused
 
@@ -330,7 +370,7 @@ async function fullScreenAttach(session: string): Promise<void> {
 }
 ```
 
-This is the "I need real tmux" escape hatch. Useful for complex interactions that don't work through the key forwarding layer.
+This is the "I need real tmux" escape hatch. Useful for complex interactions that don't work through the key forwarding layer (paste, Alt+key combos, mouse-heavy TUIs).
 
 ## Integration with Dashboard
 
@@ -377,12 +417,18 @@ type DashboardMode = "taskList" | "workspace";
 
 Only one is visible at a time. The opentui layout switches between two root containers based on mode.
 
+### Render Batching
+
+Three async data sources update the UI: terminal poll, sidebar poll, file watcher. opentui's `CliRenderer` handles batching — it renders at a fixed FPS (default 30), collecting all property changes since the last frame. Multiple updates between frames produce a single render.
+
+If sidebar and terminal update within the same frame interval, opentui renders once.
+
 ### Session Death While Viewing
 
 If the tmux session dies while the workspace viewer is active:
 
-1. Poll detects session gone
-2. Terminal shows `[Session ended]`
+1. Capture poll returns null / throws → increment failure count
+2. After 3 consecutive capture failures → show `[Session ended]`
 3. Sidebar updates session icon to `✗ dead`
 4. Keys no longer forwarded (nothing to forward to)
 5. User presses `Esc` → returns to task manager
@@ -398,7 +444,7 @@ No auto-exit on session death — user might want to read the sidebar context.
 src/dashboard/
 ├── index.ts                  # Dashboard orchestrator (adds mode switching)
 ├── state.ts                  # Data fetching, polling, health checks
-├── viewer.ts                 # WorkspaceViewer (new — main viewer component)
+├── viewer.ts                 # WorkspaceViewer (new — layout, focus, lifecycle, footer)
 ├── viewer-sidebar.ts         # SidebarRenderer (new — sidebar data + rendering)
 ├── viewer-terminal.ts        # TerminalPanel (new — ghostty wrapper + capture loop)
 ├── terminal.ts               # Existing TerminalViewer (becomes fallback)
@@ -407,12 +453,13 @@ src/dashboard/
 
 ### WorkspaceViewer
 
-Top-level component that owns the layout, focus state, and child panels.
+Top-level component that owns the layout, focus state, footer, and child panels.
 
 ```typescript
 class WorkspaceViewer {
   private sidebar: SidebarRenderer;
   private terminal: TerminalPanel;
+  private footer: TextRenderable;
   private focus: ViewerFocus = "terminal";
   private task: Task | null = null;
   private container: BoxRenderable;
@@ -425,7 +472,7 @@ class WorkspaceViewer {
   /** Exit viewer. Stops data pipelines, cleans up. */
   exit(): void;
 
-  /** Handle keyboard input. Routes to active panel. */
+  /** Handle keyboard input. Routes to active panel or handles focus keys. */
   async handleKey(key: KeyEvent): Promise<boolean>;
 
   /** Handle terminal resize. */
@@ -439,6 +486,10 @@ class WorkspaceViewer {
   onAttach?: (session: string) => void;
 }
 ```
+
+Footer is owned by `WorkspaceViewer` and updated on focus change:
+- Terminal focused: `Ctrl+\:sidebar  Ctrl+]:fullscreen`
+- Sidebar focused: `Tab:terminal  Esc:dashboard`
 
 ### SidebarRenderer
 
@@ -478,6 +529,7 @@ class TerminalPanel {
   private session: string | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private lastActivityTime: number = 0;
+  private consecutiveFailures: number = 0;
 
   constructor(renderer: CliRenderer, deps: Deps) { ... }
 
@@ -493,7 +545,11 @@ class TerminalPanel {
   /** Resize terminal. */
   async resize(cols: number, rows: number): Promise<void>;
 
-  /** Whether session is still alive. */
+  /**
+   * Whether session appears alive.
+   * Potentially stale — based on last successful capture.
+   * 3 consecutive failures = considered dead.
+   */
   get alive(): boolean;
 
   /** Get the renderable container. */
@@ -532,13 +588,14 @@ const terminalWidth = width - sidebarWidth;
 ### Enter
 
 ```
-1. Create sidebar + terminal panel renderables
-2. Add to container (flex row: sidebar | terminal)
+1. Create sidebar + terminal panel + footer renderables
+2. Add to container (flex column: [flex row: sidebar | terminal] + footer)
 3. Calculate dimensions
-4. sidebar.start(task, sidebarWidth, height)
-5. terminal.connect(session, termCols, termRows)
-6. Set focus = "terminal"
-7. Render footer: "Ctrl+\:sidebar  Ctrl+]:fullscreen"
+4. Resolve workspace path: getWorkspacePath(deps, task.workspace)
+5. sidebar.start(task, sidebarWidth, height - 1)
+6. terminal.connect(session, termCols, termRows)
+7. Set focus = "terminal"
+8. Update footer: "Ctrl+\:sidebar  Ctrl+]:fullscreen"
 ```
 
 ### Poll Cycle (while active)
@@ -546,13 +603,17 @@ const terminalWidth = width - sidebarWidth;
 ```
 Terminal poll (adaptive 20–500ms):
   1. tmux.capturePaneAnsi(session, scrollback)
-  2. Update ghostty.ansi = captured
-  3. If capture fails → session dead → update UI
+  2. tmux.queryPaneInfo(session) for cursor
+  3. Update ghostty.ansi + highlights
+  4. If capture fails → increment consecutiveFailures
+  5. If consecutiveFailures >= 3 → show [Session ended], mark dead
 
 Sidebar poll (10s):
   1. tmux.sessionExists(session)
-  2. git.getCommitCount(), git.getDiffStats(), git.getChangedFiles()
-  3. Update sidebar data, re-render
+  2. git.getCommitCount(workspacePath, base)
+  3. git.getDiffStats(workspacePath, base)
+  4. git.getChangedFiles(workspacePath, base)
+  5. Update sidebar data, re-render
 
 Sidebar file watcher (immediate, 100ms debounce):
   1. TASK.md changed → re-read frontmatter + body
@@ -581,10 +642,10 @@ Sidebar file watcher (immediate, 100ms debounce):
 
 | Error | Behavior |
 |-------|----------|
-| tmux capture fails once | Retry on next poll cycle |
+| tmux capture fails once | Retry on next poll cycle, increment failure count |
 | tmux capture fails 3× consecutive | Show `[Session ended]`, mark dead |
 | git commands fail | Sidebar shows stale data, no crash |
-| File watcher error | Fall back to poll-only (10s) |
+| File watcher error | Fall back to poll-only (10s) for affected files |
 | ghostty import fails | Use fallback TerminalViewer |
 | Resize to tiny dimensions | Hide sidebar, terminal gets full width |
 
@@ -598,9 +659,8 @@ class TerminalPanel {
     try {
       const { GhosttyTerminalRenderable } = require("ghostty-opentui/terminal-buffer");
       this.ghostty = new GhosttyTerminalRenderable(renderer, {
-        persistent: false,  // stateless for v1
-        showCursor: true,
-        cursorStyle: "block",
+        persistent: false,
+        showCursor: false,   // cursor rendered via highlights + tmux query
       });
     } catch {
       // ghostty not available, use fallback
