@@ -12,6 +12,7 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
 - [Harness Configuration](./harness.md) — multi-harness support (pi, opencode, claude, codex)
 - [Logging](./logging.md) — structured logging, debugging
+- [Workflow Engine](./workflow-engine.md) — configurable state machine, gates, hooks, agent protocol
 - [Testing](./testing.md) — setup, strategy
 - [GitHub](./github.md) — PR creation, merge detection
 - [Pi Extension](./pi-extension.md) — optional pi tool + /tasks command
