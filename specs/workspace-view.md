@@ -1,6 +1,6 @@
 # Workspace View
 
-Deep-dive view for a single task. Left sidebar shows workspace context, right panel shows the agent's terminal session.
+Primary working view for a task. Users spend most of their time here — interacting with the agent's terminal while a persistent sidebar provides live workspace context.
 
 Entry: press `w` on a selected task from the main dashboard. Only available when the task has a live tmux session. Back: `Esc` returns to dashboard.
 
@@ -27,13 +27,13 @@ Entry: press `w` on a selected task from the main dashboard. Only available when
 │  Fix OAuth redirect loop │                                       │
 │  on mobile Safari...     │                                       │
 ├──────────────────────────┴───────────────────────────────────────┤
-│ Tab:terminal  Esc:dashboard                                      │
+│ Ctrl+\:sidebar  Ctrl+]:fullscreen                                │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Sidebar (30%)
 
-Read-only context panel for the selected task's workspace. Not interactive — no scrolling or selection within the sidebar.
+Persistent context HUD for the task's workspace. Always visible while working in the terminal — this ambient awareness is the key advantage over raw tmux. Read-only, not interactive — no scrolling or selection within the sidebar.
 
 ### Sections
 
@@ -66,9 +66,9 @@ Read-only context panel for the selected task's workspace. Not interactive — n
 
 ### Auto-refresh
 
-Sidebar refreshes on:
+Since this is the primary view, sidebar data must stay fresh:
 - File watcher detects TASK.md changes
-- Poll cycle (30s): session health, git stats, PR status
+- Poll cycle (10s): session health, git stats, PR status
 - Immediate refresh after terminal interaction (keystroke → poll)
 
 ## Terminal Panel (70%)
@@ -89,40 +89,40 @@ Full agent terminal using the existing terminal viewer component. Connects to th
 
 ## Focus Modes
 
-Two focus states: **sidebar** (default) and **terminal**.
+Two focus states: **terminal** (default) and **sidebar**.
 
-### Sidebar focused (default on entry)
+### Terminal focused (default on entry)
 
-Terminal panel is visible and polling, but keys are not forwarded.
-
-| Key | Action |
-|-----|--------|
-| Tab, Enter | Switch focus to terminal |
-| Esc | Exit workspace view, return to dashboard |
-
-### Terminal focused
-
-All keys forwarded to the tmux session.
+All keys forwarded to the tmux session. This is where users spend most of their time.
 
 | Key | Action |
 |-----|--------|
-| Ctrl+\\ | Return focus to sidebar |
-| Ctrl+] | Full-screen tmux attach (exit dashboard) |
+| Ctrl+\\ | Switch focus to sidebar |
+| Ctrl+] | Full-screen tmux attach (escape hatch, exits dashboard) |
 | All other keys | Forwarded to tmux session |
+
+### Sidebar focused
+
+Terminal panel is visible and polling, but keys are not forwarded. Used to read context or exit.
+
+| Key | Action |
+|-----|--------|
+| Tab, Enter | Return focus to terminal |
+| Esc | Exit workspace view, return to dashboard |
 
 ## Footer
 
 | Focus | Footer |
 |-------|--------|
-| Sidebar | `Tab:terminal  Esc:dashboard` |
 | Terminal | `Ctrl+\:sidebar  Ctrl+]:fullscreen` |
+| Sidebar | `Tab:terminal  Esc:dashboard` |
 
 ## State
 
 ```
 workspaceMode:
   active: boolean
-  focus: "sidebar" | "terminal"
+  focus: "terminal" | "sidebar"
   task: Task              # the task being viewed
   changedFiles: string[]  # git diff file list
   history: HistoryEntry[] # recent history events
@@ -131,13 +131,13 @@ workspaceMode:
 ### Transitions
 
 ```
-Dashboard ──w──> Workspace view (sidebar focus)
+Dashboard ──w──> Workspace view (terminal focus)
                     │
-         Esc ◄──────┤
-                    │
-         Tab/Enter ─┼──> Terminal focus
+         Ctrl+\ ────┼──> Sidebar focus
                     │         │
-         Ctrl+\ ◄───┼─────────┘
+         Tab/Enter ◄─┼─────────┘
+                    │         │
+         Esc ◄───────┼─────────┘  (exit to dashboard)
                     │
          Ctrl+] ────┼──> Full-screen attach (exit dashboard)
 ```
