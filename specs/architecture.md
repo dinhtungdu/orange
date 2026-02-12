@@ -7,7 +7,8 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 - [Flows](./flows.md) — end-to-end workflows, status transitions
 - [Data & Storage](./data.md) — files, formats, task status
 - [CLI Commands](./cli.md) — project, task, workspace commands
-- [Dashboard](./dashboard.md) — TUI, keybindings
+- [Task Manager](./dashboard.md) — task list, keybindings, polling
+- [Workspace View](./workspace-view.md) — terminal + sidebar HUD (primary working view)
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
 - [Harness Configuration](./harness.md) — multi-harness support (pi, opencode, claude, codex)
 - [Workspace Pool](./workspace.md) — worktree management
@@ -18,16 +19,20 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 
 ## Overview
 
-```
-Your terminal (orchestrator):
-┌─────────────────────────────────────────────────────┐
-│ Agent session in ~/workspace/coffee                 │
-│ (you chat here, create tasks via CLI or dashboard)  │
-└─────────────────────────────────────────────────────┘
+The dashboard has two modules users switch between:
 
-Dashboard (orange):
+```
 ┌─────────────────────────────────────────────────────┐
-│ Task list, status, actions                          │
+│                   Task Manager                      │
+│  Task list, status, create/cancel/merge, polling    │
+│                                                     │
+│  ── w ──▶  Workspace (per task)                     │
+│            ┌────────────┬──────────────────────┐    │
+│            │ Sidebar    │ Terminal              │    │
+│            │ (context   │ (agent session)       │    │
+│            │  HUD)      │                       │    │
+│            └────────────┴──────────────────────┘    │
+│         ◀── Esc ──                                  │
 └─────────────────────────────────────────────────────┘
 
 Task sessions (one per task):
@@ -37,9 +42,11 @@ Task sessions (one per task):
 │ │ Agent (pi/claude/…) │ │  │ │ Agent (pi/claude/…) │ │
 │ └─────────────────────┘ │  │ └─────────────────────┘ │
 └─────────────────────────┘  └─────────────────────────┘
-
-← attach to any task session to interact with agent
 ```
+
+**Task Manager** — manage tasks: create, spawn, cancel, merge, monitor status. See [dashboard.md](./dashboard.md).
+
+**Workspace** — primary working view for a single task. Terminal + sidebar HUD. Users spend most time here. See [workspace-view.md](./workspace-view.md).
 
 **Session naming:** `<project>/<branch>` for task sessions.
 
@@ -65,7 +72,7 @@ Task sessions (one per task):
 |--------|----------------|
 | args | CLI argument parsing |
 | commands | CLI command handlers (project, task, workspace, install, log) |
-| dashboard | TUI rendering, input handling, file watching |
+| dashboard | TUI: task manager (list, create, polling) + workspace (terminal, sidebar HUD) |
 | agent | Prompt generation (spawn + respawn) |
 | clock | Time abstraction (real + mock) |
 | cwd | CWD-based project detection |

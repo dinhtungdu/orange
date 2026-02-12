@@ -2,7 +2,7 @@
 
 Primary working view for a task. Users spend most of their time here — interacting with the agent's terminal while a persistent sidebar provides live workspace context.
 
-Entry: press `w` on a selected task from the main dashboard. Only available when the task has a live tmux session. Back: `Esc` returns to dashboard.
+One of two dashboard modules — the other is [Task Manager](./dashboard.md) for creating and managing tasks. Entry: press `w` on a selected task from the task manager. Only available when the task has a live tmux session. `Esc` returns to the task manager.
 
 ## Layout
 
