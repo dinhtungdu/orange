@@ -65,7 +65,15 @@ Implementation notes from orchestrator...
 
 ## Notes
 
-Agent working notes, discoveries, session handoff...
+PLAN: Use CSS custom properties for theme switching
+TOUCHING: src/dashboard/styles.ts, src/dashboard/view.ts
+
+## Handoff
+
+DONE: Theme data structure, CSS variable injection
+REMAINING: Persist preference to config, keyboard shortcut toggle
+DECISIONS: CSS custom properties over Lipgloss styles (works with all TUI components)
+UNCERTAIN: Should theme apply to agent terminal output too?
 ```
 
 **Structure:**
@@ -75,27 +83,43 @@ Agent working notes, discoveries, session handoff...
 **Body sections** (all optional):
 - `## Context` — Implementation context from `--context -` (orchestrator-controlled, read-only for agent)
 - `## Questions` — Agent's clarifying questions (agent-controlled)
-- `## Notes` — Working notes, plan, session handoff (agent-controlled)
+- `## Notes` — Working notes, plan (agent-controlled)
+- `## Handoff` — Structured session state: done/remaining/decisions/uncertain (agent-controlled, written before stopping)
 - `## Review` — Agent review summary (written by review agent during `agent-review`)
 
 ### Notes Format
 
-For autonomous agents, structured notes in body:
+For autonomous agents, working notes in body:
 
 ```markdown
 ## Notes
 
 PLAN: <implementation approach, if no ## Context provided>
 TOUCHING: <files/areas affected>
-
-COMPLETED: X
-IN PROGRESS: Y
-NEXT: Z
-BLOCKER: (if any)
 ```
 
 - **PLAN/TOUCHING**: Written before implementation when no `## Context` provided
-- **COMPLETED/IN PROGRESS/NEXT/BLOCKER**: Updated before stopping (session handoff)
+
+### Handoff Format
+
+Agents write a `## Handoff` section before stopping (status change to `agent-review`, or session death/respawn). This is the structured state that lets the next session pick up accurately.
+
+```markdown
+## Handoff
+
+DONE: OAuth callback handler, token storage in keychain
+REMAINING: Refresh token rotation, logout flow
+DECISIONS: Using JWT for stateless auth (avoid DB session lookups)
+UNCERTAIN: Should tokens expire on password change?
+```
+
+**Fields** (all optional, include what's relevant):
+- **DONE** — What's completed this session
+- **REMAINING** — What's left to do
+- **DECISIONS** — Choices made and why (critical for next session)
+- **UNCERTAIN** — Open questions, unknowns, things that need human input
+
+The `DECISIONS` and `UNCERTAIN` fields are where handoff quality lives — they prevent the next session from re-making decisions or confidently continuing from wrong assumptions.
 
 ### Empty Summary
 

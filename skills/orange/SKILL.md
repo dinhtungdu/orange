@@ -34,16 +34,24 @@ Triggers: empty summary, ambiguous requirements, scope larger than expected.
 
 ### Session Handoff
 
-Update `## Notes` before stopping:
+Write `## Handoff` to TASK.md before stopping (before `--status agent-review`):
 
 ```markdown
-## Notes
+## Handoff
 
-COMPLETED: X
-IN PROGRESS: Y
-NEXT: Z
-BLOCKER: (if any)
+DONE: OAuth callback handler, token storage in keychain
+REMAINING: Refresh token rotation, logout flow
+DECISIONS: Using JWT for stateless auth (avoid DB session lookups)
+UNCERTAIN: Should tokens expire on password change?
 ```
+
+**Fields** (all optional, include what's relevant):
+- **DONE** — What's completed this session
+- **REMAINING** — What's left to do
+- **DECISIONS** — Choices made and why (prevents next session from re-deciding)
+- **UNCERTAIN** — Open questions, unknowns, things that need human input
+
+On respawn, read `## Handoff` first — it's the structured state from the previous session.
 
 ### Rules
 
@@ -76,6 +84,7 @@ Core workflow is in the spawn prompt. This section covers details.
 - Do NOT modify any code — review only
 - Do NOT post comments or reviews to GitHub (no `gh pr review`, no `gh pr comment`)
 - ALWAYS write `## Review` to TASK.md before setting status — no exceptions
+- Read `## Handoff` — check UNCERTAIN items for correctness risks, verify DECISIONS are sound
 - Write actionable feedback (specific files, line numbers, what's wrong)
 - Even for PASS, include positive notes and minor suggestions
 - Save ALL feedback to TASK.md only — human will review and post to GitHub if needed
