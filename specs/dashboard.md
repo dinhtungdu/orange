@@ -105,6 +105,7 @@ Footer shows relevant actions based on selected task's state:
 | p | Create PR / Open PR in browser | Reviewing (no PR) creates, any with PR opens |
 | x | Cancel task (shows confirmation) | Active tasks |
 | d | Delete task folder (shows confirmation) | Cancelled or done tasks |
+| w | Open workspace view (sidebar + terminal) | Task has live tmux session |
 | f | Filter by status (cycle: all → active → done) | Always |
 | q | Quit dashboard | Always |
 
@@ -173,6 +174,10 @@ Transparent background — works with user's terminal background/wallpaper.
 | Column headers | `#666666` (dark gray) |
 
 Status colors defined in `state.ts` (`STATUS_COLOR`).
+
+## Workspace View
+
+Press `w` on a task with a live session to enter workspace view. See [workspace-view.md](./workspace-view.md).
 
 ## Polling & Updates
 
