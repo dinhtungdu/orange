@@ -68,6 +68,152 @@ When no branch name provided, defaults to `orange-tasks/<id>`. Agent renames bas
 1. `git branch -m orange-tasks/<id> <meaningful-name>`
 2. `orange task update --branch`
 
+### Prompt Templates
+
+Each state has a focused prompt. Agents receive only the instructions relevant to their current role.
+
+Variable substitution: `{summary}`, `{project}`, `{branch}`, `{review_round}`, `{status}`.
+
+#### Worker Prompt (working)
+
+```
+# Task: {summary}
+
+Project: {project}
+Branch: {branch}
+
+Steps:
+1. Read TASK.md — summary in frontmatter, context in body
+2. If branch is orange-tasks/<id>, rename: git branch -m <old> <meaningful-name> && orange task update --branch
+3. If empty/vague summary: add ## Questions to TASK.md, set --status clarification, wait
+4. If no ## Context: document plan in ## Notes before coding
+5. Read project rules (AGENTS.md, etc.), implement, test, commit
+6. Write ## Handoff to TASK.md (DONE/REMAINING/DECISIONS/UNCERTAIN)
+7. orange task update --status agent-review (triggers review agent)
+
+IMPORTANT:
+- Do NOT push to remote (no git push) — human handles that
+- Do NOT set --status reviewing directly — always use agent-review
+- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
+  (the command will fail if ## Handoff is missing)
+
+Read the orange skill for full details.
+```
+
+#### Worker Respawn Prompt (working, review_round > 0)
+
+```
+# Resuming Task: {summary}
+
+Project: {project}
+Branch: {branch}
+Status: {status}
+Review round: {review_round}
+
+Read ## Handoff in TASK.md first — it has structured state from the previous session.
+
+Continue implementation:
+1. Read TASK.md for context and previous progress
+2. Pick up where the last session left off
+3. Write ## Handoff with updated progress
+4. orange task update --status agent-review
+
+IMPORTANT:
+- Do NOT push to remote (no git push) — human handles that
+- Do NOT set --status reviewing directly — always use agent-review
+- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
+  (the command will fail if ## Handoff is missing)
+
+Read the orange skill for full details.
+```
+
+#### Worker Fix Prompt (post-review fail)
+
+```
+# Fixing Issues: {summary}
+
+Project: {project}
+Branch: {branch}
+Review round: {review_round}
+
+Steps:
+1. Read ## Review in TASK.md — it contains specific feedback
+2. Fix each issue raised
+3. Update ## Handoff with what you changed
+4. orange task update --status agent-review
+
+IMPORTANT:
+- Do NOT push to remote (no git push) — human handles that
+- Do NOT set --status reviewing directly — always use agent-review
+- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
+  (the command will fail if ## Handoff is missing)
+
+Read the orange skill for full details.
+```
+
+#### Review Agent Prompt (agent-review)
+
+```
+# Review Task: {summary}
+
+Project: {project}
+Branch: {branch}
+Review round: {review_round} of 2
+
+You MUST write a ## Review section to TASK.md body BEFORE setting status.
+
+Steps:
+1. Read TASK.md for requirements and ## Handoff for implementation state
+2. Review diff: git diff origin/HEAD...HEAD
+3. Check ## Handoff UNCERTAIN items — flag any that affect correctness
+4. Write ## Review to TASK.md with verdict (PASS/FAIL) and specific feedback
+5. Then set status based on verdict and round
+
+IMPORTANT:
+- Do NOT post comments or reviews to GitHub
+- Do NOT set status without writing ## Review first
+  (the command will fail if ## Review is missing)
+- Save ALL feedback to TASK.md only
+
+Read the orange skill for detailed review agent instructions.
+```
+
+#### Clarification Prompt
+
+```
+# Task: {summary}
+
+Project: {project}
+Branch: {branch}
+
+The task requirements are unclear. Write ## Questions to TASK.md with
+2-3 specific questions, then wait for the user to attach and discuss.
+
+After discussion:
+1. Update task summary: orange task update --summary "..."
+2. Document approach in ## Notes
+3. Resume: orange task update --status working
+```
+
+#### Stuck Respawn Prompt
+
+```
+# Resuming Stuck Task: {summary}
+
+Project: {project}
+Branch: {branch}
+Review round: {review_round}
+
+This task was stuck — either review failed twice or crashes occurred.
+Read ## Review and ## Handoff for context on what went wrong.
+
+Steps:
+1. Read TASK.md thoroughly
+2. Address the issues that caused stuck state
+3. Write ## Handoff with what you changed
+4. orange task update --status agent-review
+```
+
 ## 3. Respawn Prompt
 
 For dead sessions reusing existing workspace:

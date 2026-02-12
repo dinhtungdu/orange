@@ -8,12 +8,10 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 - [Data & Storage](./data.md) — files, formats, task status
 - [CLI Commands](./cli.md) — project, task, workspace commands
 - [Task Manager](./dashboard.md) — task list, keybindings, polling
-- [Workspace](./workspace.md) — pool (worktree management) + view (terminal + sidebar HUD)
-- [Viewer](./viewer.md) — terminal rendering (ghostty-opentui), sidebar data pipeline, input handling
+- [Workspace](./workspace.md) — pool (worktree management) + view (terminal rendering, sidebar HUD, input handling)
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
 - [Harness Configuration](./harness.md) — multi-harness support (pi, opencode, claude, codex)
 - [Logging](./logging.md) — structured logging, debugging
-- [Workflow Engine](./workflow-engine.md) — configurable state machine, gates, hooks, agent protocol
 - [Testing](./testing.md) — setup, strategy
 - [GitHub](./github.md) — PR creation, merge detection
 - [Pi Extension](./pi-extension.md) — optional pi tool + /tasks command
