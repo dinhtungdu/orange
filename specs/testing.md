@@ -17,7 +17,8 @@ Unit tests colocated with source. Integration tests in separate directory.
 
 ### Key Scenarios
 
-- Task lifecycle: create → spawn → complete → merge
+- Task lifecycle: create → spawn → agent-review → reviewing → done
+- Task lifecycle: create → spawn → review fail → fix → review pass → done
 - Task lifecycle: create → spawn → stuck → cancel
 - Workspace pool: acquire, release, exhaustion
 - Concurrent operations: locking, race conditions
