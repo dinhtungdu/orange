@@ -654,10 +654,11 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   log.info("Respawning task", { taskId, session: tmuxSession, interactive: !prompt, isReview });
   await deps.tmux.newSession(tmuxSession, workspacePath, command);
 
-  // Update task — keep agent-review status if respawning review agent
+  // Update task — keep status for agent-review and reviewing
   const now = deps.clock.now();
   task.tmux_session = tmuxSession;
-  if (!isReview) {
+  const isReviewing = task.status === "reviewing";
+  if (!isReview && !isReviewing) {
     task.status = "working";
   }
   task.updated_at = now;

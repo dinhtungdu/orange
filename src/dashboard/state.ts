@@ -1243,9 +1243,8 @@ export class DashboardState {
     const isAgentReview = task.status === "agent-review";
     const isReviewing = task.status === "reviewing";
 
-    // Allow: working/agent-review with dead session, stuck, cancelled
-    // Reviewing without session: no respawn (human merges/creates PR, no agent needed)
-    const canRespawn = ((isWorking || isAgentReview) && sessionDead) || isStuck || isCancelled;
+    // Allow: working/agent-review/reviewing with dead session, stuck, cancelled
+    const canRespawn = ((isWorking || isAgentReview || isReviewing) && sessionDead) || isStuck || isCancelled;
     if (!canRespawn) {
       this.data.error = "Cannot respawn this task.";
       this.emit();

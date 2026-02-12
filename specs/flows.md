@@ -223,8 +223,8 @@ Agent reads TASK.md, checks status
 ┌──────────────┬────────────────┬──────────────┬──────────────┐
 reviewing      stuck/working     clarification   agent-review
 ↓              ↓                 ↓               ↓
-Stop           Continue work     Wait for user   Respawn review
-                                                 agent (same round)
+Ready for      Continue work     Wait for user   Respawn review
+human review                                     agent (same round)
 ```
 
 **Session states:**

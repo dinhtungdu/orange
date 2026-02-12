@@ -55,7 +55,7 @@ Status: ${task.status}
 Review round: ${task.review_round}
 
 Check status and act:
-- reviewing → stop, nothing to do
+- reviewing → ready for human review, assist with any questions or changes the reviewer requests
 - agent-review → stop, review agent will be spawned separately
 - stuck → continue implementation, then set --status agent-review
 - clarification → wait for user input
