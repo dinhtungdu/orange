@@ -8,10 +8,9 @@ Agent orchestration system. Dashboard manages tasks, agents work in parallel, au
 - [Data & Storage](./data.md) — files, formats, task status
 - [CLI Commands](./cli.md) — project, task, workspace commands
 - [Task Manager](./dashboard.md) — task list, keybindings, polling
-- [Workspace View](./workspace-view.md) — terminal + sidebar HUD (primary working view)
+- [Workspace](./workspace.md) — pool (worktree management) + view (terminal + sidebar HUD)
 - [Agent Lifecycle](./agent.md) — spawn, prompt, self-review, hooks
 - [Harness Configuration](./harness.md) — multi-harness support (pi, opencode, claude, codex)
-- [Workspace Pool](./workspace.md) — worktree management
 - [Logging](./logging.md) — structured logging, debugging
 - [Testing](./testing.md) — setup, strategy
 - [GitHub](./github.md) — PR creation, merge detection
@@ -46,7 +45,7 @@ Task sessions (one per task):
 
 **Task Manager** — manage tasks: create, spawn, cancel, merge, monitor status. See [dashboard.md](./dashboard.md).
 
-**Workspace** — primary working view for a single task. Terminal + sidebar HUD. Users spend most time here. See [workspace-view.md](./workspace-view.md).
+**Workspace** — isolated environment for a task: pool management + view (terminal + sidebar HUD). Users spend most time in the view. See [workspace.md](./workspace.md).
 
 **Session naming:** `<project>/<branch>` for task sessions.
 

@@ -1,6 +1,6 @@
 # Task Manager
 
-Task list and management. One of two dashboard modules — the other is [Workspace View](./workspace-view.md) where users spend most of their time working with agents.
+Task list and management. One of two dashboard modules — the other is [Workspace](./workspace.md#view) where users spend most of their time working with agents.
 
 ## Scoping
 
@@ -177,7 +177,7 @@ Status colors defined in `state.ts` (`STATUS_COLOR`).
 
 ## Workspace View (separate module)
 
-Press `w` on a task with a live session to switch to the workspace module. See [workspace-view.md](./workspace-view.md). `Esc` from workspace returns here.
+Press `w` on a task with a live session to switch to the workspace view. See [workspace.md](./workspace.md#view). `Esc` from workspace returns here.
 
 ## Polling & Updates
 
