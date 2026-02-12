@@ -84,6 +84,8 @@ Mock implementation for testing (no real tmux needed).
 
 Primary working view for a task. Users spend most of their time here — interacting with the agent's terminal while a persistent sidebar provides live workspace context.
 
+Implementation details: [viewer.md](./viewer.md) (terminal rendering, sidebar data pipeline, input handling, component structure).
+
 Entry: press `w` on a selected task from the [Task Manager](./dashboard.md). Only available when the task has a live tmux session. `Esc` returns to the task manager.
 
 ### Layout
