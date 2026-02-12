@@ -1,50 +1,26 @@
 # Workspace
 
-Isolated environment for a task: code, agent session, and a view to interact with it. Currently backed by git worktrees; will support containers later.
-
-Two concerns:
-- **Pool** — allocate, release, reuse workspaces
-- **View** — terminal + sidebar HUD (primary working view in the dashboard)
+Isolated environment for a task. Two concerns:
+- **Pool** — allocate, release, reuse worktrees
+- **View** — terminal + sidebar HUD (primary working view)
 
 ## Pool
 
+Git worktrees, one per active task. Naming: `<project>--<n>`.
+
 ### Initialization
 
-**Explicit:** `orange workspace init` creates worktrees based on `pool_size`.
+**Lazy** (default): worktrees created on-demand at first spawn.
+**Explicit**: `orange workspace init` pre-creates based on `pool_size`.
 
-**Lazy (automatic):** Worktrees created on-demand when spawning if none available.
-
-Each workspace is a git worktree created with detached HEAD at `origin/<default_branch>`. Detached because git doesn't allow the same branch checked out in multiple worktrees.
-
-Harness-specific setup happens at spawn time (not worktree creation) based on task's harness. See [harness.md](./harness.md) for details.
-
-### Pool State
-
-```
-~/orange/workspaces/
-├── orange--1/           # bound to: orange/dark-mode
-├── orange--2/           # available
-├── coffee--1/           # bound to: coffee/login-fix
-└── .pool.json
-```
-
-`.pool.json`:
-```json
-{
-  "workspaces": {
-    "orange--1": {"status": "bound", "task": "orange/dark-mode"},
-    "orange--2": {"status": "available"},
-    "coffee--1": {"status": "bound", "task": "coffee/login-fix"}
-  }
-}
-```
+Each worktree: detached HEAD at `origin/<default_branch>`. Detached because git doesn't allow the same branch in multiple worktrees.
 
 ### Acquisition
 
 1. Lock pool file
-2. Find first available workspace for project
-3. If none available and under pool_size, create new worktree
-4. Mark as bound
+2. Find available workspace for project
+3. If none and under pool_size, create new worktree
+4. Mark as bound to task
 5. Release lock
 
 Throws if pool exhausted.
@@ -52,635 +28,208 @@ Throws if pool exhausted.
 ### Release
 
 1. Lock pool file
-2. Fail if workspace has uncommitted changes
-3. Fetch latest, reset to `origin/<default_branch>`, clean untracked files
-4. Remove `TASK.md` symlink (excluded from git, so `git clean` doesn't remove it)
+2. Fail if uncommitted changes
+3. Fetch, reset to `origin/<default_branch>`, clean untracked
+4. Remove TASK.md symlink
 5. Mark as available
 6. Release lock
-7. Auto-spawn next pending task for the project (FIFO)
 
-### Pool Notes
+Release never auto-spawns. The [spawn_next hook](./workflow.md#hooks) handles that explicitly.
+
+### Configuration
 
 - Pool size per project (default: 2)
 - Acquired on spawn, released on merge/cancel
-- **Reused, not deleted** — branch reset on release
-- File lock prevents race conditions
-- Naming convention: `<project>--<number>`
-
-### tmux Abstraction
-
-Interface for session management:
-- `newSession(name, cwd, command)` — create detached session
-- `killSession(name)` — destroy session
-- `sessionExists(name)` — check if alive
-- `capturePane(session, lines)` — capture terminal output
-- `isAvailable()` — check if tmux is installed
-
-Session naming: `<project>/<branch>`
-
-Mock implementation for testing (no real tmux needed).
+- Reused, not deleted
 
 ## View
 
-Primary working view for a task. Users spend most of their time here — interacting with the agent's terminal while a persistent sidebar provides live workspace context.
+Primary working view. Users spend most time here — interacting with the agent's terminal while a sidebar provides live workspace context.
 
-Entry: press `w` on a selected task from the [Task Manager](./dashboard.md). Only available when the task has a live tmux session. `Esc` returns to the task manager.
+Entry: `w` on a task with a live session in the [task manager](./task-manager.md). `Esc` returns to the task manager.
 
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ WorkspaceViewer                                     │
-│                                                     │
-│  ┌──── Sidebar ─────┐  ┌──── TerminalPanel ──────┐ │
-│  │ SidebarRenderer   │  │ GhosttyTerminal         │ │
-│  │ (TextRenderable)  │  │ Renderable (stateless)  │ │
-│  │                   │  │                          │ │
-│  │ ← DataPipeline    │  │ ← tmux capture-pane     │ │
-│  │   (poll + watch)  │  │ → tmux send-keys         │ │
-│  │                   │  │ ← tmux display (cursor)  │ │
-│  └───────────────────┘  └──────────────────────────┘ │
-│                                                     │
-│  ┌──── FocusManager ────────────────────────────┐   │
-│  │ terminal | sidebar                           │   │
-│  │ routes keyboard input to active panel        │   │
-│  └──────────────────────────────────────────────┘   │
-│                                                     │
-│  ┌──── Footer ──────────────────────────────────┐   │
-│  │ context-aware keybindings per focus state     │   │
-│  └──────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│ WorkspaceViewer                                    │
+│                                                    │
+│  ┌─── Sidebar ────┐  ┌─── TerminalPanel ────────┐ │
+│  │ Data pipeline   │  │ ghostty / fallback ANSI  │ │
+│  │ (poll + watch)  │  │ tmux capture + send-keys │ │
+│  └─────────────────┘  └─────────────────────────┘ │
+│                                                    │
+│  ┌─── FocusManager ─────────────────────────────┐  │
+│  │ terminal (default) | sidebar                  │  │
+│  └───────────────────────────────────────────────┘  │
+│                                                    │
+│  ┌─── Footer ───────────────────────────────────┐  │
+│  │ keybindings per focus state                   │  │
+│  └───────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────┘
 ```
 
 ### Layout
 
 ```
 ┌─────────── 30% ──────────┬──────────────── 70% ─────────────────┐
-│ coffee/login-fix         │ Session: coffee/login-fix             │
-│ Status: working   ● live │                                       │
-│ Harness: pi              │ > Analyzing the OAuth redirect...     │
-│ PR: #123 open ✓          │ > I'll fix the callback URL handler   │
-│ Commits: 3  +144 -12    │ > ...                                 │
+│ coffee/login-fix         │ > Analyzing the OAuth redirect...     │
+│ Status: working   ● live │ > I'll fix the callback URL handler   │
+│ Harness: pi              │ > ...                                 │
+│ PR: #123 open ✓          │                                       │
+│ Commits: 3  +144 -12    │                                       │
 │                          │                                       │
 │ ── Files (3) ──────────  │                                       │
 │  M src/auth/callback.ts  │                                       │
-│  M src/auth/oauth.ts     │                                       │
 │  A src/auth/mobile.ts    │                                       │
 │                          │                                       │
 │ ── History ────────────  │                                       │
 │  2m ago  status → working│                                       │
-│  5m ago  spawned (pi)    │                                       │
+│  5m ago  spawned         │                                       │
 │                          │                                       │
 │ ── Task ───────────────  │                                       │
-│  Fix OAuth redirect loop │                                       │
-│  on mobile Safari...     │                                       │
+│  Fix OAuth redirect...   │                                       │
 ├──────────────────────────┴───────────────────────────────────────┤
 │ Ctrl+\:sidebar  Ctrl+]:fullscreen                                │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-#### Layout Calculation
+**Dimensions:**
+- Sidebar: `floor(width * 0.3)` × `height - 1`
+- Terminal: remaining width × `height - 1`
+- Footer: full width × 1
+- tmux pane resized to match terminal dimensions exactly (mismatches cause wrapping artifacts)
 
-```
-Total width: W
-Total height: H
+**Small terminals** (width < 80 or height < 15): hide sidebar, terminal gets full width.
 
-Sidebar:  width = floor(W * 0.3), height = H - 1 (footer)
-Terminal: width = W - sidebar_width, height = H - 1 (footer)
-Footer:   width = W, height = 1
+### Sidebar
 
-tmux pane: cols = terminal_width - 2 (border padding)
-           rows = terminal_height
-```
+Read-only context HUD. Not interactive.
 
-The terminal panel dimensions (cols × rows) are passed to both ghostty and `tmux resize-pane`. They must stay in sync.
+**Sections:**
 
-#### Minimum Dimensions
+| Section | Content |
+|---------|---------|
+| Header | Task name, status + session icon, harness, PR info, commit stats |
+| Files | Changed files vs default branch (`M`/`A`/`D`/`R` prefix) |
+| History | Recent events from history.jsonl, newest first |
+| Task | First lines of TASK.md body, fills remaining height |
 
-If terminal width < 40 or height < 10, hide sidebar entirely — terminal gets full width. Small terminals shouldn't waste space on a sidebar.
+**Data pipeline:**
 
-```typescript
-const sidebarVisible = width >= 80 && height >= 15;
-const sidebarWidth = sidebarVisible ? Math.floor(width * 0.3) : 0;
-const terminalWidth = width - sidebarWidth;
-```
+| Data | Source | Refresh |
+|------|--------|---------|
+| Status, harness, task body | TASK.md | File watcher (immediate) |
+| History events | history.jsonl | File watcher (immediate) |
+| Session alive | tmux.sessionExists() | Poll 10s |
+| PR info | github.getPRStatus() | Poll 30s |
+| Commits, diff stats, changed files | git commands in workspace dir | Poll 10s |
 
-### Sidebar (30%)
+File watcher: chokidar, 100ms debounce. On watcher failure, falls back to 10s polling.
 
-Persistent context HUD for the task's workspace. Always visible while working in the terminal — this ambient awareness is the key advantage over raw tmux. Read-only, not interactive — no scrolling or selection within the sidebar.
+Git commands run in the task's workspace directory. If workspace unavailable, git sections show `(unavailable)`.
 
-#### Sections
+PR polling failure (rate limit, auth): increase interval to 60s, show stale data.
 
-**Header**
-- Task name: `project/branch`
-- Status + session state: `Status: working   ● live` / `Status: working   ✗ dead`
-- Harness: `Harness: pi`
-- PR: `PR: #123 open ✓` or `PR: none` (blank if no PR)
-- Stats: `Commits: 3  +144 -12`
+### Terminal Panel
 
-**Files**
-- Section header: `── Files (N) ──`
-- List of changed files vs default branch (git diff --name-status)
-- Prefix: `M` modified, `A` added, `D` deleted, `R` renamed
-- Truncated to fit sidebar width
-- If no changes: `(no changes)`
-- Max ~10 files shown, `+N more` if truncated
+Full agent terminal connected to the task's tmux session.
 
-**History**
-- Section header: `── History ──`
-- Recent events from `history.jsonl`, newest first
-- Format: `{relative time}  {event description}`
-- Events: spawned, status changes, review outcomes, PR created, crashes
-- Max ~5 entries shown
+**Rendering backends:**
+- **ghostty-opentui** (primary, optional dep): native VT emulator, full SGR support (16/256/RGB colors, all text attributes)
+- **Fallback ANSI parser**: basic SGR handling when ghostty unavailable
 
-**Task**
-- Section header: `── Task ──`
-- Task body from TASK.md (first ~10 lines, truncated)
-- If no body: `(no description)`
+Both consume `tmux capture-pane -e` output — a rendered screen dump where tmux has already processed all VT sequences.
 
-**Formatting rules:**
-- Session icon: `●` green (alive), `✗` red (dead)
-- Status colored per `STATUS_COLOR` map
-- File status prefixes: `M` yellow, `A` green, `D` red, `R` blue
-- Max 10 files, then `+N more`
-- Max 5 history entries, newest first
-- Task body truncated to fill remaining height
-- Section headers: dim gray with `──` line fill to sidebar width
+Cursor position from `tmux display -p`, rendered as highlight overlay.
 
-#### Data Pipeline
+**Capture loop:**
+1. `tmux capture-pane -e` for screen content
+2. Query cursor position
+3. Update terminal renderable
+4. Schedule next poll
 
-The sidebar aggregates data from multiple sources into a single rendered output.
-
-```typescript
-interface SidebarData {
-  // Header
-  taskName: string;           // "project/branch"
-  status: TaskStatus;
-  sessionAlive: boolean;
-  harness: Harness;
-  prInfo: string | null;      // "#123 open ✓" or null
-  commits: number;
-  linesAdded: number;
-  linesRemoved: number;
-
-  // Files
-  changedFiles: FileChange[];  // { status: "M"|"A"|"D"|"R", path: string }
-
-  // History
-  recentEvents: HistoryEntry[];
-
-  // Task
-  taskBody: string;            // first ~10 lines of TASK.md body
-
-  // Internal
-  workspacePath: string;       // resolved via getWorkspacePath(deps, task.workspace)
-}
-```
-
-All git commands run in the task's workspace directory: `getWorkspacePath(deps, task.workspace)`. If `task.workspace` is null (shouldn't happen for live tasks), git data is skipped and sidebar shows stale/empty values.
-
-| Field | Source | Refresh |
-|-------|--------|---------|
-| `taskName`, `status`, `harness` | TASK.md frontmatter | File watcher (immediate) |
-| `sessionAlive` | `tmux.sessionExists()` | Poll (10s) |
-| `prInfo` | `github.getPRStatus()` | Poll (30s) |
-| `commits`, `linesAdded/Removed` | `git.getCommitCount()`, `git.getDiffStats()` | Poll (10s) |
-| `changedFiles` | `git diff --name-status` | Poll (10s) |
-| `recentEvents` | `history.jsonl` | File watcher (immediate) |
-| `taskBody` | TASK.md body | File watcher (immediate) |
-
-#### File Watcher
-
-Uses chokidar (already a dependency) to watch:
-- `~/orange/tasks/<project>/<taskId>/TASK.md` — status, body changes
-- `~/orange/tasks/<project>/<taskId>/history.jsonl` — new events
-
-On change (100ms debounce): re-read file, update `SidebarData`, re-render.
-
-#### Git Data
-
-New method on `GitExecutor`:
-
-```typescript
-interface GitExecutor {
-  // ... existing methods ...
-
-  /** Get list of changed files vs a base ref */
-  getChangedFiles(cwd: string, base: string): Promise<FileChange[]>;
-}
-
-interface FileChange {
-  status: "M" | "A" | "D" | "R";
-  path: string;
-}
-```
-
-Implementation: `git diff --name-status <base>...HEAD`
-
-### Terminal Panel (70%)
-
-Full agent terminal. Connects to the task's `tmux_session`.
-
-#### Two Rendering Backends
-
-**ghostty-opentui** (primary, optional dep) — Uses Ghostty's Zig VT emulator compiled as a native addon. Fed `capture-pane -e` output, it produces correctly rendered cells with full SGR support: 16/256/RGB colors, bold, italic, underline, dim, inverse, strikethrough.
-
-**Custom ANSI parser** (fallback) — The existing `TerminalViewer` in `terminal.ts` with `ansi-parser.ts`. Handles basic SGR sequences. Used when `ghostty-opentui` is not installed.
-
-Both backends consume `tmux capture-pane -e` output, which is a **rendered screen dump** — tmux has already processed all VT sequences (cursor movement, scroll regions, alternate screen) and re-encodes the final screen state with SGR color codes only.
-
-| Feature | Handled by | Backend matters? |
-|---------|-----------|-----------------|
-| Colors (16/256/RGB) | SGR in capture output | Yes — ghostty handles edge cases the custom parser misses |
-| Text attributes (bold, italic, etc.) | SGR in capture output | Yes — ghostty handles all attributes correctly |
-| Cursor position | `tmux display -p` (separate query) | No — neither backend gets cursor from capture output |
-| Alternate screen (vim, less) | tmux (already switched) | No — capture-pane shows current screen |
-| Scroll regions | tmux (already processed) | No — capture-pane shows final result |
-
-**Cursor position** always comes from tmux via `queryPaneInfo()`, not from the rendering backend. Rendered as a highlight overlay at the correct position.
-
-The ghostty advantage is **rendering correctness**: proper handling of complex SGR sequences (256-color, RGB, combined attributes) where the hand-rolled parser has gaps.
-
-```typescript
-let TerminalComponent: typeof GhosttyTerminalRenderable | null = null;
-try {
-  const mod = await import("ghostty-opentui/terminal-buffer");
-  TerminalComponent = mod.GhosttyTerminalRenderable;
-} catch {
-  // Fall back to existing TextRenderable + ansi-parser
-}
-```
-
-No code deleted — `terminal.ts` and `ansi-parser.ts` remain as fallback path.
-
-#### Capture Loop
-
-```typescript
-async function poll(): Promise<void> {
-  // 1. Capture screen state (with ANSI SGR codes)
-  const output = await tmux.capturePaneAnsi(session, scrollbackLines);
-
-  // 2. Update terminal content
-  if (output !== null && output !== lastOutput) {
-    terminal.ansi = output;
-    lastOutput = output;
-  }
-
-  // 3. Update cursor position (separate query)
-  const info = await tmux.queryPaneInfo(session);
-  if (info) {
-    terminal.highlights = info.cursorVisible ? [{
-      line: info.cursorY,
-      start: info.cursorX,
-      end: info.cursorX + 1,
-      backgroundColor: "#FFFFFF",
-    }] : [];
-  }
-
-  // 4. Schedule next poll
-  schedulePoll(calculateInterval());
-}
-```
-
-#### Adaptive Polling
+**Adaptive polling:**
 
 | State | Interval | Trigger |
 |-------|----------|---------|
-| Active input | 50ms | User typed within last 2s |
-| Idle | 200ms | No input for 2–10s |
-| Background | 500ms | No input for 10s+ |
-| Post-keystroke | 20ms | Immediate after sending key to tmux |
+| Active | 50ms | User typed within last 2s |
+| Idle | 500ms | No recent input |
+| Post-keystroke | 20ms | Immediate after sending key |
 
-Timer resets on every keystroke.
+**Resize:** Debounce 100ms, then resize tmux pane → update terminal dimensions → immediate capture.
 
-#### Resize
-
-When the viewer panel resizes:
-
-```typescript
-// 1. Resize tmux pane to match (tmux redraws content)
-await tmux.resizePane(session, newCols, newRows);
-
-// 2. Update ghostty component dimensions
-terminal.cols = newCols;
-terminal.rows = newRows;
-
-// 3. Trigger immediate capture (tmux has redrawn)
-await poll();
-```
-
-The tmux pane must match the viewer dimensions exactly. Mismatched sizes cause wrapping artifacts and broken full-screen apps (vim, htop).
-
-#### Session Death
-
-If the tmux session dies while the workspace viewer is active:
-
-1. Capture poll returns null / throws → increment failure count
-2. After 3 consecutive capture failures → show `[Session ended]`
-3. Sidebar updates session icon to `✗ dead`
-4. Keys no longer forwarded (nothing to forward to)
-5. User presses `Esc` → returns to task manager
-6. Task manager shows task as crashed, user can respawn
-
-No auto-exit on session death — user might want to read the sidebar context.
+**Session death:** 3 consecutive capture failures → show `[Session ended]`, mark session crashed. Keys stop forwarding. User presses Esc to return.
 
 ### Focus Modes
 
-Two focus states: **terminal** (default) and **sidebar**.
+Two states: **terminal** (default on entry) and **sidebar**.
 
-#### Terminal focused (default on entry)
+Focus switching works regardless of session state — can switch to sidebar to read context even when session is dead.
 
-All keys forwarded to the tmux session via `tmux.sendKeys()`. This is where users spend most of their time.
+**Terminal focused** — all keys forwarded to tmux via `send-keys`:
 
-**Intercepted keys** (not forwarded):
-
-| Key | Action |
-|-----|--------|
+| Intercepted key | Action |
+|-----------------|--------|
 | Ctrl+\\ | Switch focus to sidebar |
-| Ctrl+] | Full-screen tmux attach (escape hatch, exits dashboard) |
+| Ctrl+] | Full-screen tmux attach (exits dashboard) |
 
-**Key forwarding pipeline:**
+Key mapping for send-keys:
 
-```
-User keystroke
-  → opentui keypress event
-  → FocusManager routes to terminal
-  → Map to tmux key name
-  → tmux.sendKeys(session, key)
-  → Poll immediately (20ms) to show result
-```
-
-#### Key Mapping
-
-Extend the existing `sendKeyToTmux` from `terminal.ts`. Critical mappings:
-
-| Input | tmux send-keys |
-|-------|---------------|
-| Printable char | literal via `send-keys -l` |
-| Enter | `Enter` |
+| Input | tmux key |
+|-------|----------|
+| Printable chars | `send-keys -l` (literal) |
+| Enter, Tab, Escape, Space | Named keys |
 | Backspace | `BSpace` |
-| Tab | `Tab` |
-| Escape | `Escape` |
-| Arrow keys | `Up`, `Down`, `Left`, `Right` |
-| Ctrl+C | `C-c` |
-| Ctrl+D | `C-d` |
-| Ctrl+Z | `C-z` |
+| Arrow keys | `Up`/`Down`/`Left`/`Right` |
 | Ctrl+A..Z | `C-{letter}` |
-| Space | `Space` |
-| Home/End | `Home`, `End` |
-| Page Up/Down | `PageUp`, `PageDown` |
-| Delete | `DC` |
-| F1–F12 | `F1`–`F12` |
+| Home/End, PgUp/PgDn | Named keys |
+| F1–F12 | Named keys |
 
-#### Limitations of send-keys
+Unmapped keys (Shift+arrows, Alt combos, mouse): dropped silently. `Ctrl+]` full-screen attach is the escape hatch for anything that doesn't work through send-keys.
 
-`tmux send-keys` is a tmux command (process fork per keystroke), not raw PTY input. Known limitations:
-
-- **Paste**: multi-character input must use `send-keys -l` (literal mode). For large pastes, buffer and send as a single `send-keys -l` call.
-- **Alt+key**: sends `ESC` followed by key. Workaround: send `Escape` then the key as separate calls, or use `send-keys -H` with hex codes.
-- **Typing speed**: each keystroke = one `tmux send-keys` invocation. Fine for interactive use but not for bulk input.
-- **Mouse events**: not supported through send-keys. Mouse support would require raw PTY passthrough.
-
-`Ctrl+]` full-screen attach is the escape hatch for any interaction that doesn't work through the key forwarding layer.
-
-#### Sidebar focused
-
-Terminal visible but keys not forwarded. Used to read context or navigate out.
+**Sidebar focused** — keys not forwarded to tmux:
 
 | Key | Action |
 |-----|--------|
-| Tab, Enter | Return focus to terminal |
-| Esc | Exit workspace view, return to task manager |
+| Tab / Enter | Return focus to terminal |
+| Esc | Exit to task manager |
 
-#### Full-Screen Attach
-
-`Ctrl+]` exits the dashboard entirely and attaches to the raw tmux session:
-
-```typescript
-async function fullScreenAttach(session: string): Promise<void> {
-  // 1. Destroy viewer, cleanup timers
-  viewer.destroy();
-  // 2. Destroy opentui renderer (restores terminal)
-  renderer.destroy();
-  // 3. Exec tmux attach (replaces process)
-  await tmux.attachOrCreate(session, process.cwd());
-  // 4. When user detaches (Ctrl+B D), process exits
-  // Dashboard must be restarted — this is an escape hatch
-}
-```
-
-### Footer
+**Footer:**
 
 | Focus | Footer |
 |-------|--------|
 | Terminal | `Ctrl+\:sidebar  Ctrl+]:fullscreen` |
 | Sidebar | `Tab:terminal  Esc:dashboard` |
 
-### Integration with Dashboard
+### Integration
 
-#### Entry Point
+**Entry:** `w` key in task manager when task has live session → switch to workspace mode.
 
-From `dashboard/index.ts`, when user presses `w` on a task with a live session:
+**Exit:** Esc from sidebar → switch back to task manager, refresh task list.
 
-```typescript
-case "w": {
-  const task = selectedTask();
-  if (!task?.tmux_session) break;
-  const sessionAlive = await deps.tmux.sessionExists(task.tmux_session);
-  if (!sessionAlive) break;
+**Mode switching:** Dashboard renders one module at a time. opentui switches root container.
 
-  await workspaceViewer.enter(task);
-  dashboardMode = "workspace";  // hide task list, show viewer
-  break;
-}
-```
-
-#### Exit
-
-When viewer fires `onExit` (user pressed `Esc` from sidebar focus):
-
-```typescript
-workspaceViewer.onExit = () => {
-  dashboardMode = "taskList";  // show task list, hide viewer
-  refreshTasks();
-};
-```
-
-#### Mode Switching
-
-Dashboard has two rendering modes:
-
-```typescript
-type DashboardMode = "taskList" | "workspace";
-```
-
-- `taskList`: existing task manager UI (full screen)
-- `workspace`: viewer takes over (sidebar + terminal, full screen)
-
-Only one is visible at a time. The opentui layout switches between two root containers based on mode.
-
-#### Render Batching
-
-Three async data sources update the UI: terminal poll, sidebar poll, file watcher. opentui's `CliRenderer` handles batching — it renders at a fixed FPS (default 30), collecting all property changes since the last frame. Multiple updates between frames produce a single render.
+**Polling coordination:** Task manager polling (health checks, PR sync) continues while workspace view is active. Workspace view runs its own sidebar + terminal polls independently.
 
 ### Lifecycle
 
-#### Enter
+**Enter:** Create renderables → calculate dimensions → start sidebar polls/watchers → connect terminal capture loop → set focus to terminal.
 
-```
-1. Create sidebar + terminal panel + footer renderables
-2. Add to container (flex column: [flex row: sidebar | terminal] + footer)
-3. Calculate dimensions
-4. Resolve workspace path: getWorkspacePath(deps, task.workspace)
-5. sidebar.start(task, sidebarWidth, height - 1)
-6. terminal.connect(session, termCols, termRows)
-7. Set focus = "terminal"
-8. Update footer: "Ctrl+\:sidebar  Ctrl+]:fullscreen"
-```
+**Active:** Terminal poll (adaptive) + sidebar poll (10s) + sidebar file watcher (immediate). opentui batches renders at its fixed FPS.
 
-#### Poll Cycle (while active)
+**Exit:** Stop terminal capture → stop sidebar watchers/polls → hide container → callback to task manager.
 
-```
-Terminal poll (adaptive 20–500ms):
-  1. tmux.capturePaneAnsi(session, scrollback)
-  2. tmux.queryPaneInfo(session) for cursor
-  3. Update ghostty.ansi + highlights
-  4. If capture fails → increment consecutiveFailures
-  5. If consecutiveFailures >= 3 → show [Session ended], mark dead
-
-Sidebar poll (10s):
-  1. tmux.sessionExists(session)
-  2. git.getCommitCount(workspacePath, base)
-  3. git.getDiffStats(workspacePath, base)
-  4. git.getChangedFiles(workspacePath, base)
-  5. Update sidebar data, re-render
-
-Sidebar file watcher (immediate, 100ms debounce):
-  1. TASK.md changed → re-read frontmatter + body
-  2. history.jsonl changed → re-read last 5 events
-  3. Update sidebar data, re-render
-```
-
-#### Exit
-
-```
-1. terminal.disconnect()  — stop capture loop, cleanup timers
-2. sidebar.stop()          — stop watcher + poll
-3. Hide container
-4. Fire onExit callback
-```
-
-#### Destroy
-
-```
-1. exit() if active
-2. Destroy all renderables
-3. Null out references
-```
-
-### View State
-
-```
-workspaceMode:
-  active: boolean
-  focus: "terminal" | "sidebar"
-  task: Task              # the task being viewed
-  changedFiles: string[]  # git diff file list
-  history: HistoryEntry[] # recent history events
-```
-
-#### Transitions
-
-```
-Task Manager ──w──> Workspace view (terminal focus)
-                    │
-         Ctrl+\ ────┼──> Sidebar focus
-                    │         │
-         Tab/Enter ◄─┼─────────┘
-                    │         │
-         Esc ◄───────┼─────────┘  (exit to task manager)
-                    │
-         Ctrl+] ────┼──> Full-screen attach (exit dashboard)
-```
-
-### Implementation
-
-#### Component Structure
-
-```typescript
-class WorkspaceViewer {
-  private sidebar: SidebarRenderer;
-  private terminal: TerminalPanel;
-  private footer: TextRenderable;
-  private focus: ViewerFocus = "terminal";
-  private task: Task | null = null;
-  private container: BoxRenderable;
-
-  constructor(renderer: CliRenderer, deps: Deps) { ... }
-
-  async enter(task: Task): Promise<void>;
-  exit(): void;
-  async handleKey(key: KeyEvent): Promise<boolean>;
-  async resize(width: number, height: number): Promise<void>;
-  destroy(): void;
-
-  onExit?: () => void;
-  onAttach?: (session: string) => void;
-}
-
-class SidebarRenderer {
-  private data: SidebarData;
-  private text: TextRenderable;
-  private watcher: FSWatcher | null = null;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-
-  constructor(renderer: CliRenderer, deps: Deps) { ... }
-
-  start(task: Task, width: number, height: number): void;
-  stop(): void;
-  async refresh(): Promise<void>;
-  getContainer(): BoxRenderable;
-}
-
-class TerminalPanel {
-  private ghostty: GhosttyTerminalRenderable | null;
-  private fallback: TerminalViewer | null;
-  private session: string | null = null;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastActivityTime: number = 0;
-  private consecutiveFailures: number = 0;
-
-  constructor(renderer: CliRenderer, deps: Deps) { ... }
-
-  async connect(session: string, cols: number, rows: number): Promise<void>;
-  disconnect(): void;
-  async sendKey(key: KeyEvent): Promise<void>;
-  async resize(cols: number, rows: number): Promise<void>;
-  get alive(): boolean;  // 3 consecutive failures = dead
-  getContainer(): BoxRenderable;
-}
-```
-
-#### Files
-
-```
-src/dashboard/
-├── index.ts                  # Dashboard orchestrator (adds mode switching)
-├── state.ts                  # Data fetching, polling, health checks
-├── viewer.ts                 # WorkspaceViewer (layout, focus, lifecycle, footer)
-├── viewer-sidebar.ts         # SidebarRenderer (sidebar data + rendering)
-├── viewer-terminal.ts        # TerminalPanel (ghostty wrapper + capture loop)
-├── terminal.ts               # Existing TerminalViewer (becomes fallback)
-└── ansi-parser.ts            # Existing ANSI parser (used by fallback)
-```
+**Full-screen attach (Ctrl+]):** Destroy viewer → destroy renderer → exec `tmux attach`. Exits dashboard entirely — escape hatch for interactions that don't work through send-keys.
 
 ### Error Handling
 
 | Error | Behavior |
 |-------|----------|
-| tmux capture fails once | Retry on next poll cycle, increment failure count |
-| tmux capture fails 3× consecutive | Show `[Session ended]`, mark dead |
-| git commands fail | Sidebar shows stale data, no crash |
-| File watcher error | Fall back to poll-only (10s) for affected files |
-| ghostty import fails | Use fallback TerminalViewer |
-| Resize to tiny dimensions | Hide sidebar, terminal gets full width |
+| tmux capture fails once | Retry next poll, increment failure count |
+| 3 consecutive capture failures | `[Session ended]`, mark crashed |
+| git commands fail | Sidebar shows stale data or `(unavailable)` |
+| File watcher error | Fall back to 10s polling |
+| ghostty import fails | Use fallback ANSI parser |
+| Terminal too small | Hide sidebar, full-width terminal |
+| PR polling fails | Increase interval to 60s |

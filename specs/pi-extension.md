@@ -149,6 +149,8 @@ Matches the `Task` type from `src/core/types.ts`:
   "branch": "fix-auth",
   "harness": "pi",
   "status": "working",
+  "review_round": 0,
+  "crash_count": 0,
   "workspace": "myproject--1",
   "tmux_session": "myproject/fix-auth",
   "summary": "Fix auth redirect",
