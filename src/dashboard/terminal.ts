@@ -2,7 +2,7 @@
  * Terminal viewer component for Orange dashboard.
  *
  * Renders tmux session output inside the TUI with adaptive polling.
- * Uses TextBufferRenderable for plain text rendering.
+ * Uses TextRenderable with ANSI color pass-through.
  *
  * For full VT emulation with ghostty-opentui, see terminal-ghostty.ts.
  */
@@ -13,6 +13,7 @@ import {
   type CliRenderer,
 } from "@opentui/core";
 import type { TmuxExecutor } from "../core/types.js";
+import { ansiToStyledText } from "./ansi-parser.js";
 
 // Polling intervals (adaptive based on activity)
 const POLL_FAST = 50; // During active input
@@ -242,8 +243,8 @@ export class TerminalViewer {
     const currentGen = this.state.pollGeneration;
 
     try {
-      // Capture pane output (plain text)
-      const output = await this.tmux.capturePaneSafe(this.state.session, SCROLLBACK_LINES);
+      // Capture pane output (with ANSI color codes)
+      const output = await this.tmux.capturePaneAnsiSafe(this.state.session, SCROLLBACK_LINES);
 
       // Check if still active and same generation
       if (!this.state.active || currentGen !== this.state.pollGeneration) {
@@ -255,7 +256,7 @@ export class TerminalViewer {
         // Show last N lines that fit in the view
         const lines = output.split("\n");
         const visibleLines = lines.slice(-this.termHeight);
-        this.content.content = visibleLines.join("\n");
+        this.content.content = ansiToStyledText(visibleLines.join("\n"));
       }
 
       // Query cursor position
