@@ -322,6 +322,176 @@ Status: cancelled (terminal, not respawnable)
               (review fail → fix → review again)
 ```
 
+## Transition Enforcement
+
+Autonomous state advancement with deterministic gating. Agents produce artifacts and signal intent, the orchestrator validates and executes transitions.
+
+**Principles:**
+1. Agents write artifacts, orchestrator gates transitions — agents never decide their own fate
+2. Artifact-gated — transitions require specific sections in TASK.md before they're allowed
+3. Two advancement paths — CLI commands (synchronous, agent-initiated) and exit monitoring (asynchronous, orchestrator-initiated)
+4. Deterministic parsing — orchestrator reads TASK.md sections, doesn't trust agent claims
+
+### Transition Map
+
+Valid transitions. Any transition not in this map is rejected.
+
+```
+pending       → working, clarification, cancelled
+clarification → working, cancelled
+working       → agent-review, clarification, stuck, cancelled
+agent-review  → reviewing, working, stuck, cancelled
+reviewing     → done, cancelled
+stuck         → working, agent-review, cancelled
+done          → (terminal)
+cancelled     → (terminal)
+```
+
+Enforced in `orange task update --status`. Reject with error if transition is illegal.
+
+### Artifact Gates
+
+Certain transitions require artifacts to exist in TASK.md before they're allowed. The orchestrator parses the markdown body — it doesn't trust that the agent "said" it wrote something.
+
+| Transition | Required Artifact | Validation |
+|------------|-------------------|------------|
+| `working → agent-review` | `## Handoff` section | Section exists and is non-empty |
+| `agent-review → reviewing` | `## Review` with PASS | Section exists, verdict line contains `PASS` |
+| `agent-review → working` | `## Review` with FAIL | Section exists, verdict line contains `FAIL` |
+| `agent-review → stuck` | `## Review` with FAIL | Section exists, verdict line contains `FAIL` (round ≥ 2) |
+
+All other transitions have no artifact gate (they're gated by status alone).
+
+#### Artifact Parsing
+
+Parse TASK.md body (below frontmatter) for sections:
+
+```typescript
+interface TaskArtifacts {
+  hasHandoff: boolean;      // ## Handoff section exists and non-empty
+  hasReview: boolean;       // ## Review section exists and non-empty
+  reviewVerdict: "pass" | "fail" | null;  // extracted from ## Review
+}
+```
+
+**Verdict extraction**: Scan `## Review` section for first line matching `/\b(PASS|FAIL)\b/i`. This is the verdict. If no match, verdict is `null` (treated as incomplete review).
+
+#### Gate Enforcement
+
+Validation runs in two places:
+
+1. **CLI commands** (`orange task update --status`, `orange task complete`) — validate before writing status
+2. **Exit monitoring** (dashboard health check) — validate before auto-advancing
+
+On validation failure:
+- CLI: print error, exit non-zero (agent sees the error, can fix and retry)
+- Exit monitoring: treat as crash (no artifact = agent didn't finish properly)
+
+### Exit Monitoring
+
+Dashboard health check (30s poll) detects when agent processes die. When a tmux session is gone but the task is in an active state, the orchestrator reads TASK.md and applies deterministic rules.
+
+#### Detection
+
+Already implemented in `captureOutputs()`:
+- `tmux list-sessions` → compare against tasks with `tmux_session` set
+- Session gone + task in active state → dead session detected
+
+#### Auto-Advance Rules
+
+When a dead session is detected for a task:
+
+**Status: `working`**
+```
+Parse TASK.md:
+  has ## Handoff?
+    yes → auto-transition to agent-review, spawn review agent
+    no  → crash
+      crash_count >= 2? → transition to stuck
+      else → stay working, mark dead in UI (user can respawn)
+```
+
+**Status: `agent-review`**
+```
+Parse TASK.md:
+  has ## Review with verdict?
+    PASS → auto-transition to reviewing
+    FAIL + round < 2 → auto-transition to working, spawn worker
+    FAIL + round >= 2 → auto-transition to stuck
+    no verdict → crash
+      crash_count >= 2? → transition to stuck
+      else → stay agent-review, mark dead in UI, auto-respawn review agent
+```
+
+**Status: `clarification`** — No auto-advance. Mark dead in UI. User must respawn manually.
+
+**Status: `reviewing`** — No auto-advance. Mark dead in UI. Human review needed.
+
+**Status: `stuck`** — No auto-advance. Mark dead in UI. Needs human intervention.
+
+#### Auto-Advance Execution
+
+```
+1. Parse TASK.md, validate artifacts
+2. Update task status (same as CLI path)
+3. Log history event: { type: "auto.advanced", from, to, reason }
+4. Spawn next agent if needed (review agent or worker)
+5. Clear dead session marker
+```
+
+Reuses the same transition logic as CLI commands — validation, side effects, history logging.
+
+### Crash Tracking
+
+New field in TASK.md frontmatter:
+
+```yaml
+crash_count: 0    # reset on each successful status transition
+```
+
+**Increment**: when agent process exits without producing required artifacts.
+
+**Reset**: on any successful status transition (the agent did its job).
+
+**Threshold**: 2 crashes in same status → auto-transition to `stuck`.
+
+History event:
+```jsonl
+{"type": "agent.crashed", "timestamp": "...", "status": "working", "crash_count": 1, "reason": "process exited without ## Handoff"}
+```
+
+### Implementation
+
+#### Changes by File
+
+**`src/core/types.ts`**
+- Add `crash_count: number` to `Task` interface
+
+**`src/core/state.ts`**
+- Add `crash_count` to TASK.md frontmatter serialization
+- Default to 0 on read
+
+**`src/core/transitions.ts`** (new)
+- `ALLOWED_TRANSITIONS` map
+- `ARTIFACT_GATES` map
+- `validateTransition(task, newStatus): { valid: boolean; error?: string }`
+- `parseTaskArtifacts(taskMdBody: string): TaskArtifacts`
+- `extractReviewVerdict(reviewSection: string): "pass" | "fail" | null`
+
+**`src/cli/commands/task.ts`**
+- `updateTask`: call `validateTransition()` before applying status change
+- `completeTask`: call `validateTransition()` before applying
+- Reset `crash_count` to 0 on successful status transition
+
+**`src/dashboard/state.ts`**
+- `captureOutputs()` → extend with auto-advance logic
+- On dead session detection: call `autoAdvance(task)` instead of just marking dead
+- `autoAdvance(task)`:
+  1. Parse TASK.md artifacts
+  2. Apply exit monitoring rules
+  3. If auto-advancing: transition + spawn
+  4. If crash: increment crash_count, save, check threshold
+
 ## Future: Delegation Flow (Phase 2)
 
 Worker breaks down large task into sub-tasks.
