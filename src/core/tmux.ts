@@ -320,6 +320,22 @@ export class RealTmux implements TmuxExecutor {
       throw new Error(`Failed to rename tmux session '${oldName}': ${stderr}`);
     }
   }
+
+  async sendLiteral(session: string, text: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "send-keys",
+      "-t",
+      session,
+      "-l",
+      text,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to send literal to session '${session}': ${stderr}`
+      );
+    }
+  }
 }
 
 /**
@@ -477,6 +493,14 @@ export class MockTmux implements TmuxExecutor {
     }
     this.sessions.delete(oldName);
     this.sessions.set(newName, session);
+  }
+
+  async sendLiteral(session: string, text: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[literal: ${text}]`);
   }
 
   /**

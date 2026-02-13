@@ -1,41 +1,42 @@
 /**
- * Terminal viewer component for Orange dashboard.
+ * Terminal panel for Orange workspace view.
  *
- * Renders tmux session output inside the TUI with adaptive polling.
- * Uses TextRenderable with ANSI color pass-through.
+ * Renders tmux session output with adaptive polling.
+ * Pure content panel — no UI chrome (workspace view manages layout).
  *
- * For full VT emulation with ghostty-opentui, see terminal-ghostty.ts.
+ * Rendering backends:
+ * - ghostty-opentui (primary, optional) — full VT emulator
+ * - Fallback ANSI parser — basic SGR handling
  */
 
 import {
-  BoxRenderable,
   TextRenderable,
   type CliRenderer,
 } from "@opentui/core";
 import type { TmuxExecutor } from "../core/types.js";
 import { ansiToStyledText } from "./ansi-parser.js";
 
-// Polling intervals (adaptive based on activity)
-const POLL_FAST = 50; // During active input
-const POLL_MEDIUM = 200; // After brief inactivity
-const POLL_SLOW = 500; // Extended inactivity
-const INACTIVITY_MEDIUM_THRESHOLD = 2000; // 2s
-const INACTIVITY_SLOW_THRESHOLD = 10000; // 10s
+// Adaptive polling intervals per workspace.md spec
+const POLL_ACTIVE = 50;      // User typed within last 2s
+const POLL_IDLE = 500;        // No recent input
+const POLL_POST_KEYSTROKE = 20; // Immediate after sending key
+const ACTIVITY_THRESHOLD = 2000; // 2s boundary between active/idle
 
-// Scrollback lines to capture
-const SCROLLBACK_LINES = 100;
+// Session death detection
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+// Resize debounce
+const RESIZE_DEBOUNCE = 100;
 
 export interface TerminalViewerOptions {
   /** tmux executor for capture/send operations */
   tmux: TmuxExecutor;
-  /** Callback when exit key is pressed */
-  onExit?: () => void;
-  /** Callback when attach key is pressed */
-  onAttach?: () => void;
+  /** Callback when session dies (3 consecutive capture failures) */
+  onSessionDeath?: () => void;
 }
 
 export interface TerminalViewerState {
-  /** Whether the viewer is active */
+  /** Whether the viewer is actively polling */
   active: boolean;
   /** Current session name */
   session: string | null;
@@ -49,24 +50,24 @@ export interface TerminalViewerState {
   cursorVisible: boolean;
   /** Poll generation (for invalidating stale polls) */
   pollGeneration: number;
+  /** Consecutive capture failures */
+  consecutiveFailures: number;
+  /** Whether session is confirmed dead */
+  sessionDead: boolean;
 }
 
 /**
- * Terminal viewer that renders tmux session output.
+ * Terminal panel that renders tmux session output.
  *
- * Uses plain text rendering with tmux capture-pane.
- * Supports adaptive polling and key forwarding.
+ * Provides a TextRenderable with captured tmux content.
+ * Handles adaptive polling, key forwarding, and session death detection.
  */
 export class TerminalViewer {
-  private renderer: CliRenderer;
   private tmux: TmuxExecutor;
-  private container: BoxRenderable;
-  private header: TextRenderable;
   private content: TextRenderable;
-  private footer: TextRenderable;
-  private onExit?: () => void;
-  private onAttach?: () => void;
+  private onSessionDeath?: () => void;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private termWidth = 80;
   private termHeight = 24;
 
@@ -78,81 +79,59 @@ export class TerminalViewer {
     cursor: [0, 0],
     cursorVisible: true,
     pollGeneration: 0,
+    consecutiveFailures: 0,
+    sessionDead: false,
   };
 
   constructor(renderer: CliRenderer, options: TerminalViewerOptions) {
-    this.renderer = renderer;
     this.tmux = options.tmux;
-    this.onExit = options.onExit;
-    this.onAttach = options.onAttach;
+    this.onSessionDeath = options.onSessionDeath;
 
-    // Create container
-    this.container = new BoxRenderable(renderer, {
-      id: "terminal-viewer",
-      flexDirection: "column",
-      width: "100%",
-      height: "100%",
-      visible: false,
-    });
-
-    // Header
-    this.header = new TextRenderable(renderer, {
-      id: "terminal-header",
-      content: "",
-      fg: "#00DDFF",
-    });
-
-    // Content area
     this.content = new TextRenderable(renderer, {
       id: "terminal-content",
       content: "",
       fg: "#CCCCCC",
       flexGrow: 1,
     });
-
-    // Footer with keybindings
-    this.footer = new TextRenderable(renderer, {
-      id: "terminal-footer",
-      content: " Ctrl+\\:exit  Ctrl+]:attach full  [text mode]",
-      fg: "#888888",
-    });
-
-    this.container.add(this.header);
-    this.container.add(this.content);
-    this.container.add(this.footer);
   }
 
   /**
-   * Get the container renderable.
+   * Get the content renderable to add to a layout.
    */
-  getContainer(): BoxRenderable {
-    return this.container;
+  getRenderable(): TextRenderable {
+    return this.content;
   }
 
   /**
-   * Check if the viewer is active.
+   * Check if the viewer is actively polling.
    */
   isActive(): boolean {
     return this.state.active;
   }
 
   /**
-   * Enter terminal view mode for the given session.
+   * Check if the session has been detected as dead.
    */
-  async enter(session: string, width: number, height: number): Promise<void> {
+  isSessionDead(): boolean {
+    return this.state.sessionDead;
+  }
+
+  /**
+   * Start capturing a tmux session.
+   */
+  async start(session: string, width: number, height: number): Promise<void> {
     this.state.active = true;
     this.state.session = session;
     this.state.pollGeneration++;
     this.state.lastActivityTime = Date.now();
     this.state.output = "";
+    this.state.consecutiveFailures = 0;
+    this.state.sessionDead = false;
 
-    // Calculate terminal dimensions (subtract header/footer)
-    this.termHeight = Math.max(1, height - 2);
-    this.termWidth = Math.max(20, width - 2);
+    this.termHeight = Math.max(1, height);
+    this.termWidth = Math.max(20, width);
 
-    this.header.content = ` Session: ${session}`;
     this.content.content = "Loading...";
-    this.container.visible = true;
 
     // Resize tmux pane to match
     await this.resizeTmuxPane(session, this.termWidth, this.termHeight);
@@ -162,67 +141,53 @@ export class TerminalViewer {
   }
 
   /**
-   * Exit terminal view mode.
+   * Stop capturing.
    */
-  exit(): void {
+  stop(): void {
     this.stopPolling();
+    if (this.resizeTimer) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
     this.state.active = false;
     this.state.session = null;
-    this.container.visible = false;
-
-    if (this.onExit) {
-      this.onExit();
-    }
   }
 
   /**
-   * Handle key input.
-   * Returns true if key was handled, false to pass through.
+   * Forward a key to the tmux session.
+   * Returns true if the key was forwarded, false if ignored.
    */
   async handleKey(key: string, ctrl: boolean, sequence?: string): Promise<boolean> {
-    if (!this.state.active || !this.state.session) {
+    if (!this.state.active || !this.state.session || this.state.sessionDead) {
       return false;
     }
 
-    // Exit key: Ctrl+\
-    if (ctrl && key === "\\") {
-      this.exit();
-      return true;
-    }
-
-    // Attach key: Ctrl+]
-    if (ctrl && key === "]") {
-      this.exit();
-      if (this.onAttach) {
-        this.onAttach();
-      }
-      return true;
-    }
-
-    // Forward key to tmux
     this.state.lastActivityTime = Date.now();
     await this.sendKeyToTmux(key, ctrl, sequence);
 
-    // Trigger immediate poll after keystroke
-    this.schedulePoll(20);
+    // Post-keystroke fast poll
+    this.schedulePoll(POLL_POST_KEYSTROKE);
 
     return true;
   }
 
   /**
-   * Update dimensions.
+   * Update dimensions with debounce.
    */
-  async resize(width: number, height: number): Promise<void> {
+  resize(width: number, height: number): void {
     if (!this.state.active) return;
 
-    this.termHeight = Math.max(1, height - 2);
-    this.termWidth = Math.max(20, width - 2);
-
-    if (this.state.session) {
-      await this.resizeTmuxPane(this.state.session, this.termWidth, this.termHeight);
-      // Immediate poll after resize
-      this.schedulePoll(0);
-    }
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(async () => {
+      this.resizeTimer = null;
+      this.termWidth = Math.max(20, width);
+      this.termHeight = Math.max(1, height);
+      if (this.state.session) {
+        await this.resizeTmuxPane(this.state.session, this.termWidth, this.termHeight);
+        // Immediate capture after resize
+        this.schedulePoll(0);
+      }
+    }, RESIZE_DEBOUNCE);
   }
 
   /**
@@ -230,7 +195,11 @@ export class TerminalViewer {
    */
   destroy(): void {
     this.stopPolling();
-    this.container.destroyRecursively();
+    if (this.resizeTimer) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
+    this.content.destroy();
   }
 
   // --- Private methods ---
@@ -243,31 +212,56 @@ export class TerminalViewer {
     const currentGen = this.state.pollGeneration;
 
     try {
-      // Capture pane output (with ANSI color codes)
-      const output = await this.tmux.capturePaneAnsiSafe(this.state.session, SCROLLBACK_LINES);
+      // Capture pane output with ANSI escape sequences
+      const output = await this.tmux.capturePaneAnsiSafe(this.state.session, this.termHeight);
 
       // Check if still active and same generation
       if (!this.state.active || currentGen !== this.state.pollGeneration) {
         return;
       }
 
-      if (output !== null && output !== this.state.output) {
-        this.state.output = output;
-        // Show last N lines that fit in the view
-        const lines = output.split("\n");
-        const visibleLines = lines.slice(-this.termHeight);
-        this.content.content = ansiToStyledText(visibleLines.join("\n"));
-      }
+      if (output !== null) {
+        // Success — reset failure counter
+        this.state.consecutiveFailures = 0;
 
-      // Query cursor position
-      const info = await this.tmux.queryPaneInfo(this.state.session);
-      if (info) {
-        this.state.cursor = [info.cursorX, info.cursorY];
-        this.state.cursorVisible = info.cursorVisible;
+        if (output !== this.state.output) {
+          this.state.output = output;
+          const lines = output.split("\n");
+          const visibleLines = lines.slice(-this.termHeight);
+          this.content.content = ansiToStyledText(visibleLines.join("\n"));
+        }
+
+        // Query cursor position
+        const info = await this.tmux.queryPaneInfo(this.state.session);
+        if (info) {
+          this.state.cursor = [info.cursorX, info.cursorY];
+          this.state.cursorVisible = info.cursorVisible;
+        }
+      } else {
+        // Capture returned null — count as failure
+        this.state.consecutiveFailures++;
+        if (this.state.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          this.state.sessionDead = true;
+          this.content.content = "[Session ended]";
+          this.stopPolling();
+          if (this.onSessionDeath) {
+            this.onSessionDeath();
+          }
+          return;
+        }
       }
     } catch {
-      // Session may have died
-      this.content.content = "[Session ended]";
+      // Capture threw — count as failure
+      this.state.consecutiveFailures++;
+      if (this.state.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        this.state.sessionDead = true;
+        this.content.content = "[Session ended]";
+        this.stopPolling();
+        if (this.onSessionDeath) {
+          this.onSessionDeath();
+        }
+        return;
+      }
     }
 
     // Schedule next poll with adaptive interval
@@ -297,81 +291,93 @@ export class TerminalViewer {
 
   private calculatePollInterval(): number {
     const inactivity = Date.now() - this.state.lastActivityTime;
-
-    if (inactivity > INACTIVITY_SLOW_THRESHOLD) {
-      return POLL_SLOW;
-    }
-    if (inactivity > INACTIVITY_MEDIUM_THRESHOLD) {
-      return POLL_MEDIUM;
-    }
-    return POLL_FAST;
+    return inactivity > ACTIVITY_THRESHOLD ? POLL_IDLE : POLL_ACTIVE;
   }
 
   /**
-   * Send key to tmux session.
+   * Send key to tmux session using proper key mapping per workspace.md spec.
    */
   private async sendKeyToTmux(key: string, ctrl: boolean, sequence?: string): Promise<void> {
     if (!this.state.session) return;
 
-    let tmuxKey: string;
-
     if (ctrl) {
-      // Map Ctrl+key to tmux format
-      tmuxKey = `C-${key}`;
-    } else {
-      // Map special keys
-      switch (key) {
-        case "return":
-        case "enter":
-          tmuxKey = "Enter";
-          break;
-        case "backspace":
-          tmuxKey = "BSpace";
-          break;
-        case "tab":
-          tmuxKey = "Tab";
-          break;
-        case "escape":
-          tmuxKey = "Escape";
-          break;
-        case "up":
-          tmuxKey = "Up";
-          break;
-        case "down":
-          tmuxKey = "Down";
-          break;
-        case "left":
-          tmuxKey = "Left";
-          break;
-        case "right":
-          tmuxKey = "Right";
-          break;
-        case "space":
-          tmuxKey = "Space";
-          break;
-        default:
-          // Single character - use sequence if available for proper case handling
-          if (sequence && sequence.length === 1) {
-            await this.tmux.sendKeys(this.state.session, sequence);
-            return;
-          }
-          if (key.length === 1) {
-            await this.tmux.sendKeys(this.state.session, key);
-            return;
-          }
-          tmuxKey = key;
-      }
+      // Ctrl+A..Z → C-{letter}
+      await this.tmux.sendKeys(this.state.session, `C-${key}`);
+      return;
     }
 
-    try {
-      await this.tmux.sendKeys(this.state.session, tmuxKey);
-    } catch {
-      // Session may have died
+    // Map special keys to tmux named keys
+    switch (key) {
+      case "return":
+      case "enter":
+        await this.tmux.sendKeys(this.state.session, "Enter");
+        return;
+      case "tab":
+        await this.tmux.sendKeys(this.state.session, "Tab");
+        return;
+      case "escape":
+        await this.tmux.sendKeys(this.state.session, "Escape");
+        return;
+      case "space":
+        await this.tmux.sendKeys(this.state.session, "Space");
+        return;
+      case "backspace":
+        await this.tmux.sendKeys(this.state.session, "BSpace");
+        return;
+      case "up":
+        await this.tmux.sendKeys(this.state.session, "Up");
+        return;
+      case "down":
+        await this.tmux.sendKeys(this.state.session, "Down");
+        return;
+      case "left":
+        await this.tmux.sendKeys(this.state.session, "Left");
+        return;
+      case "right":
+        await this.tmux.sendKeys(this.state.session, "Right");
+        return;
+      case "home":
+        await this.tmux.sendKeys(this.state.session, "Home");
+        return;
+      case "end":
+        await this.tmux.sendKeys(this.state.session, "End");
+        return;
+      case "pageup":
+        await this.tmux.sendKeys(this.state.session, "PPage");
+        return;
+      case "pagedown":
+        await this.tmux.sendKeys(this.state.session, "NPage");
+        return;
+      case "f1": case "f2": case "f3": case "f4":
+      case "f5": case "f6": case "f7": case "f8":
+      case "f9": case "f10": case "f11": case "f12":
+        await this.tmux.sendKeys(this.state.session, key.toUpperCase().replace("F", "F"));
+        return;
     }
+
+    // Printable characters — use send-keys -l (literal) per spec
+    if (sequence && sequence.length === 1) {
+      try {
+        await this.tmux.sendLiteral(this.state.session, sequence);
+      } catch {
+        // Session may have died
+      }
+      return;
+    }
+    if (key.length === 1) {
+      try {
+        await this.tmux.sendLiteral(this.state.session, key);
+      } catch {
+        // Session may have died
+      }
+      return;
+    }
+
+    // Unmapped keys: dropped silently per spec
   }
 
   /**
-   * Resize tmux pane to match view dimensions.
+   * Resize tmux pane to match terminal dimensions.
    */
   private async resizeTmuxPane(
     session: string,
