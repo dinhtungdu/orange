@@ -64,11 +64,30 @@ All optional. Order by convention:
 
 | Section | Owner | Purpose |
 |---------|-------|---------|
-| `## Context` | orchestrator | Implementation plan, read-only for agent |
+| `## Context` | orchestrator | Requirements and constraints, read-only for agent |
 | `## Questions` | agent | Clarifying questions for user |
-| `## Notes` | agent | Working notes, plan |
+| `## Plan` | agent | Implementation plan (required before coding) |
 | `## Handoff` | agent | Structured session state for next session |
 | `## Review` | review agent | Review verdict and feedback |
+
+### Plan Format
+
+Written by agent during planning phase. Documents the implementation approach before any code is written.
+
+```markdown
+## Plan
+
+APPROACH: Use JWT tokens with httpOnly cookies for session management
+TOUCHING: src/auth/login.ts, src/auth/middleware.ts, src/types/auth.ts
+RISKS: Token rotation with concurrent requests needs careful error handling
+```
+
+Fields (include what's relevant):
+- **APPROACH** — how you'll implement this
+- **TOUCHING** — files and areas you'll modify
+- **RISKS** — anything that could go wrong (optional)
+
+Validation: at least one field (`APPROACH`/`TOUCHING`) with content after the colon.
 
 ### Handoff Format
 
@@ -112,6 +131,7 @@ Single source of truth. Other specs reference this table.
 | Status | Terminal | Description |
 |--------|----------|-------------|
 | `pending` | no | Created, not spawned |
+| `planning` | no | Agent reading task, writing plan |
 | `clarification` | no | Agent waiting for user input |
 | `working` | no | Agent implementing |
 | `agent-review` | no | Review agent evaluating |
