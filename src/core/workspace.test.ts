@@ -47,6 +47,7 @@ async function createTaskWithWorkspace(
     updated_at: new Date().toISOString(),
     review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
   };
   await saveTask(deps, task);

@@ -346,6 +346,7 @@ async function listTasksCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Status indicators
   const statusIcon: Record<TaskStatus, string> = {
     pending: "○",
+    planning: "◐",
     clarification: "?",
     working: "●",
     "agent-review": "◎",

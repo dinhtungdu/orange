@@ -84,10 +84,11 @@ export async function loadTask(
       id: data.id as string,
       project: data.project as string,
       branch: data.branch as string,
-      harness: (data.harness as Harness) ?? "claude", // Default for backward compat
+      harness: (data.harness as Harness) ?? "claude",
       review_harness: (data.review_harness as Harness) ?? "claude",
       status: data.status as Task["status"],
       review_round: (data.review_round as number) ?? 0,
+      crash_count: (data.crash_count as number) ?? 0,
       workspace: (data.workspace as string) ?? null,
       tmux_session: (data.tmux_session as string) ?? null,
       summary: (data.summary as string) ?? "",
@@ -124,6 +125,7 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
     review_harness: task.review_harness,
     status: task.status,
     review_round: task.review_round,
+    crash_count: task.crash_count,
     summary: task.summary,
     workspace: task.workspace,
     tmux_session: task.tmux_session,
@@ -136,6 +138,141 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
 
   const content = matter.stringify(task.body, frontmatter);
   await writeFile(getTaskPath(deps, task.project, task.id), content);
+}
+
+// --- Section Parsing ---
+
+/**
+ * Extract a named section from the markdown body.
+ * Returns the content between the section header and the next ## header (or end of body).
+ * Returns null if section not found.
+ */
+export function extractSection(body: string, sectionName: string): string | null {
+  const pattern = new RegExp(`^## ${sectionName}\\s*$`, "m");
+  const match = pattern.exec(body);
+  if (!match) return null;
+
+  const start = match.index + match[0].length;
+  const nextSection = body.indexOf("\n## ", start);
+  const content = nextSection === -1
+    ? body.slice(start)
+    : body.slice(start, nextSection);
+
+  return content.trim();
+}
+
+/**
+ * Parsed Plan section fields.
+ */
+export interface PlanFields {
+  approach?: string;
+  touching?: string;
+  risks?: string;
+}
+
+/**
+ * Parse ## Plan section. Extracts APPROACH, TOUCHING, RISKS fields.
+ */
+export function parsePlanSection(body: string): PlanFields | null {
+  const section = extractSection(body, "Plan");
+  if (section === null) return null;
+
+  const fields: PlanFields = {};
+  const approachMatch = /^APPROACH:\s*(.+)$/m.exec(section);
+  if (approachMatch) fields.approach = approachMatch[1].trim();
+  const touchingMatch = /^TOUCHING:\s*(.+)$/m.exec(section);
+  if (touchingMatch) fields.touching = touchingMatch[1].trim();
+  const risksMatch = /^RISKS:\s*(.+)$/m.exec(section);
+  if (risksMatch) fields.risks = risksMatch[1].trim();
+
+  return fields;
+}
+
+/**
+ * Parsed Handoff section fields.
+ */
+export interface HandoffFields {
+  done?: string;
+  remaining?: string;
+  decisions?: string;
+  uncertain?: string;
+}
+
+/**
+ * Parse ## Handoff section. Extracts DONE, REMAINING, DECISIONS, UNCERTAIN fields.
+ */
+export function parseHandoffSection(body: string): HandoffFields | null {
+  const section = extractSection(body, "Handoff");
+  if (section === null) return null;
+
+  const fields: HandoffFields = {};
+  const doneMatch = /^DONE:\s*(.+)$/m.exec(section);
+  if (doneMatch) fields.done = doneMatch[1].trim();
+  const remainingMatch = /^REMAINING:\s*(.+)$/m.exec(section);
+  if (remainingMatch) fields.remaining = remainingMatch[1].trim();
+  const decisionsMatch = /^DECISIONS:\s*(.+)$/m.exec(section);
+  if (decisionsMatch) fields.decisions = decisionsMatch[1].trim();
+  const uncertainMatch = /^UNCERTAIN:\s*(.+)$/m.exec(section);
+  if (uncertainMatch) fields.uncertain = uncertainMatch[1].trim();
+
+  return fields;
+}
+
+/**
+ * Parsed Review section.
+ */
+export interface ReviewFields {
+  verdict: "PASS" | "FAIL";
+  feedback: string;
+}
+
+/**
+ * Parse ## Review section. Extracts Verdict line and feedback.
+ */
+export function parseReviewSection(body: string): ReviewFields | null {
+  const section = extractSection(body, "Review");
+  if (section === null) return null;
+
+  // First non-empty line must be Verdict: PASS or Verdict: FAIL
+  const lines = section.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return null;
+
+  const verdictMatch = /^Verdict:\s*(PASS|FAIL)\s*$/i.exec(lines[0]);
+  if (!verdictMatch) return null;
+
+  const verdict = verdictMatch[1].toUpperCase() as "PASS" | "FAIL";
+  const feedback = lines.slice(1).join("\n").trim();
+
+  return { verdict, feedback };
+}
+
+// --- Artifact Gate Validation ---
+
+/**
+ * Validate ## Plan gate: section exists with at least APPROACH or TOUCHING field with content.
+ */
+export function validatePlanGate(body: string): boolean {
+  const plan = parsePlanSection(body);
+  if (!plan) return false;
+  return !!(plan.approach || plan.touching);
+}
+
+/**
+ * Validate ## Handoff gate: section exists with at least one field with content.
+ */
+export function validateHandoffGate(body: string): boolean {
+  const handoff = parseHandoffSection(body);
+  if (!handoff) return false;
+  return !!(handoff.done || handoff.remaining || handoff.decisions || handoff.uncertain);
+}
+
+/**
+ * Validate ## Review gate: section exists with correct verdict line.
+ */
+export function validateReviewGate(body: string, expectedVerdict: "PASS" | "FAIL"): boolean {
+  const review = parseReviewSection(body);
+  if (!review) return false;
+  return review.verdict === expectedVerdict;
 }
 
 /**

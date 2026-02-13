@@ -24,6 +24,7 @@ export type Harness = "pi" | "opencode" | "claude" | "codex";
  */
 export type TaskStatus =
   | "pending" // Created but not spawned
+  | "planning" // Agent reading task, writing plan
   | "clarification" // Agent waiting for user input (vague task or scope change)
   | "working" // Agent actively implementing
   | "agent-review" // Review agent evaluating work
@@ -51,6 +52,8 @@ export interface Task {
   status: TaskStatus;
   /** Current review round (0 = no review yet, 1-2 = review rounds) */
   review_round: number;
+  /** Number of consecutive crashes in current status (reset on successful transition) */
+  crash_count: number;
   /** Assigned workspace path (e.g., "orange--1"), null if not spawned */
   workspace: string | null;
   /** tmux session name (e.g., "orange/dark-mode"), null if not spawned */
@@ -275,15 +278,17 @@ export type HistoryEventType =
   | "task.created"
   | "task.updated"
   | "agent.spawned"
-  | "message"
-  | "review.started"
-  | "review.passed"
-  | "agent.stopped"
+  | "agent.crashed"
+  | "auto.advanced"
   | "status.changed"
   | "task.merged"
   | "task.cancelled"
   | "pr.created"
-  | "pr.merged";
+  | "pr.merged"
+  // Legacy event types (used by existing CLI code, will be removed in v2 CLI rewrite)
+  | "review.started"
+  | "review.passed"
+  | "agent.stopped";
 
 /**
  * Base history event structure.
@@ -327,36 +332,23 @@ export interface AgentSpawnedEvent extends HistoryEventBase {
 }
 
 /**
- * Message event (agent communication).
+ * Agent crashed event.
  */
-export interface MessageEvent extends HistoryEventBase {
-  type: "message";
-  content: string;
+export interface AgentCrashedEvent extends HistoryEventBase {
+  type: "agent.crashed";
+  status: TaskStatus;
+  crash_count: number;
+  reason: string;
 }
 
 /**
- * Review started event.
+ * Auto-advanced event (exit monitor advanced the task).
  */
-export interface ReviewStartedEvent extends HistoryEventBase {
-  type: "review.started";
-  attempt: number;
-}
-
-/**
- * Review passed event.
- */
-export interface ReviewPassedEvent extends HistoryEventBase {
-  type: "review.passed";
-  attempt: number;
-}
-
-/**
- * Agent stopped event.
- */
-export interface AgentStoppedEvent extends HistoryEventBase {
-  type: "agent.stopped";
-  outcome: "passed" | "stuck" | "failed";
-  reason?: string;
+export interface AutoAdvancedEvent extends HistoryEventBase {
+  type: "auto.advanced";
+  from: TaskStatus;
+  to: TaskStatus;
+  reason: string;
 }
 
 /**
@@ -374,7 +366,9 @@ export interface StatusChangedEvent extends HistoryEventBase {
 export interface TaskMergedEvent extends HistoryEventBase {
   type: "task.merged";
   commit_hash: string;
-  strategy: "ff" | "merge";
+  strategy?: "ff" | "merge";
+  /** Alias for commit_hash matching data.md format */
+  commit?: string;
 }
 
 /**
@@ -402,6 +396,24 @@ export interface PRMergedEvent extends HistoryEventBase {
   merge_commit: string;
 }
 
+// Legacy event interfaces (used by existing CLI code, will be removed in v2 CLI rewrite)
+
+export interface ReviewStartedEvent extends HistoryEventBase {
+  type: "review.started";
+  attempt: number;
+}
+
+export interface ReviewPassedEvent extends HistoryEventBase {
+  type: "review.passed";
+  attempt: number;
+}
+
+export interface AgentStoppedEvent extends HistoryEventBase {
+  type: "agent.stopped";
+  outcome: "passed" | "stuck" | "failed";
+  reason?: string;
+}
+
 /**
  * Union type of all history events.
  */
@@ -409,15 +421,16 @@ export type HistoryEvent =
   | TaskCreatedEvent
   | TaskUpdatedEvent
   | AgentSpawnedEvent
-  | MessageEvent
-  | ReviewStartedEvent
-  | ReviewPassedEvent
-  | AgentStoppedEvent
+  | AgentCrashedEvent
+  | AutoAdvancedEvent
   | StatusChangedEvent
   | TaskMergedEvent
   | TaskCancelledEvent
   | PRCreatedEvent
-  | PRMergedEvent;
+  | PRMergedEvent
+  | ReviewStartedEvent
+  | ReviewPassedEvent
+  | AgentStoppedEvent;
 
 /**
  * Agent task outcome written to .orange-task file.
