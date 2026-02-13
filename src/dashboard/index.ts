@@ -631,6 +631,15 @@ export async function runDashboard(
       return;
     }
 
+    // In workspace mode, Escape exits back to task list
+    if (state.isWorkspaceMode()) {
+      if (key.name === "escape") {
+        state.exitWorkspaceMode();
+      }
+      // All other keys are handled by the workspace view (task #3)
+      return;
+    }
+
     // In view mode, only j/k/up/down/escape/v/q are accepted
     if (state.isViewMode()) {
       const name = key.name;

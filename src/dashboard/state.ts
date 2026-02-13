@@ -16,6 +16,8 @@ import { getWorkspacePath, loadPoolState, releaseWorkspace } from "../core/works
 import { spawnTaskById } from "../core/spawn.js";
 import { refreshTaskPR } from "../core/task.js";
 import { getInstalledHarnesses } from "../core/harness.js";
+import { checkDeadSessions, applyAutoAdvanceRules } from "../core/exit-monitor.js";
+import { type HookExecutor } from "../core/transitions.js";
 
 /** Terminal task statuses — task is finished, no more work expected */
 const TERMINAL_STATUSES: TaskStatus[] = ["done", "cancelled"];
@@ -90,7 +92,7 @@ export const CHECKS_ICON: Record<string, string> = {
 
 export type StatusFilter = "all" | "active" | "done";
 
-const ACTIVE_STATUSES: TaskStatus[] = ["pending", "clarification", "working", "agent-review", "reviewing", "stuck"];
+const ACTIVE_STATUSES: TaskStatus[] = ["pending", "planning", "clarification", "working", "agent-review", "reviewing", "stuck"];
 const DONE_STATUSES: TaskStatus[] = ["done", "cancelled"];
 
 /** Sort tasks: active first, terminal last, by updated_at within groups */
@@ -122,7 +124,7 @@ export interface DiffStats {
 export type CreateField = "branch" | "summary" | "harness" | "status";
 
 /** Initial status options for task creation. */
-export type CreateStatus = "pending" | "agent-review" | "reviewing";
+export type CreateStatus = "pending" | "reviewing";
 
 export interface CreateModeData {
   active: boolean;
@@ -146,6 +148,11 @@ export interface ViewModeData {
   scrollOffset: number;
 }
 
+export interface WorkspaceModeData {
+  active: boolean;
+  task: Task | null;
+}
+
 export interface DashboardStateData {
   tasks: Task[];
   allTasks: Task[];
@@ -167,10 +174,12 @@ export interface DashboardStateData {
   createMode: CreateModeData;
   confirmMode: ConfirmModeData;
   viewMode: ViewModeData;
+  workspaceMode: WorkspaceModeData;
 }
 
 type ChangeListener = () => void;
 type AttachListener = () => void;
+type WorkspaceListener = (task: Task) => void;
 
 /**
  * Dashboard state machine.
@@ -213,11 +222,16 @@ export class DashboardState {
       task: null,
       scrollOffset: 0,
     },
+    workspaceMode: {
+      active: false,
+      task: null,
+    },
   };
 
   private deps: Deps;
   private listeners: ChangeListener[] = [];
   private attachListeners: AttachListener[] = [];
+  private workspaceListeners: WorkspaceListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -252,6 +266,21 @@ export class DashboardState {
 
   private emitAttach(): void {
     for (const fn of this.attachListeners) fn();
+  }
+
+  onWorkspace(fn: WorkspaceListener): () => void {
+    this.workspaceListeners.push(fn);
+    return () => {
+      this.workspaceListeners = this.workspaceListeners.filter((l) => l !== fn);
+    };
+  }
+
+  private emitWorkspace(task: Task): void {
+    for (const fn of this.workspaceListeners) fn(task);
+  }
+
+  isWorkspaceMode(): boolean {
+    return this.data.workspaceMode.active;
   }
 
   async init(options: DashboardOptions = {}): Promise<void> {
@@ -292,12 +321,13 @@ export class DashboardState {
       }, 100);
     });
 
-    // Poll loop: health check, orphan cleanup, PR sync (30s interval)
+    // Poll loop: health check, orphan cleanup, PR sync, exit monitor (30s interval)
     this.pollInterval = setInterval(() => {
       Promise.all([
         this.captureOutputs(),
         this.cleanupOrphans(),
         this.refreshPRStatuses(),
+        this.runExitMonitor(),
       ]).then(() => this.emit());
     }, 30000);
 
@@ -325,6 +355,7 @@ export class DashboardState {
       this.captureOutputs(),
       this.cleanupOrphans(),
       this.refreshPRStatuses(),
+      this.runExitMonitor(),
     ]);
   }
 
@@ -415,6 +446,9 @@ export class DashboardState {
       case "v":
         this.enterViewMode();
         break;
+      case "w":
+        this.openWorkspace();
+        break;
     }
   }
 
@@ -468,6 +502,24 @@ export class DashboardState {
       task: null,
       scrollOffset: 0,
     };
+    this.emit();
+  }
+
+  // --- Workspace mode ---
+
+  private openWorkspace(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || !task.tmux_session) return;
+    const isDead = this.data.deadSessions.has(task.id);
+    if (isDead) return;
+
+    this.data.workspaceMode = { active: true, task };
+    this.emitWorkspace(task);
+    this.emit();
+  }
+
+  exitWorkspaceMode(): void {
+    this.data.workspaceMode = { active: false, task: null };
     this.emit();
   }
 
@@ -562,7 +614,7 @@ export class DashboardState {
             cm.harness = cm.installedHarnesses[(idx + 1) % cm.installedHarnesses.length];
           } else if (cm.focusedField === "status") {
             // Toggle status on any key press (space or arrow-like behavior)
-            const statusCycle: CreateStatus[] = ["pending", "agent-review", "reviewing"];
+            const statusCycle: CreateStatus[] = ["pending", "reviewing"];
             const idx = statusCycle.indexOf(cm.status);
             cm.status = statusCycle[(idx + 1) % statusCycle.length];
           }
@@ -577,7 +629,8 @@ export class DashboardState {
     const inputBranch = cm.branch.trim();
     const summary = cm.summary.trim();
     const harness = cm.harness;
-    const status = cm.status;
+    // Empty summary → create in clarification so agent asks for requirements
+    const status = (!summary && cm.status === "pending") ? "clarification" as const : cm.status;
 
     // Generate task ID first (needed if branch is empty)
     const { customAlphabet } = await import("nanoid");
@@ -625,7 +678,7 @@ export class DashboardState {
       this.emit();
 
       // Auto-spawn agent unless status is reviewing
-      // agent-review: spawnTaskById handles spawning review agent
+      // clarification + pending: spawnTaskById handles spawning worker
       if (task.status !== "reviewing") {
         try {
           await spawnTaskById(this.deps, task.id);
@@ -892,7 +945,7 @@ export class DashboardState {
   }
 
   private async captureOutputs(): Promise<void> {
-    const activeStatuses: TaskStatus[] = ["working", "agent-review", "reviewing", "stuck"];
+    const activeStatuses: TaskStatus[] = ["planning", "clarification", "working", "agent-review", "reviewing", "stuck"];
     const activeTasks = this.data.tasks.filter(
       (t) => t.tmux_session && activeStatuses.includes(t.status)
     );
@@ -910,7 +963,7 @@ export class DashboardState {
           this.data.deadSessions.add(task.id);
         } else {
           this.data.deadSessions.delete(task.id);
-          if (task.status === "working") {
+          if (task.status === "working" || task.status === "planning") {
             const output = await this.deps.tmux.capturePaneSafe(task.tmux_session!, 5);
             if (output !== null) {
               const lastLine = output.trim().split("\n").pop() ?? "";
@@ -920,6 +973,93 @@ export class DashboardState {
         }
       })
     );
+  }
+
+  /**
+   * Run exit monitoring: detect dead sessions and apply auto-advance rules.
+   * Uses the transition engine from the foundation layer.
+   */
+  private async runExitMonitor(): Promise<void> {
+    const log = this.deps.logger.child("dashboard");
+
+    // Check all tasks (not just filtered view) for dead sessions
+    const activeTasks = this.data.allTasks.filter(
+      (t) => t.tmux_session && !TERMINAL_STATUSES.includes(t.status)
+    );
+
+    if (activeTasks.length === 0) return;
+
+    const results = await checkDeadSessions(activeTasks, this.deps);
+    const deadResults = results.filter((r) => r.isDead);
+
+    if (deadResults.length === 0) return;
+
+    // Hook executor for auto-advance transitions.
+    // Handles essential hooks; spawn_agent is deferred to user respawn.
+    const hookExecutor: HookExecutor = async (hook, task) => {
+      switch (hook.id) {
+        case "kill_session":
+          if (task.tmux_session) {
+            await this.deps.tmux.killSessionSafe(task.tmux_session);
+          }
+          break;
+        case "increment_review_round":
+          task.review_round += 1;
+          break;
+        case "release_workspace":
+          if (task.workspace) {
+            await releaseWorkspace(this.deps, task.workspace);
+            task.workspace = null;
+          }
+          break;
+        case "spawn_agent":
+          // Dashboard doesn't auto-spawn agents during exit monitoring.
+          // Task will appear as crashed, user can respawn with Enter.
+          log.debug("Skipping spawn_agent hook in dashboard exit monitor", {
+            taskId: task.id,
+            variant: hook.variant,
+          });
+          break;
+        default:
+          break;
+      }
+    };
+
+    for (const { task } of deadResults) {
+      this.data.deadSessions.add(task.id);
+
+      try {
+        const result = await applyAutoAdvanceRules(task, this.deps, hookExecutor);
+
+        if (result.action === "advanced") {
+          log.info("Auto-advanced task", {
+            taskId: task.id,
+            from: result.from,
+            to: result.to,
+            reason: result.reason,
+          });
+          this.data.message = `Auto-advanced ${task.project}/${task.branch}: ${result.from} → ${result.to}`;
+        } else if (result.action === "stuck") {
+          log.info("Task moved to stuck", {
+            taskId: task.id,
+            reason: result.reason,
+          });
+          this.data.message = `Task stuck: ${task.project}/${task.branch}`;
+        } else if (result.action === "crashed") {
+          log.info("Task crashed", {
+            taskId: task.id,
+            reason: result.reason,
+          });
+        }
+      } catch (err) {
+        log.error("Exit monitor error", {
+          taskId: task.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    await this.refreshTasks();
   }
 
   /**
@@ -1420,8 +1560,8 @@ export class DashboardState {
 
     if (!task) return ` j/k:nav${createKey}  f:filter  q:quit`;
 
-    // Session dead only matters for "working"/"agent-review" tasks
-    const isDead = this.data.deadSessions.has(task.id) && (task.status === "working" || task.status === "agent-review");
+    // Session dead only matters for active tasks with sessions
+    const isDead = this.data.deadSessions.has(task.id) && !TERMINAL_STATUSES.includes(task.status);
     const hasLiveSession = task.tmux_session && !isDead;
 
     let keys = " j/k:nav  v:view  y:copy";
@@ -1432,7 +1572,7 @@ export class DashboardState {
     } else if (task.status === "cancelled") {
       keys += "  d:del";
     } else if (isDead) {
-      // Working/agent-review task with dead session - needs respawn
+      // Active task with dead session - needs respawn
       keys += "  Enter:respawn  x:cancel";
     } else if (task.status === "stuck") {
       keys += "  Enter:attach  m:force merge  x:cancel";
@@ -1443,9 +1583,13 @@ export class DashboardState {
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {
-      // working, clarification
+      // working, planning, clarification
       keys += "  Enter:attach  m:force merge  x:cancel";
     }
+    // Workspace view for tasks with live sessions
+    if (hasLiveSession) keys += "  w:workspace";
+    // PR refresh for tasks with PR
+    if (task.pr_url) keys += "  R:refresh";
     keys += `${createKey}  f:filter  q:quit`;
     return keys;
   }

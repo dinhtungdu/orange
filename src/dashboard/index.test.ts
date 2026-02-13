@@ -608,7 +608,7 @@ describe("Dashboard Poll Cycle", () => {
   });
 
   test("orphan cleanup releases workspace for done task", async () => {
-    // Create a done task with workspace bound (TASK.md is source of truth)
+    // Create a done task with workspace bound
     const task = createTask({
       id: "done-task",
       branch: "done-branch",
@@ -618,10 +618,13 @@ describe("Dashboard Poll Cycle", () => {
     });
     await saveTask(deps, task);
 
-    // Create workspace directory (required for loadPoolState to see it)
+    // Create workspace directory and seed .pool.json
     const workspacesDir = join(tempDir, "workspaces");
     const workspacePath = join(workspacesDir, "testproj--1");
     await mkdir(workspacePath, { recursive: true });
+    await writeFile(join(workspacesDir, ".pool.json"), JSON.stringify({
+      workspaces: { "testproj--1": { status: "bound", task: "testproj/done-branch" } },
+    }));
 
     // Init mock git for the workspace
     const mockGit = deps.git as MockGit;
@@ -653,10 +656,13 @@ describe("Dashboard Poll Cycle", () => {
     });
     await saveTask(deps, task);
 
-    // Create workspace directory
+    // Create workspace directory and seed .pool.json
     const workspacesDir = join(tempDir, "workspaces");
     const workspacePath = join(workspacesDir, "testproj--1");
     await mkdir(workspacePath, { recursive: true });
+    await writeFile(join(workspacesDir, ".pool.json"), JSON.stringify({
+      workspaces: { "testproj--1": { status: "bound", task: "testproj/cancelled-branch" } },
+    }));
 
     // Init mock git for the workspace
     const mockGit = deps.git as MockGit;
@@ -784,5 +790,388 @@ describe("Dashboard Poll Cycle", () => {
     // pr_url should not be set for terminal tasks
     const updatedTask = await loadTask(deps, "testproj", "done-task");
     expect(updatedTask?.pr_url).toBeNull();
+  });
+});
+
+describe("Dashboard v2 Features", () => {
+  let tempDir: string;
+  let deps: Deps;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), "orange-v2-test-"));
+
+    deps = {
+      tmux: new MockTmux(),
+      git: new MockGit(),
+      github: new MockGitHub(),
+      clock: new MockClock(new Date("2024-01-15T10:00:00.000Z")),
+      logger: new NullLogger(),
+      dataDir: tempDir,
+    };
+
+    const project: Project = {
+      name: "testproj",
+      path: "/path/to/testproj",
+      default_branch: "main",
+      pool_size: 2,
+    };
+    await saveProjects(deps, [project]);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // --- Planning status ---
+
+  test("planning status shows in active filter", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "planning" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "done" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // All tasks visible
+    expect(state.data.tasks.length).toBe(2);
+
+    // Switch to active filter
+    state.handleInput("f");
+    expect(state.data.tasks.length).toBe(1);
+    expect(state.data.tasks[0].status).toBe("planning");
+  });
+
+  test("planning status has correct color", async () => {
+    const { STATUS_COLOR } = await import("./state.js");
+    expect(STATUS_COLOR.planning).toBeDefined();
+    expect(typeof STATUS_COLOR.planning).toBe("string");
+  });
+
+  // --- Sorting ---
+
+  test("active tasks sorted before terminal tasks", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", status: "done", updated_at: "2024-01-15T12:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", status: "planning", updated_at: "2024-01-15T09:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "b3", status: "working", updated_at: "2024-01-15T11:00:00.000Z" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // Active tasks first (working most recent, then planning), terminal last
+    expect(state.data.tasks[0].status).toBe("working");
+    expect(state.data.tasks[1].status).toBe("planning");
+    expect(state.data.tasks[2].status).toBe("done");
+  });
+
+  // --- Context keys ---
+
+  test("context keys show w:workspace for task with live session", async () => {
+    const mockTmux = deps.tmux as MockTmux;
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "working",
+      tmux_session: "testproj/feature-x",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    const keys = state.getContextKeys();
+    expect(keys).toContain("w:workspace");
+  });
+
+  test("context keys hide w:workspace for dead session", async () => {
+    // Task has tmux_session but session doesn't exist in mock
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "working",
+      tmux_session: "testproj/feature-x",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+    // Mark session as dead
+    state.data.deadSessions.add("t1");
+
+    const keys = state.getContextKeys();
+    expect(keys).not.toContain("w:workspace");
+  });
+
+  test("context keys show R:refresh for task with PR", async () => {
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "reviewing",
+      pr_url: "https://github.com/test/repo/pull/123",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    const keys = state.getContextKeys();
+    expect(keys).toContain("R:refresh");
+  });
+
+  test("context keys hide R:refresh when no PR", async () => {
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "reviewing",
+      pr_url: null,
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    const keys = state.getContextKeys();
+    expect(keys).not.toContain("R:refresh");
+  });
+
+  // --- Workspace mode ---
+
+  test("w key enters workspace mode for task with live session", async () => {
+    const mockTmux = deps.tmux as MockTmux;
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "working",
+      tmux_session: "testproj/feature-x",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    expect(state.isWorkspaceMode()).toBe(false);
+    state.handleInput("w");
+    expect(state.isWorkspaceMode()).toBe(true);
+    expect(state.data.workspaceMode.task?.id).toBe("t1");
+  });
+
+  test("w key does nothing for task without session", async () => {
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "pending",
+      tmux_session: null,
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("w");
+    expect(state.isWorkspaceMode()).toBe(false);
+  });
+
+  test("exitWorkspaceMode clears workspace mode", async () => {
+    const mockTmux = deps.tmux as MockTmux;
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "working",
+      tmux_session: "testproj/feature-x",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("w");
+    expect(state.isWorkspaceMode()).toBe(true);
+
+    state.exitWorkspaceMode();
+    expect(state.isWorkspaceMode()).toBe(false);
+    expect(state.data.workspaceMode.task).toBeNull();
+  });
+
+  test("onWorkspace listener fires when entering workspace mode", async () => {
+    const mockTmux = deps.tmux as MockTmux;
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "working",
+      tmux_session: "testproj/feature-x",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    let workspaceTaskId = "";
+    state.onWorkspace((task) => { workspaceTaskId = task.id; });
+
+    state.handleInput("w");
+    expect(workspaceTaskId).toBe("t1");
+  });
+
+  // --- Create form ---
+
+  test("create status toggles between pending and reviewing", async () => {
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("c");
+    expect(state.data.createMode.status).toBe("pending");
+
+    // Tab to status field
+    state.handleInput("tab"); // summary
+    state.handleInput("tab"); // harness
+    state.handleInput("tab"); // status
+
+    // Toggle
+    state.handleInput(" ");
+    expect(state.data.createMode.status).toBe("reviewing");
+
+    state.handleInput(" ");
+    expect(state.data.createMode.status).toBe("pending");
+  });
+
+  // --- Exit monitoring integration ---
+
+  test("exit monitor detects dead sessions via checkDeadSessions", async () => {
+    // Create a working task with a tmux session that doesn't exist
+    await saveTask(deps, createTask({
+      id: "dead-task",
+      branch: "dead-branch",
+      status: "working",
+      tmux_session: "testproj/dead-branch",
+      workspace: "testproj--1",
+      body: "", // No ## Handoff → will crash
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // Run exit monitor (session doesn't exist in mock → dead)
+    await state.runPollCycle();
+
+    // Task should be marked as dead
+    expect(state.data.deadSessions.has("dead-task")).toBe(true);
+  });
+
+  test("exit monitor auto-advances working task with valid handoff", async () => {
+    // Create a working task with valid ## Handoff that has a dead session
+    await saveTask(deps, createTask({
+      id: "advance-task",
+      branch: "advance-branch",
+      status: "working",
+      tmux_session: "testproj/advance-branch",
+      workspace: "testproj--1",
+      body: "## Handoff\n\nDONE: Implemented the feature\nREMAINING: Tests",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    // Run exit monitor
+    await state.runPollCycle();
+
+    // Task should have been auto-advanced to agent-review
+    const updatedTask = await loadTask(deps, "testproj", "advance-task");
+    expect(updatedTask?.status).toBe("agent-review");
+  });
+
+  test("exit monitor auto-advances planning task with valid plan", async () => {
+    await saveTask(deps, createTask({
+      id: "plan-task",
+      branch: "plan-branch",
+      status: "planning",
+      tmux_session: "testproj/plan-branch",
+      workspace: "testproj--1",
+      body: "## Plan\n\nAPPROACH: Use JWT tokens for auth\nTOUCHING: src/auth/login.ts",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    const updatedTask = await loadTask(deps, "testproj", "plan-task");
+    expect(updatedTask?.status).toBe("working");
+  });
+
+  test("exit monitor increments crash_count for dead session without artifacts", async () => {
+    await saveTask(deps, createTask({
+      id: "crash-task",
+      branch: "crash-branch",
+      status: "working",
+      tmux_session: "testproj/crash-branch",
+      workspace: "testproj--1",
+      crash_count: 0,
+      body: "", // No ## Handoff
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    const updatedTask = await loadTask(deps, "testproj", "crash-task");
+    expect(updatedTask?.crash_count).toBe(1);
+  });
+
+  test("exit monitor moves to stuck after 2 crashes", async () => {
+    await saveTask(deps, createTask({
+      id: "stuck-task",
+      branch: "stuck-branch",
+      status: "working",
+      tmux_session: "testproj/stuck-branch",
+      workspace: "testproj--1",
+      crash_count: 1, // Already crashed once
+      body: "", // No ## Handoff
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    const updatedTask = await loadTask(deps, "testproj", "stuck-task");
+    expect(updatedTask?.status).toBe("stuck");
+  });
+
+  test("exit monitor skips tasks without tmux_session", async () => {
+    await saveTask(deps, createTask({
+      id: "no-session",
+      branch: "no-session-branch",
+      status: "working",
+      tmux_session: null, // No session
+      workspace: null,
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    // Should not be marked as dead (no session to check)
+    expect(state.data.deadSessions.has("no-session")).toBe(false);
+  });
+
+  // --- captureOutputs with planning ---
+
+  test("captureOutputs detects dead planning sessions", async () => {
+    // Planning task with dead session (session doesn't exist in mock)
+    await saveTask(deps, createTask({
+      id: "planning-dead",
+      branch: "planning-branch",
+      status: "planning",
+      tmux_session: "testproj/planning-branch",
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    await state.runPollCycle();
+
+    expect(state.data.deadSessions.has("planning-dead")).toBe(true);
   });
 });
