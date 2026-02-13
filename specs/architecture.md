@@ -35,7 +35,7 @@ Agents run in parallel tmux sessions:
 | [task-manager.md](./task-manager.md) | Dashboard task list UI |
 | [workspace.md](./workspace.md) | Worktree pool + workspace view |
 
-Supporting specs: [harness.md](./harness.md), [cli.md](./cli.md), [github.md](./github.md), [logging.md](./logging.md), [testing.md](./testing.md).
+Supporting: [cli.md](./cli.md), [harness.md](./harness.md), [github.md](./github.md), [logging.md](./logging.md), [testing.md](./testing.md).
 
 ## Flow
 
