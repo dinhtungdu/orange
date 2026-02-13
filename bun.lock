@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "orange",
@@ -16,6 +17,9 @@
         "@types/proper-lockfile": "^4.1.4",
         "bun-types": "latest",
         "typescript": "^5.0.0",
+      },
+      "optionalDependencies": {
+        "ghostty-opentui": "^0.0.35",
       },
     },
   },

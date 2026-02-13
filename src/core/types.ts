@@ -134,6 +134,8 @@ export interface TmuxExecutor {
   attachOrCreate(name: string, cwd: string): Promise<void>;
   /** Rename a session */
   renameSession(oldName: string, newName: string): Promise<void>;
+  /** Send literal text (not interpreted as key names) via send-keys -l */
+  sendLiteral(session: string, text: string): Promise<void>;
 }
 
 /**
