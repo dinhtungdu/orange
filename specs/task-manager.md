@@ -36,7 +36,7 @@ Selected row shows summary underneath.
 
 ## Sorting
 
-1. Active first (pending, clarification, working, agent-review, reviewing, stuck)
+1. Active first (pending, planning, clarification, working, agent-review, reviewing, stuck)
 2. Terminal last (done, cancelled)
 3. Within groups: most recently updated first
 
