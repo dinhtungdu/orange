@@ -41,9 +41,10 @@ Supporting: [cli.md](./cli.md), [harness.md](./harness.md), [github.md](./github
 
 1. `orange` opens dashboard (task manager)
 2. Create tasks — agents spawn in parallel worktrees
-3. Agents implement, autonomous review loop runs
-4. Tasks reach `reviewing` — human reviews and merges
-5. `w` key opens workspace view: terminal + sidebar for live interaction
+3. Agents plan (write ## Plan), then implement autonomously
+4. Autonomous review loop: reviewer agent evaluates, worker fixes if needed
+5. Tasks reach `reviewing` — human reviews and merges
+6. `w` key opens workspace view: terminal + sidebar for live interaction
 
 ## Decisions
 

@@ -7,17 +7,18 @@ Statuses defined in [data.md](./data.md#status).
 ## State Machine
 
 ```
-        pending ─────────────────────────────────► cancelled
-            │                                         ▲
-            ├──────────► clarification                │
-            ▼                  ↕                      │
-        working ◄──────────────┘                      │
-            │   ◄─────── reviewing                    │
-            │                │                        │
-            ├──► agent-review┤                        │
-            │        │       ▼                        │
-            │        ▼      done                      │
-            │      stuck ────────────────────────────►┘
+        pending ──────────────────────────────────► cancelled
+            │                                          ▲
+            ▼                                          │
+        planning ──────► clarification                 │
+            │                  ↕                       │
+            ▼           ◄──────┘                       │
+        working ◄──────── reviewing                    │
+            │                │                         │
+            ├──► agent-review┤                         │
+            │        │       ▼                         │
+            │        ▼      done                       │
+            │      stuck ─────────────────────────────►┘
             └────────┘
 ```
 
@@ -27,10 +28,12 @@ Each transition has optional gates (artifact requirements) and hooks (side effec
 
 | From | To | Gate | Hooks |
 |------|----|------|-------|
-| pending | working | — | acquire_workspace, spawn_agent(worker) |
-| pending | clarification | — | acquire_workspace, spawn_agent(clarification) |
+| pending | planning | — | acquire_workspace, spawn_agent(worker) |
 | pending | cancelled | — | — |
-| clarification | working | — | — |
+| planning | working | ## Plan valid | — |
+| planning | clarification | — | — |
+| planning | cancelled | — | kill_session, release_workspace |
+| clarification | planning | — | — |
 | clarification | cancelled | — | kill_session, release_workspace |
 | working | agent-review | ## Handoff valid | kill_session, spawn_agent(reviewer), increment review_round |
 | working | clarification | — | — |
@@ -48,9 +51,15 @@ Each transition has optional gates (artifact requirements) and hooks (side effec
 
 Any transition not in this map is rejected.
 
+**Note:** `planning → working` has no hooks — the same agent session continues. The agent plans, transitions to working, then implements. One spawn, one session, two phases.
+
 ## Artifact Gates
 
 Gates validate TASK.md content before allowing a transition.
+
+**## Plan gate** (planning → working):
+- Section `## Plan` exists
+- At least one field present: line matching `^(APPROACH|TOUCHING):` with content after the colon
 
 **## Handoff gate** (working → agent-review):
 - Section `## Handoff` exists
@@ -61,7 +70,7 @@ Gates validate TASK.md content before allowing a transition.
 - First non-empty line is `Verdict: PASS` or `Verdict: FAIL` (case-insensitive)
 - Verdict must match the target: PASS for → reviewing, FAIL for → working or → stuck
 
-See [data.md](./data.md#handoff-format) and [data.md](./data.md#review-format) for artifact format details.
+See [data.md](./data.md) for artifact format details.
 
 ## Hooks
 
@@ -112,6 +121,12 @@ Compare `tmux list-sessions` against tasks with active `tmux_session`. Session g
 
 ### Auto-Advance Rules
 
+**planning:**
+- Has valid ## Plan → advance to working
+- No plan → crash (increment crash_count)
+  - crash_count ≥ 2 → advance to stuck
+  - else → mark crashed in UI, user can respawn
+
 **working:**
 - Has valid ## Handoff → advance to agent-review (spawn reviewer)
 - No handoff → crash (increment crash_count)
@@ -151,7 +166,9 @@ Auto-advance checks current status before acting. If a CLI command already trans
 
 Each `spawn_agent` hook uses a prompt template. Variables: `{summary}`, `{project}`, `{branch}`, `{review_round}`, `{status}`.
 
-### Worker (pending → working)
+### Worker (pending → planning → working)
+
+Single agent session covering both planning and implementation phases.
 
 ```
 # Task: {summary}
@@ -159,33 +176,44 @@ Each `spawn_agent` hook uses a prompt template. Variables: `{summary}`, `{projec
 Project: {project}
 Branch: {branch}
 
+Phase 1 — Plan:
 1. Read TASK.md — summary in frontmatter, context in body
 2. If branch is orange-tasks/<id>, rename it and run: orange task update --branch
-3. If empty/vague summary: add ## Questions to TASK.md, set --status clarification, wait
-4. If no ## Context: document plan in ## Notes before coding
-5. Read project rules (AGENTS.md, etc.), implement, test, commit
-6. Write ## Handoff to TASK.md (at least one of DONE/REMAINING/DECISIONS/UNCERTAIN)
-7. orange task update --status agent-review
+3. If requirements unclear: add ## Questions, set --status clarification, wait
+4. Write ## Plan to TASK.md (APPROACH + TOUCHING, optional RISKS)
+5. orange task update --status working
+
+Phase 2 — Implement:
+6. Read project rules (AGENTS.md, etc.)
+7. Implement according to ## Plan, test, commit
+8. Write ## Handoff (at least one of DONE/REMAINING/DECISIONS/UNCERTAIN)
+9. orange task update --status agent-review
 
 Do NOT push to remote.
 Do NOT set --status reviewing — always use agent-review.
-The command rejects if ## Handoff is missing or empty.
 ```
 
-### Worker Respawn (crashed working session)
+### Worker Respawn (crashed session)
 
 ```
 # Resuming: {summary}
 
 Project: {project}
 Branch: {branch}
+Status: {status}
 Review round: {review_round}
 
-Read ## Handoff in TASK.md — structured state from previous session.
+Read TASK.md — check ## Plan and ## Handoff for previous progress.
 
-1. Pick up where last session left off
-2. Write updated ## Handoff
-3. orange task update --status agent-review
+If status is planning:
+  1. Write ## Plan if not yet written
+  2. orange task update --status working
+  3. Continue to implementation
+
+If status is working:
+  1. Pick up where last session left off
+  2. Write updated ## Handoff
+  3. orange task update --status agent-review
 
 Do NOT push to remote.
 ```
@@ -216,7 +244,7 @@ Project: {project}
 Branch: {branch}
 Review round: {review_round} of 2
 
-1. Read TASK.md for requirements and ## Handoff
+1. Read TASK.md for requirements, ## Plan for approach, ## Handoff for state
 2. Review diff: git diff origin/HEAD...HEAD
 3. Check UNCERTAIN items for correctness risks
 4. Write ## Review to TASK.md:
@@ -231,7 +259,7 @@ Do NOT post to GitHub. All feedback goes in TASK.md only.
 The command rejects if ## Review is missing or has no verdict line.
 ```
 
-### Clarification (empty summary)
+### Clarification (requirements unclear)
 
 ```
 # Task: {summary}
@@ -245,7 +273,7 @@ Wait for user to attach and discuss.
 
 After discussion:
 1. orange task update --summary "..."
-2. Document plan in ## Notes
+2. Write ## Plan (APPROACH + TOUCHING)
 3. orange task update --status working
 ```
 
@@ -259,7 +287,7 @@ Branch: {branch}
 Review round: {review_round}
 
 Task stuck — review failed twice or repeated crashes.
-Read ## Review and ## Handoff for what went wrong.
+Read ## Review, ## Plan, and ## Handoff for what went wrong.
 
 1. Address the root issues
 2. Write updated ## Handoff
@@ -268,11 +296,11 @@ Read ## Review and ## Handoff for what went wrong.
 
 ## Orchestrator
 
-The orchestrator is a skill (not a module) that runs in the user's terminal. It:
+The orchestrator is a skill (not a module) that runs in the user's terminal. It decomposes work — it does not plan implementation.
 
 1. Refines vague requests — asks clarifying questions, waits for answers
-2. Breaks work into independent, parallel tasks with actionable plans
-3. Creates tasks with `--context` containing the plan
+2. Breaks work into independent, parallel tasks with clear summaries
+3. Creates tasks with optional `--context` for requirements and constraints
 4. Monitors progress via `orange task list`
 
-The orchestrator is upstream of the workflow — it creates tasks, the engine runs them.
+Each task's agent handles its own planning in the `planning` phase. The orchestrator's value is scoping and decomposition, not implementation design.
