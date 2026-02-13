@@ -1,42 +1,158 @@
 /**
- * Agent prompt generation and lifecycle management.
+ * Agent prompt templates.
  *
- * Files in worktree:
- * - TASK.md: Symlinked from task folder, contains task summary + context
+ * Each spawn_agent hook uses a prompt template.
+ * Variables: {summary}, {project}, {branch}, {review_round}, {status}.
+ *
+ * See specs/workflow.md § Agent Prompts for the canonical definitions.
  */
 
 import type { Task } from "./types.js";
 
 /**
- * Build the agent prompt for initial spawn.
- * Returns empty string if no summary (clarification mode).
+ * Worker prompt (pending → planning → working).
+ * Single agent session covering both planning and implementation phases.
  */
-export function buildAgentPrompt(task: Task): string {
-  // No summary = clarification mode, no prompt
-  if (!task.summary.trim()) {
-    return "";
-  }
-
+export function buildWorkerPrompt(task: Task): string {
   return `# Task: ${task.summary}
 
 Project: ${task.project}
 Branch: ${task.branch}
 
-Steps:
+Phase 1 — Plan:
 1. Read TASK.md — summary in frontmatter, context in body
-2. If branch is orange-tasks/<id>, rename: git branch -m <old> <meaningful-name> && orange task update --branch
-3. If empty/vague summary: add ## Questions to TASK.md, set --status clarification, wait
-4. If no ## Context: document plan in ## Notes before coding
-5. Read project rules (AGENTS.md, etc.), implement, test, commit
-6. Write ## Handoff to TASK.md (DONE/REMAINING/DECISIONS/UNCERTAIN)
-7. orange task update --status agent-review (triggers review agent)
+2. If branch is orange-tasks/<id>, rename it and run: orange task update --branch
+3. If requirements unclear: add ## Questions, set --status clarification, wait
+4. Write ## Plan to TASK.md (APPROACH + TOUCHING, optional RISKS)
+5. orange task update --status working
 
-IMPORTANT:
-- Do NOT push to remote (no git push) — human handles that
-- Do NOT set --status reviewing directly — always use agent-review
-- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
+Phase 2 — Implement:
+6. Read project rules (AGENTS.md, etc.)
+7. Implement according to ## Plan, test, commit
+8. Write ## Handoff (at least one of DONE/REMAINING/DECISIONS/UNCERTAIN)
+9. orange task update --status agent-review
 
-Read the orange skill for full details.`;
+Do NOT push to remote.
+Do NOT set --status reviewing — always use agent-review.`;
+}
+
+/**
+ * Worker respawn prompt (crashed session resume).
+ */
+export function buildWorkerRespawnPrompt(task: Task): string {
+  return `# Resuming: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Status: ${task.status}
+Review round: ${task.review_round}
+
+Read TASK.md — check ## Plan and ## Handoff for previous progress.
+
+If status is planning:
+  1. Write ## Plan if not yet written
+  2. orange task update --status working
+  3. Continue to implementation
+
+If status is working:
+  1. Pick up where last session left off
+  2. Write updated ## Handoff
+  3. orange task update --status agent-review
+
+Do NOT push to remote.`;
+}
+
+/**
+ * Worker fix prompt (review failed, address feedback).
+ */
+export function buildWorkerFixPrompt(task: Task): string {
+  return `# Fixing: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Review round: ${task.review_round}
+
+1. Read ## Review — specific feedback to address
+2. Fix each issue
+3. Write updated ## Handoff
+4. orange task update --status agent-review
+
+Do NOT push to remote.`;
+}
+
+/**
+ * Reviewer prompt (working → agent-review).
+ */
+export function buildReviewerPrompt(task: Task): string {
+  return `# Review: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Review round: ${task.review_round} of 2
+
+1. Read TASK.md for requirements, ## Plan for approach, ## Handoff for state
+2. Review diff: git diff origin/HEAD...HEAD
+3. Check UNCERTAIN items for correctness risks
+4. Write ## Review to TASK.md:
+   - First line must be: "Verdict: PASS" or "Verdict: FAIL"
+   - Then detailed, actionable feedback
+5. Set status:
+   - PASS → orange task update --status reviewing
+   - FAIL, round < 2 → orange task update --status working
+   - FAIL, round ≥ 2 → orange task update --status stuck
+
+Do NOT post to GitHub. All feedback goes in TASK.md only.
+The command rejects if ## Review is missing or has no verdict line.`;
+}
+
+/**
+ * Clarification prompt (requirements unclear).
+ */
+export function buildClarificationPrompt(task: Task): string {
+  return `# Task: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+
+Requirements unclear. Write ## Questions to TASK.md with 2-3 specific questions.
+Run: orange task update --status clarification
+Wait for user to attach and discuss.
+
+After discussion:
+1. orange task update --summary "..."
+2. Write ## Plan (APPROACH + TOUCHING)
+3. orange task update --status working`;
+}
+
+/**
+ * Stuck fix prompt (respawn from stuck).
+ */
+export function buildStuckFixPrompt(task: Task): string {
+  return `# Stuck: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Review round: ${task.review_round}
+
+Task stuck — review failed twice or repeated crashes.
+Read ## Review, ## Plan, and ## Handoff for what went wrong.
+
+1. Address the root issues
+2. Write updated ## Handoff
+3. orange task update --status agent-review`;
+}
+
+// --- Backwards-compatible aliases used by spawn.ts ---
+
+/**
+ * Build the agent prompt for initial spawn (worker).
+ * Returns empty string if no summary (clarification mode).
+ */
+export function buildAgentPrompt(task: Task): string {
+  if (!task.summary.trim()) {
+    return "";
+  }
+  return buildWorkerPrompt(task);
 }
 
 /**
@@ -44,63 +160,15 @@ Read the orange skill for full details.`;
  * Returns empty string if no summary (clarification mode).
  */
 export function buildRespawnPrompt(task: Task): string {
-  // No summary = clarification mode, no prompt
   if (!task.summary.trim()) {
     return "";
   }
-
-  return `# Resuming Task: ${task.summary}
-
-Project: ${task.project}
-Branch: ${task.branch}
-Status: ${task.status}
-Review round: ${task.review_round}
-
-Read ## Handoff in TASK.md first — it has structured state from the previous session.
-
-Check status and act:
-- reviewing → ready for human review, assist with any questions or changes the reviewer requests
-- agent-review → stop, review agent will be spawned separately
-- stuck → continue implementation, then write ## Handoff and set --status agent-review
-- clarification → wait for user input
-- working (review_round > 0) → read ## Review feedback in TASK.md, fix the issues, then write ## Handoff and set --status agent-review
-- working → continue implementation, then write ## Handoff and set --status agent-review
-
-IMPORTANT:
-- Do NOT push to remote (no git push) — human handles that
-- Do NOT set --status reviewing directly — always use agent-review
-- ALWAYS write ## Handoff to TASK.md before setting --status agent-review
-
-Read the orange skill for full details.`;
+  return buildWorkerRespawnPrompt(task);
 }
 
 /**
  * Build the review agent prompt.
- * Review agent evaluates worker's changes and writes ## Review to TASK.md.
  */
 export function buildReviewPrompt(task: Task): string {
-  const isLastRound = task.review_round >= 2;
-  return `# Review Task: ${task.summary}
-
-Project: ${task.project}
-Branch: ${task.branch}
-Review round: ${task.review_round} of 2
-
-You MUST write a ## Review section to TASK.md body BEFORE setting status.
-
-Steps:
-1. Read TASK.md for requirements and ## Handoff for implementation state
-2. Review diff: git diff origin/HEAD...HEAD
-3. Check ## Handoff UNCERTAIN items — flag any that affect correctness
-4. Write ## Review to TASK.md with verdict (PASS/FAIL) and specific feedback
-4. Then set status: ${isLastRound
-    ? "orange task update --status reviewing (pass) or --status stuck (fail, final round)"
-    : "orange task update --status reviewing (pass) or --status working (fail)"}
-
-IMPORTANT:
-- Do NOT post comments or reviews to GitHub (no gh pr review, no gh pr comment)
-- Do NOT set status without writing ## Review first
-- Save ALL feedback to TASK.md only
-
-Read the orange skill for detailed review agent instructions.`;
+  return buildReviewerPrompt(task);
 }

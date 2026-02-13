@@ -28,6 +28,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   review_harness: "claude",
   status: "pending",
   review_round: 0,
+  crash_count: 0,
   workspace: null,
   tmux_session: null,
   summary: "Test task description",

@@ -117,6 +117,7 @@ describe("Task state (TASK.md)", () => {
       updated_at: "2024-01-01T00:00:00.000Z",
       review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -146,6 +147,7 @@ describe("Task state (TASK.md)", () => {
       updated_at: "2024-01-01T01:00:00.000Z",
       review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -176,6 +178,7 @@ describe("Task state (TASK.md)", () => {
       updated_at: "2024-01-01T00:00:00.000Z",
       review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -231,6 +234,7 @@ describe("History (history.jsonl)", () => {
       updated_at: "2024-01-01T00:00:00.000Z",
       review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
     await saveTask(deps, task);
@@ -266,6 +270,7 @@ describe("History (history.jsonl)", () => {
       updated_at: "2024-01-01T00:00:00.000Z",
       review_harness: "claude",
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
     await saveTask(deps, task);
@@ -304,5 +309,156 @@ describe("History (history.jsonl)", () => {
   test("loadHistory returns empty array for non-existent task", async () => {
     const events = await loadHistory(deps, "orange", "nonexistent");
     expect(events).toEqual([]);
+  });
+});
+
+// Import section parsing functions
+import {
+  extractSection,
+  parsePlanSection,
+  parseHandoffSection,
+  parseReviewSection,
+  validatePlanGate,
+  validateHandoffGate,
+  validateReviewGate,
+} from "./state.js";
+
+describe("Section parsing", () => {
+  test("extractSection extracts named section content", () => {
+    const body = "## Context\n\nSome context\n\n## Plan\n\nAPPROACH: Use JWT\n\n## Handoff\n\nDONE: Auth";
+    expect(extractSection(body, "Plan")).toBe("APPROACH: Use JWT");
+    expect(extractSection(body, "Context")).toBe("Some context");
+    expect(extractSection(body, "Handoff")).toBe("DONE: Auth");
+  });
+
+  test("extractSection returns null for missing section", () => {
+    expect(extractSection("## Context\n\nSome text", "Plan")).toBeNull();
+    expect(extractSection("", "Plan")).toBeNull();
+  });
+
+  test("extractSection handles section at end of body", () => {
+    const body = "## Plan\n\nAPPROACH: Do the thing";
+    expect(extractSection(body, "Plan")).toBe("APPROACH: Do the thing");
+  });
+
+  test("parsePlanSection extracts all fields", () => {
+    const body = "## Plan\n\nAPPROACH: Use JWT\nTOUCHING: src/auth.ts\nRISKS: Token rotation";
+    const plan = parsePlanSection(body);
+    expect(plan).not.toBeNull();
+    expect(plan!.approach).toBe("Use JWT");
+    expect(plan!.touching).toBe("src/auth.ts");
+    expect(plan!.risks).toBe("Token rotation");
+  });
+
+  test("parsePlanSection returns null when section missing", () => {
+    expect(parsePlanSection("## Context\n\nSome text")).toBeNull();
+  });
+
+  test("parsePlanSection returns empty object when no fields match", () => {
+    const body = "## Plan\n\nJust some notes";
+    const plan = parsePlanSection(body);
+    expect(plan).not.toBeNull();
+    expect(plan!.approach).toBeUndefined();
+    expect(plan!.touching).toBeUndefined();
+  });
+
+  test("parseHandoffSection extracts all fields", () => {
+    const body = "## Handoff\n\nDONE: Auth\nREMAINING: Tests\nDECISIONS: JWT\nUNCERTAIN: Expiry";
+    const handoff = parseHandoffSection(body);
+    expect(handoff).not.toBeNull();
+    expect(handoff!.done).toBe("Auth");
+    expect(handoff!.remaining).toBe("Tests");
+    expect(handoff!.decisions).toBe("JWT");
+    expect(handoff!.uncertain).toBe("Expiry");
+  });
+
+  test("parseHandoffSection returns null when section missing", () => {
+    expect(parseHandoffSection("")).toBeNull();
+  });
+
+  test("parseReviewSection extracts verdict and feedback", () => {
+    const body = "## Review\n\nVerdict: PASS\n\nLooks good!\nNice code.";
+    const review = parseReviewSection(body);
+    expect(review).not.toBeNull();
+    expect(review!.verdict).toBe("PASS");
+    expect(review!.feedback).toBe("Looks good!\nNice code.");
+  });
+
+  test("parseReviewSection handles FAIL verdict", () => {
+    const body = "## Review\n\nVerdict: FAIL\n\nNeeds work on error handling";
+    const review = parseReviewSection(body);
+    expect(review).not.toBeNull();
+    expect(review!.verdict).toBe("FAIL");
+  });
+
+  test("parseReviewSection is case-insensitive for verdict", () => {
+    const body = "## Review\n\nVerdict: pass\n\nOK";
+    const review = parseReviewSection(body);
+    expect(review).not.toBeNull();
+    expect(review!.verdict).toBe("PASS");
+  });
+
+  test("parseReviewSection returns null without verdict line", () => {
+    const body = "## Review\n\nNo verdict here";
+    expect(parseReviewSection(body)).toBeNull();
+  });
+
+  test("parseReviewSection returns null for missing section", () => {
+    expect(parseReviewSection("")).toBeNull();
+  });
+});
+
+describe("Gate validation", () => {
+  test("validatePlanGate passes with APPROACH", () => {
+    expect(validatePlanGate("## Plan\n\nAPPROACH: Use JWT")).toBe(true);
+  });
+
+  test("validatePlanGate passes with TOUCHING", () => {
+    expect(validatePlanGate("## Plan\n\nTOUCHING: src/auth.ts")).toBe(true);
+  });
+
+  test("validatePlanGate fails without recognized fields", () => {
+    expect(validatePlanGate("## Plan\n\nJust some notes")).toBe(false);
+  });
+
+  test("validatePlanGate fails without section", () => {
+    expect(validatePlanGate("")).toBe(false);
+  });
+
+  test("validateHandoffGate passes with DONE", () => {
+    expect(validateHandoffGate("## Handoff\n\nDONE: Implemented auth")).toBe(true);
+  });
+
+  test("validateHandoffGate passes with REMAINING", () => {
+    expect(validateHandoffGate("## Handoff\n\nREMAINING: Tests")).toBe(true);
+  });
+
+  test("validateHandoffGate passes with DECISIONS", () => {
+    expect(validateHandoffGate("## Handoff\n\nDECISIONS: JWT")).toBe(true);
+  });
+
+  test("validateHandoffGate passes with UNCERTAIN", () => {
+    expect(validateHandoffGate("## Handoff\n\nUNCERTAIN: Token expiry")).toBe(true);
+  });
+
+  test("validateHandoffGate fails without section", () => {
+    expect(validateHandoffGate("")).toBe(false);
+  });
+
+  test("validateReviewGate passes with matching PASS verdict", () => {
+    expect(validateReviewGate("## Review\n\nVerdict: PASS\n\nGood", "PASS")).toBe(true);
+  });
+
+  test("validateReviewGate passes with matching FAIL verdict", () => {
+    expect(validateReviewGate("## Review\n\nVerdict: FAIL\n\nBad", "FAIL")).toBe(true);
+  });
+
+  test("validateReviewGate fails with mismatched verdict", () => {
+    expect(validateReviewGate("## Review\n\nVerdict: PASS\n\nGood", "FAIL")).toBe(false);
+    expect(validateReviewGate("## Review\n\nVerdict: FAIL\n\nBad", "PASS")).toBe(false);
+  });
+
+  test("validateReviewGate fails without section", () => {
+    expect(validateReviewGate("", "PASS")).toBe(false);
   });
 });
