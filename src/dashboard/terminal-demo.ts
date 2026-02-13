@@ -11,6 +11,8 @@
 
 import {
   createCliRenderer,
+  BoxRenderable,
+  TextRenderable,
   type KeyEvent,
 } from "@opentui/core";
 import { TerminalViewer } from "./terminal.js";
@@ -50,26 +52,45 @@ async function main() {
     useMouse: false,
   });
 
+  // Create container with header and footer chrome
+  const container = new BoxRenderable(renderer, {
+    id: "terminal-demo",
+    flexDirection: "column",
+    width: "100%",
+    height: "100%",
+  });
+
+  const header = new TextRenderable(renderer, {
+    id: "terminal-header",
+    content: ` Session: ${sessionName}`,
+    fg: "#00DDFF",
+  });
+
   // Create terminal viewer
   const viewer = new TerminalViewer(renderer, {
     tmux,
-    onExit: () => {
-      renderer.destroy();
-      process.exit(0);
-    },
-    onAttach: async () => {
-      // Full attach to tmux session
-      renderer.destroy();
-      await tmux.attachOrCreate(sessionName, process.cwd());
-      process.exit(0);
+    onSessionDeath: () => {
+      footer.content = " [Session ended] Press Ctrl+C to exit";
     },
   });
 
-  // Add to root
-  renderer.root.add(viewer.getContainer());
+  const footer = new TextRenderable(renderer, {
+    id: "terminal-footer",
+    content: " Ctrl+\\:exit  Ctrl+]:attach full  [text mode]",
+    fg: "#888888",
+  });
+
+  container.add(header);
+  container.add(viewer.getRenderable());
+  container.add(footer);
+  renderer.root.add(container);
+
+  // Terminal dimensions (subtract header/footer)
+  const termHeight = Math.max(1, renderer.height - 2);
+  const termWidth = Math.max(20, renderer.width);
 
   // Enter terminal view
-  await viewer.enter(sessionName, renderer.width, renderer.height);
+  await viewer.start(sessionName, termWidth, termHeight);
 
   // Handle keyboard input
   renderer.keyInput.on("keypress", async (key: KeyEvent) => {
@@ -77,6 +98,21 @@ async function main() {
     if (key.ctrl && key.name === "c") {
       viewer.destroy();
       renderer.destroy();
+      process.exit(0);
+    }
+
+    // Ctrl+\ — exit
+    if (key.ctrl && key.name === "\\") {
+      viewer.destroy();
+      renderer.destroy();
+      process.exit(0);
+    }
+
+    // Ctrl+] — full-screen attach
+    if (key.ctrl && key.name === "]") {
+      viewer.destroy();
+      renderer.destroy();
+      await tmux.attachOrCreate(sessionName, process.cwd());
       process.exit(0);
     }
 
@@ -89,8 +125,10 @@ async function main() {
   });
 
   // Handle resize
-  renderer.on("resize", async () => {
-    await viewer.resize(renderer.width, renderer.height);
+  renderer.on("resize", () => {
+    const h = Math.max(1, renderer.height - 2);
+    const w = Math.max(20, renderer.width);
+    viewer.resize(w, h);
   });
 
   console.log(`Connected to tmux session: ${sessionName}`);

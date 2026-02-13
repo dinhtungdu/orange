@@ -4,21 +4,18 @@
  * Manages git worktrees as a reusable resource pool.
  * Uses file locking to prevent race conditions.
  *
- * TASK.md is the single source of truth for workspace allocation.
- * A workspace is "bound" if any TASK.md has `workspace: <name>` in frontmatter.
- * A workspace is "available" if no TASK.md references it.
- *
- * Supports lazy initialization - worktrees are created on-demand
- * when task spawn requests a workspace and none are available.
+ * Pool state is tracked in .pool.json (per data.md spec).
+ * acquire marks a workspace as bound, release marks it as available.
  */
 
-import { writeFile, mkdir, unlink, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
-import type { Deps, Project, PoolState, Task } from "./types.js";
+import type { Deps, Project, PoolState } from "./types.js";
 import { loadProjects } from "./state.js";
 import { getAllGitExcludes } from "./harness.js";
-import { listTasks } from "./db.js";
+
+const POOL_FILE = ".pool.json";
 
 /**
  * Get the path to the workspaces directory.
@@ -35,6 +32,13 @@ function getLockPath(deps: Deps): string {
 }
 
 /**
+ * Get the .pool.json file path.
+ */
+function getPoolPath(deps: Deps): string {
+  return join(getWorkspacesDir(deps), POOL_FILE);
+}
+
+/**
  * Get all workspace directories that exist on disk.
  * Returns sorted list for deterministic ordering.
  */
@@ -46,59 +50,37 @@ async function getExistingWorkspaces(deps: Deps): Promise<string[]> {
       .filter((e) => e.isDirectory() && e.name.includes("--"))
       .map((e) => e.name)
       .sort((a, b) => {
-        // Sort by project name first, then by number
         const [projA, numA] = a.split("--");
         const [projB, numB] = b.split("--");
         if (projA !== projB) return projA.localeCompare(projB);
         return parseInt(numA, 10) - parseInt(numB, 10);
       });
   } catch (err) {
-    // Directory doesn't exist yet - this is expected on first run
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }
-    // Other errors (permissions, etc.) should propagate
     throw err;
   }
 }
 
 /**
- * Get bound workspaces from TASK.md files (single source of truth).
- * Returns a map of workspace name → task reference (project/branch).
+ * Load pool state from .pool.json.
  */
-async function getBoundWorkspaces(deps: Deps): Promise<Map<string, string>> {
-  const tasks = await listTasks(deps, {});
-  const bound = new Map<string, string>();
-  
-  for (const task of tasks) {
-    if (task.workspace) {
-      bound.set(task.workspace, `${task.project}/${task.branch}`);
-    }
+export async function loadPoolState(deps: Deps): Promise<PoolState> {
+  try {
+    const content = await readFile(getPoolPath(deps), "utf-8");
+    return JSON.parse(content) as PoolState;
+  } catch {
+    return { workspaces: {} };
   }
-  
-  return bound;
 }
 
 /**
- * Load pool state derived from TASK.md files and existing workspace directories.
- * This is the single source of truth - no .pool.json needed.
+ * Save pool state to .pool.json.
  */
-export async function loadPoolState(deps: Deps): Promise<PoolState> {
-  const existingWorkspaces = await getExistingWorkspaces(deps);
-  const boundWorkspaces = await getBoundWorkspaces(deps);
-  
-  const workspaces: PoolState["workspaces"] = {};
-  
-  for (const name of existingWorkspaces) {
-    const task = boundWorkspaces.get(name);
-    if (task) {
-      workspaces[name] = { status: "bound", task };
-    } else {
-      workspaces[name] = { status: "available" };
-    }
-  }
-  
-  return { workspaces };
+async function savePoolState(deps: Deps, state: PoolState): Promise<void> {
+  await ensureWorkspacesDir(deps);
+  await writeFile(getPoolPath(deps), JSON.stringify(state, null, 2));
 }
 
 /**
@@ -109,19 +91,19 @@ async function ensureWorkspacesDir(deps: Deps): Promise<void> {
 }
 
 /**
- * Count existing workspaces for a project.
+ * Count existing workspaces for a project in pool state.
  */
-function countProjectWorkspaces(existingWorkspaces: string[], projectName: string): number {
+function countProjectWorkspaces(state: PoolState, projectName: string): number {
   const prefix = `${projectName}--`;
-  return existingWorkspaces.filter((name) => name.startsWith(prefix)).length;
+  return Object.keys(state.workspaces).filter((name) => name.startsWith(prefix)).length;
 }
 
 /**
  * Get the next workspace number for a project.
  */
-function getNextWorkspaceNumber(existingWorkspaces: string[], projectName: string): number {
+function getNextWorkspaceNumber(state: PoolState, projectName: string): number {
   const prefix = `${projectName}--`;
-  const numbers = existingWorkspaces
+  const numbers = Object.keys(state.workspaces)
     .filter((name) => name.startsWith(prefix))
     .map((name) => parseInt(name.slice(prefix.length), 10))
     .filter((n) => !isNaN(n));
@@ -133,31 +115,25 @@ function getNextWorkspaceNumber(existingWorkspaces: string[], projectName: strin
 /**
  * Create a single worktree for a project.
  * Returns the workspace name.
- *
- * Note: Harness-specific setup happens at spawn time, not here.
- * This allows different tasks to use different harnesses in the same worktree pool.
  */
 async function createWorktree(
   deps: Deps,
   project: Project,
-  existingWorkspaces: string[]
+  state: PoolState
 ): Promise<string> {
-  const number = getNextWorkspaceNumber(existingWorkspaces, project.name);
+  const number = getNextWorkspaceNumber(state, project.name);
   const name = `${project.name}--${number}`;
   const worktreePath = join(getWorkspacesDir(deps), name);
 
   // Safety check: verify the directory doesn't already exist
-  // This catches stale state / race conditions
   const { stat } = await import("node:fs/promises");
   try {
     await stat(worktreePath);
-    // If we get here, the path exists but wasn't in existingWorkspaces
     throw new Error(
-      `Workspace directory '${worktreePath}' already exists but wasn't detected. ` +
+      `Workspace directory '${worktreePath}' already exists but wasn't in pool state. ` +
       `This may indicate stale state. Try running 'orange workspace gc'.`
     );
   } catch (err) {
-    // ENOENT is expected - directory doesn't exist, we can create it
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       throw err;
     }
@@ -165,8 +141,6 @@ async function createWorktree(
 
   console.log(`Creating workspace ${name}...`);
   await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
-
-  // Add orange files to main repo's .git/info/exclude
   await addGitExcludes(project.path);
 
   return name;
@@ -174,10 +148,7 @@ async function createWorktree(
 
 /**
  * Add orange-managed files to the main repo's .git/info/exclude.
- * Worktrees share the main repo's exclude file — worktree-specific
- * git dirs don't support their own info/exclude.
- *
- * @param projectPath - Path to the main project repo (not the worktree)
+ * Worktrees share the main repo's exclude file.
  */
 export async function addGitExcludes(projectPath: string): Promise<void> {
   try {
@@ -188,13 +159,12 @@ export async function addGitExcludes(projectPath: string): Promise<void> {
 
     let excludeContent = "";
     try {
-      const { readFile } = await import("node:fs/promises");
-      excludeContent = await readFile(excludePath, "utf-8");
+      const { readFile: rf } = await import("node:fs/promises");
+      excludeContent = await rf(excludePath, "utf-8");
     } catch {
       // File doesn't exist
     }
 
-    // Get all excludes from all harnesses
     const entries = getAllGitExcludes();
     for (const entry of entries) {
       if (!excludeContent.includes(entry)) {
@@ -204,53 +174,53 @@ export async function addGitExcludes(projectPath: string): Promise<void> {
     }
     await writeFile(excludePath, excludeContent);
   } catch {
-    // Best-effort — project path may not be a real git repo in tests
+    // Best-effort
   }
 }
 
 /**
  * Initialize workspace pool for a project.
- * Creates worktrees based on pool_size.
- *
- * This is optional - workspaces can be created lazily on first spawn.
- * Note: Harness-specific setup happens at spawn time, not here.
+ * Creates worktrees based on pool_size and writes to .pool.json.
  */
 export async function initWorkspacePool(deps: Deps, project: Project): Promise<void> {
   await ensureWorkspacesDir(deps);
 
-  const existingWorkspaces = await getExistingWorkspaces(deps);
+  const state = await loadPoolState(deps);
+  const existingDirs = await getExistingWorkspaces(deps);
 
   for (let i = 1; i <= project.pool_size; i++) {
     const name = `${project.name}--${i}`;
-    const worktreePath = join(getWorkspacesDir(deps), name);
 
-    // Skip if already exists
-    if (existingWorkspaces.includes(name)) {
+    // Skip if already tracked in pool state
+    if (state.workspaces[name]) {
       continue;
     }
 
-    // Create worktree
-    await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
+    const worktreePath = join(getWorkspacesDir(deps), name);
 
-    // Add orange files to main repo's .git/info/exclude
-    await addGitExcludes(project.path);
+    // Create worktree if directory doesn't exist
+    if (!existingDirs.includes(name)) {
+      await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
+      await addGitExcludes(project.path);
+    }
+
+    state.workspaces[name] = { status: "available" };
   }
+
+  await savePoolState(deps, state);
 }
 
 /**
  * Acquire an available workspace for a project.
  * Uses file locking to prevent race conditions.
  *
- * If no workspace is available but pool_size allows, creates a new worktree (lazy init).
- * If pool is exhausted (all workspaces bound and at pool_size), throws an error.
- *
- * Note: This only returns the workspace name. The caller must update TASK.md
- * with `workspace: <name>` to mark it as bound (TASK.md is source of truth).
+ * Marks the workspace as bound in .pool.json.
+ * If pool is exhausted, throws an error.
  */
 export async function acquireWorkspace(
   deps: Deps,
   projectName: string,
-  _task: string  // Kept for API compatibility, but not stored in pool.json anymore
+  task: string
 ): Promise<string> {
   const log = deps.logger.child("workspace");
 
@@ -261,29 +231,28 @@ export async function acquireWorkspace(
   const lockPath = getLockPath(deps);
   await writeFile(lockPath, "", { flag: "a" });
 
-  // Acquire lock
   log.debug("Acquiring pool lock");
   const release = await lock(lockPath, { retries: 5 });
 
   try {
-    const existingWorkspaces = await getExistingWorkspaces(deps);
-    const boundWorkspaces = await getBoundWorkspaces(deps);
+    const state = await loadPoolState(deps);
 
     // Find first available workspace for this project
     const prefix = `${projectName}--`;
-    const projectWorkspaces = existingWorkspaces.filter((name) => name.startsWith(prefix));
-    const available = projectWorkspaces.find((name) => !boundWorkspaces.has(name));
+    const available = Object.entries(state.workspaces)
+      .find(([name, entry]) => name.startsWith(prefix) && entry.status === "available");
 
     log.debug("Workspace pool state", {
       project: projectName,
-      existing: projectWorkspaces,
-      bound: Array.from(boundWorkspaces.keys()).filter((name) => name.startsWith(prefix)),
-      available,
+      available: available?.[0] ?? null,
     });
 
     if (available) {
-      log.info("Workspace acquired", { workspace: available, project: projectName });
-      return available;
+      const [name] = available;
+      state.workspaces[name] = { status: "bound", task };
+      await savePoolState(deps, state);
+      log.info("Workspace acquired", { workspace: name, project: projectName });
+      return name;
     }
 
     // No available workspace - try lazy init
@@ -295,7 +264,7 @@ export async function acquireWorkspace(
       throw new Error(`Project '${projectName}' not found`);
     }
 
-    const existingCount = countProjectWorkspaces(existingWorkspaces, projectName);
+    const existingCount = countProjectWorkspaces(state, projectName);
     if (existingCount >= project.pool_size) {
       log.warn("Pool exhausted", { project: projectName, existing: existingCount, poolSize: project.pool_size });
       throw new Error(
@@ -305,7 +274,11 @@ export async function acquireWorkspace(
 
     // Create new worktree (lazy init)
     log.info("Creating new worktree (lazy init)", { project: projectName });
-    const name = await createWorktree(deps, project, existingWorkspaces);
+    const name = await createWorktree(deps, project, state);
+
+    // Mark as bound in pool state
+    state.workspaces[name] = { status: "bound", task };
+    await savePoolState(deps, state);
 
     log.info("Workspace acquired (new)", { workspace: name, project: projectName });
     return name;
@@ -317,16 +290,15 @@ export async function acquireWorkspace(
 
 /**
  * Release a workspace back to the pool.
- * Cleans git state to prepare for reuse.
+ * Cleans git state and marks as available in .pool.json.
  *
- * Note: The caller must clear `workspace` in TASK.md to mark it as available
- * (TASK.md is the source of truth for allocation).
- *
- * After release, optionally auto-spawns the next pending task for this project.
- *
- * @param autoSpawn - Whether to auto-spawn next pending task (default: true)
+ * Release never auto-spawns. The spawn_next hook handles that separately.
  */
-export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn = true): Promise<void> {
+export async function releaseWorkspace(
+  deps: Deps,
+  workspace: string,
+  _autoSpawn?: boolean // Deprecated, ignored. spawn_next hook handles this.
+): Promise<void> {
   const log = deps.logger.child("workspace");
 
   log.debug("Releasing workspace", { workspace });
@@ -336,26 +308,28 @@ export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn 
   const lockPath = getLockPath(deps);
   await writeFile(lockPath, "", { flag: "a" });
 
-  // Extract project name before lock (needed for auto-spawn)
   const projectName = workspace.split("--")[0];
 
-  // Acquire lock
   log.debug("Acquiring pool lock for release");
   const release = await lock(lockPath, { retries: 5 });
 
   try {
-    // Verify workspace exists
-    const existingWorkspaces = await getExistingWorkspaces(deps);
-    if (!existingWorkspaces.includes(workspace)) {
-      log.error("Workspace not found", { workspace });
-      throw new Error(`Workspace '${workspace}' not found`);
+    // Verify workspace is tracked
+    const state = await loadPoolState(deps);
+    if (!state.workspaces[workspace]) {
+      // Check if directory exists on disk but not tracked
+      const existingDirs = await getExistingWorkspaces(deps);
+      if (!existingDirs.includes(workspace)) {
+        log.error("Workspace not found", { workspace });
+        throw new Error(`Workspace '${workspace}' not found`);
+      }
     }
 
     // Clean workspace
     const workspacePath = join(getWorkspacesDir(deps), workspace);
     log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
-    // Check for uncommitted changes - fail if dirty so user can review
+    // Check for uncommitted changes
     const isDirty = await deps.git.isDirty(workspacePath);
     if (isDirty) {
       throw new Error(
@@ -368,14 +342,14 @@ export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn 
     const project = projects.find((p) => p.name === projectName);
     const defaultBranch = project?.default_branch ?? "main";
 
-    // Fetch latest refs (ignore error for local-only repos)
+    // Fetch latest refs
     try {
       await deps.git.fetch(workspacePath);
     } catch {
-      // No remote - local-only repo
+      // No remote
     }
 
-    // Reset to default branch - try origin/<branch> first, fallback to local branch
+    // Reset to default branch
     try {
       await deps.git.resetHard(workspacePath, `origin/${defaultBranch}`);
     } catch {
@@ -385,10 +359,10 @@ export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn 
     // Clean untracked files
     await deps.git.clean(workspacePath);
 
-    // Remove orange-specific files (excluded from git, so git clean won't remove them)
-    const outcomeFile = join(workspacePath, ".orange-outcome");
+    // Remove TASK.md symlink and orange files
     const taskSymlink = join(workspacePath, "TASK.md");
-    for (const file of [outcomeFile, taskSymlink]) {
+    const outcomeFile = join(workspacePath, ".orange-outcome");
+    for (const file of [taskSymlink, outcomeFile]) {
       try {
         await unlink(file);
       } catch {
@@ -396,17 +370,14 @@ export async function releaseWorkspace(deps: Deps, workspace: string, autoSpawn 
       }
     }
 
+    // Mark as available in .pool.json
+    state.workspaces[workspace] = { status: "available" };
+    await savePoolState(deps, state);
+
     log.info("Workspace released", { workspace, project: projectName });
   } finally {
     log.debug("Releasing pool lock");
     await release();
-  }
-
-  // Auto-spawn next pending task for this project (outside lock)
-  if (autoSpawn) {
-    // Imported dynamically to avoid circular dependency
-    const { spawnNextPending } = await import("./spawn.js");
-    await spawnNextPending(deps, projectName);
   }
 }
 
@@ -419,25 +390,24 @@ export function getWorkspacePath(deps: Deps, workspace: string): string {
 
 /**
  * Get pool statistics for a project.
- * Derived from TASK.md files (single source of truth).
  */
 export async function getPoolStats(
   deps: Deps,
   projectName: string
 ): Promise<{ total: number; available: number; bound: number; poolSize: number }> {
-  const existingWorkspaces = await getExistingWorkspaces(deps);
-  const boundWorkspaces = await getBoundWorkspaces(deps);
+  const state = await loadPoolState(deps);
   const projects = await loadProjects(deps);
   const project = projects.find((p) => p.name === projectName);
 
   const prefix = `${projectName}--`;
-  const projectWorkspaces = existingWorkspaces.filter((name) => name.startsWith(prefix));
+  const projectEntries = Object.entries(state.workspaces)
+    .filter(([name]) => name.startsWith(prefix));
 
-  const bound = projectWorkspaces.filter((name) => boundWorkspaces.has(name)).length;
-  const available = projectWorkspaces.length - bound;
+  const bound = projectEntries.filter(([, e]) => e.status === "bound").length;
+  const available = projectEntries.length - bound;
 
   return {
-    total: projectWorkspaces.length,
+    total: projectEntries.length,
     available,
     bound,
     poolSize: project?.pool_size ?? 0,
