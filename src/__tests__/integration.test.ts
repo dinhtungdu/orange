@@ -222,6 +222,7 @@ describe("Integration: Workspace Pool", () => {
       updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
     await saveTask(deps, task);
@@ -282,6 +283,7 @@ describe("Integration: Full Task Lifecycle", () => {
       updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -314,6 +316,7 @@ describe("Integration: Full Task Lifecycle", () => {
       updated_at: "2024-01-01T00:00:00.000Z",
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
     const task2 = {
@@ -330,6 +333,7 @@ describe("Integration: Full Task Lifecycle", () => {
       updated_at: "2024-01-02T00:00:00.000Z",
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -357,6 +361,7 @@ describe("Integration: Full Task Lifecycle", () => {
       updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -374,6 +379,7 @@ describe("Integration: Full Task Lifecycle", () => {
       updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 
@@ -467,6 +473,7 @@ describe("Integration: Multiple Projects", () => {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
     const task2 = {
@@ -475,6 +482,7 @@ describe("Integration: Multiple Projects", () => {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       review_harness: "claude" as const,
     review_round: 0,
+    crash_count: 0,
     pr_url: null,
     };
 

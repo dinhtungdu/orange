@@ -66,6 +66,7 @@ export const SESSION_COLOR: Record<SessionState, string> = {
 /** Task status colors (hex). */
 export const STATUS_COLOR: Record<TaskStatus, string> = {
   pending: "#888888",
+  planning: "#6688CC", // Blue-gray — agent planning
   clarification: "#FF8800", // Orange — needs attention
   working: "#5599FF",
   "agent-review": "#CC8800", // Orange — review in progress
