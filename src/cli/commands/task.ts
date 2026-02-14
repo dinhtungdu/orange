@@ -553,7 +553,9 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
 /**
  * Respawn a task whose session died.
- * Reuses the existing workspace and branch, just starts a new agent session.
+ *
+ * Routes through transition engine for stuck/cancelled,
+ * or calls hooks directly for dead session recovery.
  */
 async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
@@ -573,19 +575,17 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Cannot respawn done tasks
   if (task.status === "done") {
     console.error(`Task '${taskId}' is done, cannot respawn`);
     process.exit(1);
   }
 
-  // Cannot respawn pending tasks (use spawn instead)
   if (task.status === "pending") {
     console.error(`Task '${taskId}' is pending. Use 'spawn' instead.`);
     process.exit(1);
   }
 
-  // Check if session is still active (for tasks with workspace)
+  // Check if session is still active
   if (task.tmux_session) {
     const exists = await deps.tmux.sessionExists(task.tmux_session);
     if (exists) {
@@ -594,85 +594,49 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
   }
 
-  // Get project for prompt building
-  const projects = await loadProjects(deps);
-  const project = projects.find((p) => p.name === task.project);
-  if (!project) {
-    console.error(`Project '${task.project}' not found`);
-    process.exit(1);
+  const { executeTransition } = await import("../../core/transitions.js");
+  const { createHookExecutor, acquireWorkspaceHook, spawnAgentHook } = await import("../../core/hooks.js");
+  const hookExecutor = createHookExecutor(deps);
+
+  if (task.status === "stuck") {
+    // stuck → working via transition engine (runs spawn_agent(stuck_fix) hook)
+    await executeTransition(task, "working", deps, hookExecutor);
+    console.log(`Respawned agent for task ${taskId} in ${task.tmux_session}`);
+    return;
   }
 
-  // Acquire workspace if needed
-  let workspace = task.workspace;
-  if (!workspace) {
-    const { acquireWorkspace, getWorkspacePath } = await import("../../core/workspace.js");
-    workspace = await acquireWorkspace(deps, task.project, `${task.project}/${task.branch}`);
-    task.workspace = workspace;
-
-    // Setup git branch in new workspace
-    const workspacePath = getWorkspacePath(deps, workspace);
-    try {
-      await deps.git.fetch(workspacePath);
-      await deps.git.resetHard(workspacePath, `origin/${project.default_branch}`);
-    } catch {
-      // No remote — use local default branch as-is
-    }
-
-    // Create or checkout branch
-    const branchExists = await deps.git.branchExists(workspacePath, task.branch);
-    if (branchExists) {
-      try {
-        await deps.git.checkout(workspacePath, task.branch);
-      } catch {
-        // Local branch doesn't exist but remote does — create tracking branch
-        await deps.git.createBranch(workspacePath, task.branch, `origin/${task.branch}`);
-      }
-    } else {
-      await deps.git.createBranch(workspacePath, task.branch);
-    }
+  if (task.status === "cancelled") {
+    // Reactivate: set to pending, then spawn via transition engine
+    task.status = "pending";
+    task.updated_at = deps.clock.now();
+    await saveTask(deps, task);
+    await appendHistory(deps, task.project, task.id, {
+      type: "status.changed",
+      timestamp: deps.clock.now(),
+      from: "cancelled",
+      to: "pending",
+    });
+    await executeTransition(task, "planning", deps, hookExecutor);
+    console.log(`Respawned agent for task ${taskId} in ${task.tmux_session}`);
+    return;
   }
 
-  // Get workspace path
-  const workspacePath = join(deps.dataDir, "workspaces", workspace);
+  // Dead session recovery (working/planning/agent-review/reviewing/clarification)
+  // No status change — just re-establish workspace + session
+  await acquireWorkspaceHook(deps, task);
 
-  // Ensure symlinks exist (may be missing if workspace reused or created before symlink logic)
-  const { linkTaskFile } = await import("../../core/spawn.js");
-  await linkTaskFile(deps, workspacePath, task.project, task.id);
+  type VariantType = "worker" | "worker_respawn" | "reviewer";
+  const variantMap: Record<string, VariantType> = {
+    working: "worker_respawn",
+    planning: "worker_respawn",
+    "agent-review": "reviewer",
+    reviewing: "worker_respawn",
+    clarification: "worker",
+  };
+  const variant = variantMap[task.status] ?? "worker_respawn";
+  await spawnAgentHook(deps, task, variant);
 
-  // Create new tmux session
-  const tmuxSession = `${task.project}/${task.branch}`;
-  const { buildRespawnPrompt, buildReviewPrompt } = await import("../../core/agent.js");
-  const { HARNESSES } = await import("../../core/harness.js");
-
-  // If agent-review, respawn review agent instead of worker
-  const isReview = task.status === "agent-review";
-  const prompt = isReview ? buildReviewPrompt(task) : buildRespawnPrompt(task);
-  const harness = isReview ? task.review_harness : task.harness;
-  const harnessConfig = HARNESSES[harness];
-  // Empty prompt = interactive session, just spawn harness without args
-  const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
-
-  log.info("Respawning task", { taskId, session: tmuxSession, interactive: !prompt, isReview });
-  await deps.tmux.newSession(tmuxSession, workspacePath, command);
-
-  // Update task — keep status for agent-review and reviewing
-  const now = deps.clock.now();
-  task.tmux_session = tmuxSession;
-  const isReviewing = task.status === "reviewing";
-  if (!isReview && !isReviewing) {
-    task.status = "working";
-  }
-  task.updated_at = now;
-
-  await saveTask(deps, task);
-  await appendHistory(deps, task.project, task.id, {
-    type: "agent.spawned",
-    timestamp: now,
-    workspace,
-    tmux_session: tmuxSession,
-  });
-
-  console.log(`Respawned agent for task ${taskId} in ${tmuxSession}`);
+  console.log(`Respawned agent for task ${taskId} in ${task.tmux_session}`);
 }
 
 /**
