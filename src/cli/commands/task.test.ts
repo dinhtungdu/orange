@@ -427,8 +427,9 @@ describe("task spawn command", () => {
     );
 
     // Verify status changed (load by task ID)
+    // Spawn now goes through transition engine: pending → planning
     const task = await loadTask(deps, "testproj", taskId);
-    expect(task!.status).toBe("working");
+    expect(task!.status).toBe("planning");
     expect(task!.workspace).toBe("testproj--1");
     expect(task!.tmux_session).toBe("testproj/spawn-feature");
 
@@ -450,10 +451,11 @@ describe("task spawn command", () => {
     );
 
     // Load history by task ID
+    // Transition engine: pending → planning, with agent.spawned hook
     const history = await loadHistory(deps, "testproj", taskId);
     expect(history.length).toBeGreaterThanOrEqual(3); // created + spawned + status.changed
     expect(history.some(e => e.type === "agent.spawned")).toBe(true);
-    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "working")).toBe(true);
+    expect(history.some(e => e.type === "status.changed" && (e as StatusChangedEvent).to === "planning")).toBe(true);
   });
 
   test("errors when task not found", async () => {
@@ -975,7 +977,8 @@ describe("task delete command", () => {
     ).rejects.toThrow("process.exit(1)");
 
     expect(consoleErrors[0]).toContain("Cannot delete");
-    expect(consoleErrors[0]).toContain("working");
+    // After spawn, task is in 'planning' state (transition engine: pending → planning)
+    expect(consoleErrors[0]).toContain("planning");
   });
 
   test("errors when deleting pending task", async () => {

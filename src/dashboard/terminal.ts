@@ -117,6 +117,18 @@ export class TerminalViewer {
   }
 
   /**
+   * Show a placeholder message instead of capturing a session.
+   * Used when no tmux session exists yet.
+   */
+  showPlaceholder(msg: string): void {
+    this.stopPolling();
+    this.state.active = false;
+    this.state.session = null;
+    this.state.sessionDead = false;
+    this.content.content = msg;
+  }
+
+  /**
    * Start capturing a tmux session.
    */
   async start(session: string, width: number, height: number): Promise<void> {

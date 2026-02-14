@@ -23,7 +23,7 @@ import {
   type KeyEvent,
   type PasteEvent,
 } from "@opentui/core";
-import type { Deps, TaskStatus } from "../core/types.js";
+import type { Deps, Task, TaskStatus } from "../core/types.js";
 import {
   DashboardState,
   STATUS_COLOR,
@@ -32,6 +32,7 @@ import {
   CHECKS_ICON,
   type DashboardOptions,
 } from "./state.js";
+import { WorkspaceViewer } from "./workspace-view.js";
 
 // Re-export for external use and tests
 export { DashboardState } from "./state.js";
@@ -171,7 +172,7 @@ function createHeaderRow(renderer: CliRenderer): BoxRenderable {
 function buildDashboard(
   renderer: CliRenderer,
   state: DashboardState
-): { update: () => void } {
+): { update: () => void; root: BoxRenderable } {
   const s = state.data;
 
   // --- Root container ---
@@ -593,7 +594,7 @@ function buildDashboard(
     }
   }
 
-  return { update };
+  return { update, root };
 }
 
 /**
@@ -612,6 +613,91 @@ export async function runDashboard(
   const state = new DashboardState(deps, options);
   const dashboard = buildDashboard(renderer, state);
 
+  // --- Workspace viewer ---
+  let workspaceViewer: WorkspaceViewer | null = null;
+
+  async function enterWorkspace(task: Task): Promise<void> {
+    // Destroy previous viewer if any
+    if (workspaceViewer) {
+      await workspaceViewer.destroy();
+    }
+
+    workspaceViewer = new WorkspaceViewer(renderer, {
+      deps,
+      task,
+      onExit: () => {
+        exitWorkspace();
+      },
+      onAttach: async (session: string) => {
+        await state.dispose();
+        renderer.destroy();
+
+        // resizePane sets window-size=manual; reset so window fits client
+        await Bun.spawn(
+          ["tmux", "set-option", "-t", session, "window-size", "largest"],
+          { stdout: "pipe", stderr: "pipe" },
+        ).exited;
+
+        const insideTmux = !!process.env.TMUX;
+        if (insideTmux) {
+          // Switch first, then resize (client must be attached for sizing)
+          await Bun.spawn(["tmux", "switch-client", "-t", session], {
+            stdout: "pipe", stderr: "pipe",
+          }).exited;
+          await Bun.spawn(["tmux", "resize-window", "-A", "-t", session], {
+            stdout: "pipe", stderr: "pipe",
+          }).exited;
+          process.exit(0);
+        } else {
+          // attach-session will auto-size with window-size=largest
+          const proc = Bun.spawn(["tmux", "attach-session", "-t", session], {
+            stdin: "inherit",
+            stdout: "inherit",
+            stderr: "inherit",
+          });
+          const code = await proc.exited;
+          process.exit(code);
+        }
+      },
+      onSpawn: async (t: Task) => {
+        if (t.status === "pending") {
+          const { spawnTaskById } = await import("../core/spawn.js");
+          await spawnTaskById(deps, t.id);
+        } else {
+          // Shell out to orange task respawn for non-pending tasks
+          const scriptPath = process.argv[1];
+          const cmd = scriptPath.endsWith(".ts")
+            ? ["bun", "run", scriptPath, "task", "respawn", t.id]
+            : [scriptPath, "task", "respawn", t.id];
+          const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+          const exitCode = await proc.exited;
+          if (exitCode !== 0) {
+            const stderr = await new Response(proc.stderr).text();
+            throw new Error(stderr.trim() || `respawn failed (exit code: ${exitCode})`);
+          }
+        }
+      },
+    });
+
+    dashboard.root.visible = false;
+    renderer.root.add(workspaceViewer.getContainer());
+    await workspaceViewer.enter();
+  }
+
+  async function exitWorkspace(): Promise<void> {
+    if (workspaceViewer) {
+      await workspaceViewer.destroy();
+      workspaceViewer = null;
+    }
+    dashboard.root.visible = true;
+    state.exitWorkspaceMode();
+    dashboard.update();
+  }
+
+  state.onWorkspace(async (task: Task) => {
+    await enterWorkspace(task);
+  });
+
   if (options.exitOnAttach) {
     state.onAttach(() => {
       state.dispose().then(() => {
@@ -624,19 +710,19 @@ export async function runDashboard(
   // Keyboard handler
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
     if (key.ctrl && key.name === "c") {
-      state.dispose().then(() => {
+      const cleanup = workspaceViewer ? workspaceViewer.destroy() : Promise.resolve();
+      cleanup.then(() => state.dispose()).then(() => {
         renderer.destroy();
         process.exit(0);
       });
       return;
     }
 
-    // In workspace mode, Escape exits back to task list
+    // In workspace mode, forward keys to workspace viewer
     if (state.isWorkspaceMode()) {
-      if (key.name === "escape") {
-        state.exitWorkspaceMode();
+      if (workspaceViewer) {
+        workspaceViewer.handleKey(key.name ?? "", !!key.ctrl, key.sequence);
       }
-      // All other keys are handled by the workspace view (task #3)
       return;
     }
 
@@ -719,6 +805,9 @@ export async function runDashboard(
 
   // Re-render on terminal resize
   renderer.on("resize", () => {
+    if (workspaceViewer?.isActive()) {
+      workspaceViewer.resize();
+    }
     dashboard.update();
   });
 

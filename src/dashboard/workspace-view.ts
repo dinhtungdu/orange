@@ -2,9 +2,9 @@
  * Workspace view — primary working view per workspace.md spec.
  *
  * Layout: Sidebar (30%) + Terminal (70%) + Footer (1 row)
- * Focus modes: terminal (default) and sidebar.
+ * Focus modes: terminal (default) and sidebar. Toggle with Ctrl+\.
  *
- * Entry: `w` key on task with live session in task manager.
+ * Entry: Enter key on task in task manager.
  * Exit: Esc from sidebar → return to task manager.
  */
 
@@ -30,8 +30,10 @@ export interface WorkspaceViewOptions {
   task: Task;
   /** Callback when exiting workspace view to return to task manager */
   onExit: () => void;
-  /** Callback for full-screen tmux attach (Ctrl+]) */
+  /** Callback for tmux attach (Ctrl+]) */
   onAttach: (session: string) => void;
+  /** Callback to spawn or respawn the task */
+  onSpawn?: (task: Task) => Promise<void>;
 }
 
 /**
@@ -42,6 +44,8 @@ export class WorkspaceViewer {
   private task: Task;
   private onExit: () => void;
   private onAttach: (session: string) => void;
+  private onSpawn?: (task: Task) => Promise<void>;
+  private spawning = false;
 
   private renderer: CliRenderer;
   private container: BoxRenderable;
@@ -63,6 +67,7 @@ export class WorkspaceViewer {
     this.task = options.task;
     this.onExit = options.onExit;
     this.onAttach = options.onAttach;
+    this.onSpawn = options.onSpawn;
 
     // Root container (column: body + footer)
     this.container = new BoxRenderable(renderer, {
@@ -85,6 +90,8 @@ export class WorkspaceViewer {
     this.sidebarBox = new BoxRenderable(renderer, {
       id: "ws-sidebar-box",
       flexDirection: "column",
+      border: ["right"],
+      borderColor: "#333333",
     });
 
     // Terminal box (will hold TerminalViewer renderable)
@@ -140,6 +147,9 @@ export class WorkspaceViewer {
 
   /**
    * Enter workspace view for a task.
+   *
+   * If session exists and is alive, starts terminal capture.
+   * Otherwise shows a placeholder with status info.
    */
   async enter(): Promise<void> {
     this.active = true;
@@ -155,12 +165,20 @@ export class WorkspaceViewer {
     // Set sidebar dimensions
     this.updateLayout(dims);
 
-    // Start terminal capture
+    // Start terminal capture or show placeholder
     const session = this.task.tmux_session;
     if (session) {
-      await this.terminal.start(session, dims.terminalWidth, dims.terminalHeight);
+      const exists = await this.deps.tmux.sessionExists(session);
+      if (exists) {
+        await this.terminal.start(session, dims.terminalWidth, dims.terminalHeight);
+      } else {
+        this.terminal.showPlaceholder(this.getPlaceholderMessage());
+      }
+    } else {
+      this.terminal.showPlaceholder(this.getPlaceholderMessage());
     }
 
+    this.updateFocusIndicators();
     this.updateFooter();
   }
 
@@ -191,7 +209,7 @@ export class WorkspaceViewer {
     if (this.focus === "terminal") {
       return this.handleTerminalKey(key, ctrl, sequence);
     } else {
-      return this.handleSidebarKey(key);
+      return this.handleSidebarKey(key, ctrl, sequence);
     }
   }
 
@@ -219,39 +237,65 @@ export class WorkspaceViewer {
     this.container.destroyRecursively();
   }
 
+  // --- Private: Focus indicators ---
+
+  private updateFocusIndicators(): void {
+    // Sidebar border color indicates which panel is focused
+    this.sidebarBox.borderColor = this.focus === "sidebar" ? "#00DDFF" : "#333333";
+  }
+
   // --- Private: Focus handling ---
 
   private async handleTerminalKey(key: string, ctrl: boolean, sequence?: string): Promise<boolean> {
-    // Intercept Ctrl+\ → switch to sidebar
-    if (ctrl && key === "\\") {
+    // Ctrl+\ → toggle to sidebar
+    // Kitty mode: ctrl=true, key="\\"
+    // Raw/legacy mode: ctrl=false, key="\x1c" (ASCII 28)
+    if ((ctrl && key === "\\") || key === "\x1c" || sequence === "\x1c") {
       this.focus = "sidebar";
+      this.updateFocusIndicators();
       this.updateFooter();
       return true;
     }
 
-    // Intercept Ctrl+] → full-screen tmux attach
-    if (ctrl && key === "]") {
-      const session = this.task.tmux_session;
-      if (session) {
-        await this.exit();
-        this.onAttach(session);
+    // 's' key: spawn or respawn when no active session
+    if (!ctrl && (key === "s" || sequence === "s")) {
+      if (this.needsSpawn() && !this.spawning) {
+        await this.handleSpawn();
+        return true;
       }
-      return true;
     }
 
     // Forward everything else to terminal
     return this.terminal.handleKey(key, ctrl, sequence);
   }
 
-  private handleSidebarKey(key: string): boolean {
+  private async handleSidebarKey(key: string, ctrl: boolean, sequence?: string): Promise<boolean> {
+    // Ctrl+\ → toggle back to terminal
+    if ((ctrl && key === "\\") || key === "\x1c" || sequence === "\x1c") {
+      this.focus = "terminal";
+      this.updateFocusIndicators();
+      this.updateFooter();
+      return true;
+    }
+
     switch (key) {
       case "tab":
       case "return":
       case "enter":
         // Return focus to terminal
         this.focus = "terminal";
+        this.updateFocusIndicators();
         this.updateFooter();
         return true;
+      case "a": {
+        // Attach to tmux session (only if session alive)
+        const session = this.task.tmux_session;
+        if (session && !this.terminal.isSessionDead() && this.terminal.isActive()) {
+          await this.exit();
+          this.onAttach(session);
+        }
+        return true;
+      }
       case "escape":
         // Exit to task manager
         this.exit();
@@ -259,6 +303,76 @@ export class WorkspaceViewer {
       default:
         return false;
     }
+  }
+
+  // --- Private: Spawn/Respawn ---
+
+  /**
+   * Whether the task needs spawn or respawn (no active terminal session).
+   */
+  private needsSpawn(): boolean {
+    if (!this.onSpawn) return false;
+    // Terminal is actively capturing a live session — no spawn needed
+    if (this.terminal.isActive() && !this.terminal.isSessionDead()) return false;
+    return true;
+  }
+
+  /**
+   * Handle spawn/respawn via callback, then start terminal capture.
+   */
+  private async handleSpawn(): Promise<void> {
+    if (!this.onSpawn || this.spawning) return;
+
+    this.spawning = true;
+    this.terminal.showPlaceholder("Spawning agent...");
+    this.updateFooter();
+
+    try {
+      await this.onSpawn(this.task);
+
+      // Reload task to get new tmux_session
+      const { listTasks } = await import("../core/db.js");
+      const tasks = await listTasks(this.deps, {});
+      const updated = tasks.find((t) => t.id === this.task.id);
+      if (updated) {
+        this.task = updated;
+      }
+
+      // Start terminal on new session
+      if (this.task.tmux_session) {
+        const exists = await this.deps.tmux.sessionExists(this.task.tmux_session);
+        if (exists) {
+          const dims = this.calculateDimensions();
+          await this.terminal.start(this.task.tmux_session, dims.terminalWidth, dims.terminalHeight);
+        } else {
+          this.terminal.showPlaceholder(this.getPlaceholderMessage());
+        }
+      } else {
+        this.terminal.showPlaceholder(this.getPlaceholderMessage());
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.terminal.showPlaceholder(`Spawn failed: ${msg}`);
+    } finally {
+      this.spawning = false;
+      this.updateFooter();
+    }
+  }
+
+  /**
+   * Get appropriate placeholder message based on task state.
+   */
+  private getPlaceholderMessage(): string {
+    if (this.task.status === "pending") {
+      return "No agent running — press 's' to spawn";
+    }
+    if (this.terminal.isSessionDead() || (this.task.tmux_session && !this.terminal.isActive())) {
+      return "Session ended — press 's' to respawn";
+    }
+    if (!this.task.tmux_session) {
+      return "No session — press 's' to spawn";
+    }
+    return "No active session";
   }
 
   // --- Private: Layout ---
@@ -337,15 +451,21 @@ export class WorkspaceViewer {
   // --- Private: Footer ---
 
   private updateFooter(): void {
-    if (this.terminal.isSessionDead()) {
-      this.footer.content = " [Session ended]  Ctrl+\\:sidebar  Esc:dashboard";
+    if (this.spawning) {
+      this.footer.content = " [terminal] Spawning...";
       return;
     }
 
+    const canSpawn = this.needsSpawn();
+    const focusLabel = this.focus === "terminal" ? "[terminal]" : "[sidebar]";
+
     if (this.focus === "terminal") {
-      this.footer.content = " Ctrl+\\:sidebar  Ctrl+]:fullscreen";
+      const spawnHint = canSpawn ? "  s:spawn" : "";
+      this.footer.content = ` ${focusLabel} Ctrl+\\:unfocus${spawnHint}`;
     } else {
-      this.footer.content = " Tab:terminal  Esc:dashboard";
+      const hasSession = this.task.tmux_session && this.terminal.isActive() && !this.terminal.isSessionDead();
+      const attachHint = hasSession ? "  a:attach" : "";
+      this.footer.content = ` ${focusLabel} Ctrl+\\:terminal${attachHint}  Esc:dashboard`;
     }
   }
 }

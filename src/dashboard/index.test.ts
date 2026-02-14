@@ -866,7 +866,7 @@ describe("Dashboard v2 Features", () => {
 
   // --- Context keys ---
 
-  test("context keys show w:workspace for task with live session", async () => {
+  test("context keys show Enter:open for task with live session", async () => {
     const mockTmux = deps.tmux as MockTmux;
     mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
 
@@ -880,10 +880,10 @@ describe("Dashboard v2 Features", () => {
     await state.loadTasks();
 
     const keys = state.getContextKeys();
-    expect(keys).toContain("w:workspace");
+    expect(keys).toContain("Enter:open");
   });
 
-  test("context keys hide w:workspace for dead session", async () => {
+  test("context keys show Enter:open for dead session too", async () => {
     // Task has tmux_session but session doesn't exist in mock
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "working",
@@ -897,7 +897,8 @@ describe("Dashboard v2 Features", () => {
     state.data.deadSessions.add("t1");
 
     const keys = state.getContextKeys();
-    expect(keys).not.toContain("w:workspace");
+    // Enter:open is shown for all non-terminal tasks now
+    expect(keys).toContain("Enter:open");
   });
 
   test("context keys show R:refresh for task with PR", async () => {
@@ -949,9 +950,24 @@ describe("Dashboard v2 Features", () => {
     expect(state.data.workspaceMode.task?.id).toBe("t1");
   });
 
-  test("w key does nothing for task without session", async () => {
+  test("w key opens workspace for pending task (no session needed)", async () => {
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "pending",
+      tmux_session: null,
+    }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    state.handleInput("w");
+    // Now opens workspace view for any non-terminal task
+    expect(state.isWorkspaceMode()).toBe(true);
+  });
+
+  test("w key does nothing for done task", async () => {
+    await saveTask(deps, createTask({
+      id: "t1", branch: "feature-x", status: "done",
       tmux_session: null,
     }));
 

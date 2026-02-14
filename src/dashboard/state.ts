@@ -18,6 +18,7 @@ import { refreshTaskPR } from "../core/task.js";
 import { getInstalledHarnesses } from "../core/harness.js";
 import { checkDeadSessions, applyAutoAdvanceRules } from "../core/exit-monitor.js";
 import { type HookExecutor } from "../core/transitions.js";
+import { createHookExecutor } from "../core/hooks.js";
 
 /** Terminal task statuses — task is finished, no more work expected */
 const TERMINAL_STATUSES: TaskStatus[] = ["done", "cancelled"];
@@ -417,7 +418,7 @@ export class DashboardState {
         }
         break;
       case "enter":
-        this.attachToTask();
+        this.openWorkspace();
         break;
       case "c":
         this.enterCreateMode();
@@ -447,6 +448,7 @@ export class DashboardState {
         this.enterViewMode();
         break;
       case "w":
+        // Legacy: 'w' also opens workspace (Enter is primary)
         this.openWorkspace();
         break;
     }
@@ -509,9 +511,13 @@ export class DashboardState {
 
   private openWorkspace(): void {
     const task = this.data.tasks[this.data.cursor];
-    if (!task || !task.tmux_session) return;
-    const isDead = this.data.deadSessions.has(task.id);
-    if (isDead) return;
+    if (!task) return;
+
+    // Terminal tasks: no workspace view
+    if (task.status === "done" || task.status === "cancelled") return;
+
+    // Pending ops: wait
+    if (this.data.pendingOps.has(task.id)) return;
 
     this.data.workspaceMode = { active: true, task };
     this.emitWorkspace(task);
@@ -994,35 +1000,18 @@ export class DashboardState {
 
     if (deadResults.length === 0) return;
 
-    // Hook executor for auto-advance transitions.
-    // Handles essential hooks; spawn_agent is deferred to user respawn.
+    // Hook executor: use standard hook executor but skip spawn_agent
+    // (dashboard doesn't auto-spawn during exit monitoring — user respawns)
+    const baseExecutor = createHookExecutor(this.deps);
     const hookExecutor: HookExecutor = async (hook, task) => {
-      switch (hook.id) {
-        case "kill_session":
-          if (task.tmux_session) {
-            await this.deps.tmux.killSessionSafe(task.tmux_session);
-          }
-          break;
-        case "increment_review_round":
-          task.review_round += 1;
-          break;
-        case "release_workspace":
-          if (task.workspace) {
-            await releaseWorkspace(this.deps, task.workspace);
-            task.workspace = null;
-          }
-          break;
-        case "spawn_agent":
-          // Dashboard doesn't auto-spawn agents during exit monitoring.
-          // Task will appear as crashed, user can respawn with Enter.
-          log.debug("Skipping spawn_agent hook in dashboard exit monitor", {
-            taskId: task.id,
-            variant: hook.variant,
-          });
-          break;
-        default:
-          break;
+      if (hook.id === "spawn_agent") {
+        log.debug("Skipping spawn_agent hook in dashboard exit monitor", {
+          taskId: task.id,
+          variant: hook.variant,
+        });
+        return;
       }
+      await baseExecutor(hook, task);
     };
 
     for (const { task } of deadResults) {
@@ -1566,28 +1555,19 @@ export class DashboardState {
 
     let keys = " j/k:nav  v:view  y:copy";
     if (task.status === "pending") {
-      keys += "  Enter:spawn  x:cancel";
+      keys += "  Enter:open  x:cancel";
     } else if (task.status === "done") {
       keys += "  d:del";
     } else if (task.status === "cancelled") {
       keys += "  d:del";
-    } else if (isDead) {
-      // Active task with dead session - needs respawn
-      keys += "  Enter:respawn  x:cancel";
-    } else if (task.status === "stuck") {
-      keys += "  Enter:attach  m:force merge  x:cancel";
-    } else if (task.status === "agent-review") {
-      keys += "  Enter:attach  m:force merge  x:cancel";
     } else if (task.status === "reviewing") {
-      if (hasLiveSession) keys += "  Enter:attach";
+      keys += "  Enter:open";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {
-      // working, planning, clarification
-      keys += "  Enter:attach  m:force merge  x:cancel";
+      // working, planning, clarification, agent-review, stuck (+ dead sessions)
+      keys += "  Enter:open  m:force merge  x:cancel";
     }
-    // Workspace view for tasks with live sessions
-    if (hasLiveSession) keys += "  w:workspace";
     // PR refresh for tasks with PR
     if (task.pr_url) keys += "  R:refresh";
     keys += `${createKey}  f:filter  q:quit`;
