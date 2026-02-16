@@ -635,9 +635,6 @@ function buildDashboard(
 /**
  * Run the dashboard.
  */
-// SGR mouse reporting escape sequences
-const MOUSE_ENABLE = "\x1b[?1002h\x1b[?1006h";
-const MOUSE_DISABLE = "\x1b[?1002l\x1b[?1006l";
 
 export async function runDashboard(
   deps: Deps,
@@ -686,8 +683,12 @@ export async function runDashboard(
     ],
   });
 
-  // Enable SGR mouse reporting
-  process.stdout.write(MOUSE_ENABLE);
+  // Enable SGR mouse reporting through opentui's zig pipeline (process.stdout.write
+  // doesn't work — opentui manages terminal output). Setting useMouse=true sends the
+  // escape codes, then we reset _useMouse so events flow through _stdinBuffer to our
+  // prependInputHandlers instead of opentui's handleMouseData.
+  renderer.useMouse = true;
+  (renderer as unknown as { _useMouse: boolean })._useMouse = false;
 
   const state = new DashboardState(deps, options);
   const dashboard = buildDashboard(renderer, state);
@@ -792,7 +793,9 @@ export async function runDashboard(
   });
 
   function disableMouse(): void {
-    process.stdout.write(MOUSE_DISABLE);
+    // Temporarily enable so opentui's disableMouse sends the escape codes through zig
+    (renderer as unknown as { _useMouse: boolean })._useMouse = true;
+    renderer.useMouse = false;
   }
 
   if (options.exitOnAttach) {
