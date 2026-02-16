@@ -55,13 +55,11 @@ async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof 
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
   const windowName = `review-${task.review_round}`;
 
-  const sessionExists = await deps.tmux.sessionExists(task.tmux_session);
-  if (sessionExists) {
-    await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
-  } else {
-    await deps.tmux.newSession(task.tmux_session, workspacePath, command);
-    try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
-  }
+  // Kill existing session to clean up stale windows from previous agents
+  await deps.tmux.killSessionSafe(task.tmux_session);
+
+  await deps.tmux.newSession(task.tmux_session, workspacePath, command);
+  try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
 
   await appendHistory(deps, task.project, task.id, {
     type: "review.started",
@@ -88,13 +86,11 @@ async function spawnWorkerWindow(deps: Deps, task: Task, log: ReturnType<typeof 
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
   const windowName = `worker-${task.review_round + 1}`;
 
-  const sessionExists = await deps.tmux.sessionExists(task.tmux_session);
-  if (sessionExists) {
-    await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
-  } else {
-    await deps.tmux.newSession(task.tmux_session, workspacePath, command);
-    try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
-  }
+  // Kill existing session to clean up stale windows from previous agents
+  await deps.tmux.killSessionSafe(task.tmux_session);
+
+  await deps.tmux.newSession(task.tmux_session, workspacePath, command);
+  try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
 
   log.info("Worker respawned after review", { taskId: task.id, round: task.review_round });
   console.log(`Worker respawned (fix round ${task.review_round})`);

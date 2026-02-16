@@ -158,16 +158,14 @@ export async function spawnAgentHook(
     ? (isRespawnVariant ? harnessConfig.respawnCommand(prompt) : harnessConfig.spawnCommand(prompt))
     : harnessConfig.binary;
 
-  const sessionExists = await deps.tmux.sessionExists(tmuxSession);
-  if (sessionExists) {
-    await deps.tmux.newWindow(tmuxSession, windowName, workspacePath, command);
-  } else {
-    await deps.tmux.newSession(tmuxSession, workspacePath, command);
-    try {
-      await deps.tmux.renameWindow(tmuxSession, windowName);
-    } catch {
-      // Best-effort
-    }
+  // Kill existing session to clean up stale windows from previous agents
+  await deps.tmux.killSessionSafe(tmuxSession);
+
+  await deps.tmux.newSession(tmuxSession, workspacePath, command);
+  try {
+    await deps.tmux.renameWindow(tmuxSession, windowName);
+  } catch {
+    // Best-effort
   }
 
   log.debug("Agent spawned", { session: tmuxSession, variant, window: windowName });

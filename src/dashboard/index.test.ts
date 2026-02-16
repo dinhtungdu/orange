@@ -1063,8 +1063,10 @@ describe("Dashboard v2 Features", () => {
     // Run exit monitor (session doesn't exist in mock → dead)
     await state.runPollCycle();
 
-    // Task should be marked as dead
-    expect(state.data.deadSessions.has("dead-task")).toBe(true);
+    // Dead session detected and cleared — tmux_session nulled, dead set cleaned
+    const updatedTask = await loadTask(deps, "testproj", "dead-task");
+    expect(updatedTask?.tmux_session).toBeNull();
+    expect(state.data.deadSessions.has("dead-task")).toBe(false);
   });
 
   test("exit monitor auto-advances working task with valid handoff", async () => {
@@ -1188,6 +1190,9 @@ describe("Dashboard v2 Features", () => {
 
     await state.runPollCycle();
 
-    expect(state.data.deadSessions.has("planning-dead")).toBe(true);
+    // Dead session detected and cleared
+    const updatedTask = await loadTask(deps, "testproj", "planning-dead");
+    expect(updatedTask?.tmux_session).toBeNull();
+    expect(state.data.deadSessions.has("planning-dead")).toBe(false);
   });
 });
