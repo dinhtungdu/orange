@@ -203,15 +203,14 @@ export function ansiToStyledText(input: string): StyledText {
     if (match.index > lastIndex) {
       const text = cleaned.slice(lastIndex, match.index);
       if (text) {
-        // Resolve reverse video by swapping fg/bg at chunk creation
-        // instead of passing the attribute to opentui (which can bleed across boxes)
+        // Resolve reverse video: use bg as fg color so reversed text is still visible
         const chunkFg = state.reverse ? (state.bg ?? DEFAULT_BG) : state.fg;
-        const chunkBg = state.reverse ? (state.fg ?? DEFAULT_FG) : state.bg;
+        // Drop bg colors — opentui doesn't isolate bg between adjacent boxes,
+        // causing terminal bg to bleed into sidebar on the same screen row
         chunks.push({
           __isChunk: true,
           text,
           fg: chunkFg,
-          bg: chunkBg,
           attributes: makeAttributes(state),
         });
       }
@@ -235,12 +234,10 @@ export function ansiToStyledText(input: string): StyledText {
     const text = cleaned.slice(lastIndex);
     if (text) {
       const chunkFg = state.reverse ? (state.bg ?? DEFAULT_BG) : state.fg;
-      const chunkBg = state.reverse ? (state.fg ?? DEFAULT_FG) : state.bg;
       chunks.push({
         __isChunk: true,
         text,
         fg: chunkFg,
-        bg: chunkBg,
         attributes: makeAttributes(state),
       });
     }

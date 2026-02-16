@@ -30,11 +30,9 @@ describe("ansiToStyledText", () => {
     expect(fg.b).toBeCloseTo(102 / 255, 2);
   });
 
-  test("24-bit RGB background", () => {
+  test("background colors are stripped (opentui bleed workaround)", () => {
     const result = ansiToStyledText("\x1b[48;2;255;0;0mtext\x1b[0m");
-    expect(result.chunks[0].bg).toBeDefined();
-    expect(result.chunks[0].bg!.r).toBeCloseTo(1, 2);
-    expect(result.chunks[0].bg!.g).toBeCloseTo(0, 2);
+    expect(result.chunks[0].bg).toBeUndefined();
   });
 
   test("bold attribute", () => {
