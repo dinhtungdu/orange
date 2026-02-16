@@ -201,11 +201,18 @@ describe("Sidebar Scroll State", () => {
     expect(visibleLines).toBe(1);
   });
 
-  // Test section hit-testing logic
+  // Test section hit-testing logic (with fallback for uncomputed coords)
   function sectionAtRow(
     row: number,
     sections: Array<{ key: string; y: number; height: number; visible: boolean }>,
   ): string | null {
+    const hasLayout = sections.some(s => s.visible && s.height > 0);
+    if (!hasLayout) {
+      for (const s of sections) {
+        if (s.visible) return s.key;
+      }
+      return null;
+    }
     for (const s of sections) {
       if (!s.visible) continue;
       if (row - 1 >= s.y && row - 1 < s.y + s.height) return s.key;
@@ -240,6 +247,24 @@ describe("Sidebar Scroll State", () => {
       { key: "history", y: 5, height: 6, visible: true },
     ];
     expect(sectionAtRow(6, sections)).toBe("history");
+  });
+
+  test("hit-test falls back to first visible when coords uncomputed", () => {
+    const sections = [
+      { key: "files", y: 0, height: 0, visible: false },
+      { key: "history", y: 0, height: 0, visible: true },
+      { key: "task", y: 0, height: 0, visible: true },
+    ];
+    // All heights are 0 → fallback to first visible
+    expect(sectionAtRow(10, sections)).toBe("history");
+  });
+
+  test("hit-test returns null when no sections visible and coords uncomputed", () => {
+    const sections = [
+      { key: "files", y: 0, height: 0, visible: false },
+      { key: "history", y: 0, height: 0, visible: false },
+    ];
+    expect(sectionAtRow(10, sections)).toBe(null);
   });
 });
 

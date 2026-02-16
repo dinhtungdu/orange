@@ -254,9 +254,9 @@ export class WorkspaceViewer {
         return true;
       }
 
-      // Terminal area: forward scroll to tmux
+      // Terminal area: forward scroll to tmux as arrow keys (1 line per tick)
       if (this.terminal.isActive() && !this.terminal.isSessionDead()) {
-        const tmuxKey = direction === "up" ? "PPage" : "NPage";
+        const tmuxKey = direction === "up" ? "Up" : "Down";
         const session = this.task.tmux_session;
         if (session) {
           this.deps.tmux.sendKeys(session, tmuxKey);

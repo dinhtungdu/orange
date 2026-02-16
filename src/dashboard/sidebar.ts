@@ -138,6 +138,8 @@ export class Sidebar {
       paddingLeft: 1,
       paddingRight: 1,
       gap: 1,
+      width: "100%",
+      height: "100%",
     });
 
     // Header section
@@ -147,6 +149,7 @@ export class Sidebar {
       border: true,
       borderStyle: "rounded",
       borderColor: HEADER_BORDER_COLOR,
+      flexShrink: 0,
     });
     this.headerText = new TextRenderable(renderer, {
       id: "sidebar-header",
@@ -164,6 +167,7 @@ export class Sidebar {
       borderColor: SECTION_BORDER_COLOR,
       title: "Files",
       visible: false,
+      flexShrink: 0,
     });
     this.filesText = new TextRenderable(renderer, {
       id: "sidebar-files",
@@ -181,6 +185,7 @@ export class Sidebar {
       borderColor: SECTION_BORDER_COLOR,
       title: "History",
       visible: false,
+      flexShrink: 0,
     });
     this.historyText = new TextRenderable(renderer, {
       id: "sidebar-history",
@@ -249,6 +254,18 @@ export class Sidebar {
       { key: "history" as const, box: this.historyBox },
       { key: "task" as const, box: this.taskBox },
     ];
+
+    // Check if layout coords are computed (at least one visible box has height > 0)
+    const hasLayout = sections.some(({ box }) => box.visible && box.height > 0);
+
+    if (!hasLayout) {
+      // Fallback: return first visible section (coords not yet computed)
+      for (const { key, box } of sections) {
+        if (box.visible) return key;
+      }
+      return null;
+    }
+
     for (const { key, box } of sections) {
       if (!box.visible) continue;
       // opentui layout coords: y is top edge, height is total height (1-based row → 0-based y)
@@ -557,9 +574,10 @@ export class Sidebar {
     }
 
     this.contentLines.files = lines.length;
-    const offset = Math.min(this.scrollOffset.files, Math.max(0, lines.length - 1));
+    const visibleLines = this.sectionVisibleLines("files");
+    const offset = Math.min(this.scrollOffset.files, Math.max(0, lines.length - visibleLines));
     this.scrollOffset.files = offset;
-    this.filesText.content = this.joinLines(lines.slice(offset));
+    this.filesText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
   }
 
   private renderHistory(): void {
@@ -585,9 +603,10 @@ export class Sidebar {
     }
 
     this.contentLines.history = lines.length;
-    const offset = Math.min(this.scrollOffset.history, Math.max(0, lines.length - 1));
+    const visibleLines = this.sectionVisibleLines("history");
+    const offset = Math.min(this.scrollOffset.history, Math.max(0, lines.length - visibleLines));
     this.scrollOffset.history = offset;
-    this.historyText.content = this.joinLines(lines.slice(offset));
+    this.historyText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
   }
 
   private renderTaskBody(): void {
@@ -606,9 +625,10 @@ export class Sidebar {
     }
 
     this.contentLines.task = lines.length;
-    const offset = Math.min(this.scrollOffset.task, Math.max(0, lines.length - 1));
+    const visibleLines = this.sectionVisibleLines("task");
+    const offset = Math.min(this.scrollOffset.task, Math.max(0, lines.length - visibleLines));
     this.scrollOffset.task = offset;
-    this.taskText.content = this.joinLines(lines.slice(offset));
+    this.taskText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
   }
 
   private formatAge(timestamp: string): string {
