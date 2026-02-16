@@ -95,10 +95,11 @@ Entry: `w` on a task with a live session in the [task manager](./task-manager.md
 ```
 
 **Dimensions:**
-- Sidebar: `floor(width * 0.3)` × `height - 1`
+- Sidebar: `floor(width * ratio)` × `height - 1` (default ratio: 0.3, range: 0.15–0.50)
 - Terminal: remaining width × `height - 1`
 - Footer: full width × 1
 - tmux pane resized to match terminal dimensions exactly (mismatches cause wrapping artifacts)
+- Sidebar resizable via H/L or ←/→ arrow keys in sidebar focus mode (5% step)
 
 **Small terminals** (width < 80 or height < 15): hide sidebar, terminal gets full width.
 
@@ -193,6 +194,8 @@ Unmapped keys (Shift+arrows, Alt combos, mouse): dropped silently. `Ctrl+]` full
 | Key | Action |
 |-----|--------|
 | Tab / Enter | Return focus to terminal |
+| H / ← | Shrink sidebar (−5%) |
+| L / → | Grow sidebar (+5%) |
 | Esc | Exit to task manager |
 
 **Footer:**
@@ -200,7 +203,7 @@ Unmapped keys (Shift+arrows, Alt combos, mouse): dropped silently. `Ctrl+]` full
 | Focus | Footer |
 |-------|--------|
 | Terminal | `Ctrl+\:sidebar  Ctrl+]:fullscreen` |
-| Sidebar | `Tab:terminal  Esc:dashboard` |
+| Sidebar | `H/L:resize  Ctrl+\:terminal  Esc:dashboard` |
 
 ### Integration
 

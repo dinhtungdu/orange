@@ -1,8 +1,9 @@
 /**
  * Workspace view — primary working view per workspace.md spec.
  *
- * Layout: Sidebar (30%) + Terminal (70%) + Footer (1 row)
+ * Layout: Sidebar (resizable, default 30%) + Terminal + Footer (1 row)
  * Focus modes: terminal (default) and sidebar. Toggle with Ctrl+\.
+ * Sidebar resize: H/L or arrow keys in sidebar focus mode (15%–50%).
  *
  * Entry: Enter key on task in task manager.
  * Exit: Esc from sidebar → return to task manager.
@@ -21,6 +22,12 @@ import { Sidebar } from "./sidebar.js";
 // Small terminal thresholds per spec
 const MIN_WIDTH_FOR_SIDEBAR = 80;
 const MIN_HEIGHT_FOR_SIDEBAR = 15;
+
+// Sidebar resize constraints
+const DEFAULT_SIDEBAR_RATIO = 0.3;
+const MIN_SIDEBAR_RATIO = 0.15;
+const MAX_SIDEBAR_RATIO = 0.5;
+const SIDEBAR_RESIZE_STEP = 0.05;
 
 /** Focus state */
 export type FocusMode = "terminal" | "sidebar";
@@ -59,6 +66,7 @@ export class WorkspaceViewer {
 
   private focus: FocusMode = "terminal";
   private sidebarVisible = true;
+  private sidebarRatio = DEFAULT_SIDEBAR_RATIO;
   private active = false;
 
   constructor(renderer: CliRenderer, options: WorkspaceViewOptions) {
@@ -296,11 +304,26 @@ export class WorkspaceViewer {
         }
         return true;
       }
+      case "left":
+        this.resizeSidebar(-SIDEBAR_RESIZE_STEP);
+        return true;
+      case "right":
+        this.resizeSidebar(SIDEBAR_RESIZE_STEP);
+        return true;
       case "escape":
         // Exit to task manager
         this.exit();
         return true;
       default:
+        // H/L resize (sequence is uppercase)
+        if (sequence === "H") {
+          this.resizeSidebar(-SIDEBAR_RESIZE_STEP);
+          return true;
+        }
+        if (sequence === "L") {
+          this.resizeSidebar(SIDEBAR_RESIZE_STEP);
+          return true;
+        }
         return false;
     }
   }
@@ -377,6 +400,13 @@ export class WorkspaceViewer {
 
   // --- Private: Layout ---
 
+  private resizeSidebar(delta: number): void {
+    this.sidebarRatio = Math.min(MAX_SIDEBAR_RATIO, Math.max(MIN_SIDEBAR_RATIO, this.sidebarRatio + delta));
+    const dims = this.calculateDimensions();
+    this.updateLayout(dims);
+    this.terminal.resize(dims.terminalWidth, dims.terminalHeight);
+  }
+
   private calculateDimensions(): {
     sidebarWidth: number;
     terminalWidth: number;
@@ -401,7 +431,7 @@ export class WorkspaceViewer {
       };
     }
 
-    const sidebarWidth = Math.floor(width * 0.3);
+    const sidebarWidth = Math.floor(width * this.sidebarRatio);
     const terminalWidth = width - sidebarWidth;
 
     return {
@@ -465,7 +495,7 @@ export class WorkspaceViewer {
     } else {
       const hasSession = this.task.tmux_session && this.terminal.isActive() && !this.terminal.isSessionDead();
       const attachHint = hasSession ? "  a:attach" : "";
-      this.footer.content = ` ${focusLabel} Ctrl+\\:terminal${attachHint}  Esc:dashboard`;
+      this.footer.content = ` ${focusLabel} H/L:resize  Ctrl+\\:terminal${attachHint}  Esc:dashboard`;
     }
   }
 }
