@@ -114,6 +114,14 @@ export async function applyAutoAdvanceRules(
 
   log.debug("Applying auto-advance rules", { taskId: task.id, status });
 
+  // Session is dead — clear reference immediately so it's not left dangling.
+  // Transition hooks (kill_session) become no-ops; spawn_agent sets a new value.
+  if (task.tmux_session) {
+    task.tmux_session = null;
+    task.updated_at = deps.clock.now();
+    await saveTask(deps, task);
+  }
+
   switch (status) {
     case "planning":
       return await handlePlanningExit(task, deps, executeHook);

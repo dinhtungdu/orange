@@ -1144,10 +1144,11 @@ export class DashboardState {
     };
 
     for (const { task } of deadResults) {
-      this.data.deadSessions.add(task.id);
-
       try {
         const result = await applyAutoAdvanceRules(task, this.deps, hookExecutor);
+
+        // Session cleared by applyAutoAdvanceRules — remove from dead set
+        this.data.deadSessions.delete(task.id);
 
         if (result.action === "advanced") {
           log.info("Auto-advanced task", {
