@@ -15,12 +15,44 @@ import { join } from "node:path";
 import {
   BoxRenderable,
   TextRenderable,
+  StyledText,
+  bold,
+  dim,
+  fg,
+  green,
+  red,
+  yellow,
+  cyan,
+  t,
   type CliRenderer,
 } from "@opentui/core";
 import type { Deps, Task, HistoryEvent, PRStatus } from "../core/types.js";
 import { loadTask, loadHistory } from "../core/state.js";
 import { getWorkspacePath } from "../core/workspace.js";
 import { STATUS_COLOR, SESSION_ICON, SESSION_COLOR, type SessionState } from "./state.js";
+
+type TextChunk = StyledText["chunks"][number];
+
+/** Color map for file status prefixes. */
+const FILE_PREFIX_COLOR: Record<string, (input: string) => TextChunk> = {
+  A: green,
+  M: yellow,
+  D: red,
+  R: cyan,
+};
+
+/** Color map for history event types. */
+const EVENT_COLOR: Record<string, string> = {
+  "agent.spawned": "#5599FF",
+  "agent.crashed": "#FF5555",
+  "status.changed": "#D4A000",
+  "auto.advanced": "#00BBCC",
+};
+
+/** Border color for section boxes. */
+const SECTION_BORDER_COLOR = "#333333";
+/** Border color for header box. */
+const HEADER_BORDER_COLOR = "#5599FF";
 
 // Polling intervals per workspace.md spec
 const SESSION_POLL_INTERVAL = 10_000;  // 10s
@@ -56,9 +88,18 @@ export class Sidebar {
   private defaultBranch: string;
 
   private container: BoxRenderable;
+
+  // Section widgets — each a rounded box with text content
+  readonly headerBox: BoxRenderable;
   private headerText: TextRenderable;
+
+  readonly filesBox: BoxRenderable;
   private filesText: TextRenderable;
+
+  readonly historyBox: BoxRenderable;
   private historyText: TextRenderable;
+
+  readonly taskBox: BoxRenderable;
   private taskText: TextRenderable;
 
   private watcher: FSWatcher | null = null;
@@ -91,37 +132,80 @@ export class Sidebar {
       flexDirection: "column",
       paddingLeft: 1,
       paddingRight: 1,
+      gap: 1,
     });
 
+    // Header section
+    this.headerBox = new BoxRenderable(renderer, {
+      id: "sidebar-header-box",
+      flexDirection: "column",
+      border: true,
+      borderStyle: "rounded",
+      borderColor: HEADER_BORDER_COLOR,
+    });
     this.headerText = new TextRenderable(renderer, {
       id: "sidebar-header",
       content: "",
       fg: "#CCCCCC",
     });
+    this.headerBox.add(this.headerText);
 
+    // Files section
+    this.filesBox = new BoxRenderable(renderer, {
+      id: "sidebar-files-box",
+      flexDirection: "column",
+      border: true,
+      borderStyle: "rounded",
+      borderColor: SECTION_BORDER_COLOR,
+      title: "Files",
+      visible: false,
+    });
     this.filesText = new TextRenderable(renderer, {
       id: "sidebar-files",
       content: "",
-      fg: "#CCCCCC",
+      fg: "#AAAAAA",
     });
+    this.filesBox.add(this.filesText);
 
+    // History section
+    this.historyBox = new BoxRenderable(renderer, {
+      id: "sidebar-history-box",
+      flexDirection: "column",
+      border: true,
+      borderStyle: "rounded",
+      borderColor: SECTION_BORDER_COLOR,
+      title: "History",
+      visible: false,
+    });
     this.historyText = new TextRenderable(renderer, {
       id: "sidebar-history",
       content: "",
-      fg: "#888888",
+      fg: "#AAAAAA",
     });
+    this.historyBox.add(this.historyText);
 
+    // Task section
+    this.taskBox = new BoxRenderable(renderer, {
+      id: "sidebar-task-box",
+      flexDirection: "column",
+      border: true,
+      borderStyle: "rounded",
+      borderColor: SECTION_BORDER_COLOR,
+      title: "Task",
+      visible: false,
+      flexGrow: 1,
+    });
     this.taskText = new TextRenderable(renderer, {
       id: "sidebar-task",
       content: "",
-      fg: "#888888",
-      flexGrow: 1,
+      fg: "#AAAAAA",
     });
+    this.taskBox.add(this.taskText);
 
-    this.container.add(this.headerText);
-    this.container.add(this.filesText);
-    this.container.add(this.historyText);
-    this.container.add(this.taskText);
+    this.container.add(this.headerBox);
+    this.container.add(this.filesBox);
+    this.container.add(this.historyBox);
+    this.container.add(this.taskBox);
   }
 
   /**
@@ -350,6 +434,28 @@ export class Sidebar {
     if (this.onChange) this.onChange();
   }
 
+  /** Join multiple StyledText lines with newlines. */
+  private joinLines(lines: StyledText[]): StyledText {
+    const chunks: TextChunk[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) chunks.push({ __isChunk: true, text: "\n" });
+      chunks.push(...lines[i].chunks);
+    }
+    return new StyledText(chunks);
+  }
+
+  /** Truncate file path, stripping common prefix and ellipsizing. */
+  private truncPath(path: string, max: number): string {
+    if (path.length <= max) return path;
+    const parts = path.split("/");
+    while (parts.length > 1 && parts.join("/").length > max - 1) {
+      parts.shift();
+    }
+    const shortened = parts.join("/");
+    if (shortened.length <= max) return "…" + shortened;
+    return "…" + shortened.slice(-(max - 1));
+  }
+
   private renderHeader(): void {
     const task = this.data.task;
     if (!task) {
@@ -362,75 +468,92 @@ export class Sidebar {
       : "none";
     const icon = SESSION_ICON[sessionState];
     const statusColor = STATUS_COLOR[task.status] || "#888888";
+    const sessionColor = SESSION_COLOR[sessionState];
 
-    const lines: string[] = [];
-    lines.push(`${task.project}/${task.branch}`);
-    lines.push(`Status: ${task.status} ${icon}`);
-    lines.push(`Harness: ${task.harness}`);
+    const lines: StyledText[] = [];
+    lines.push(t`${bold(`${task.project}/${task.branch}`)}`);
+    lines.push(t`${dim(this.taskId.slice(0, 8))}  ${fg(statusColor)(task.status)} ${fg(sessionColor)(icon)}  ${task.harness}`);
 
     // PR info
     if (this.data.prStatus?.exists && this.data.prStatus.url) {
       const prNum = this.data.prStatus.url.match(/\/pull\/(\d+)/)?.[1];
       const state = this.data.prStatus.state?.toLowerCase() ?? "open";
-      const checks = this.data.prStatus.checks === "pass" ? " \u2713" : "";
-      lines.push(`PR: #${prNum ?? "?"} ${state}${checks}`);
+      const stateColor = state === "merged" ? "#8B5CF6" : state === "closed" ? "#FF5555" : "#22BB22";
+      const checks = this.data.prStatus.checks === "pass" ? " ✓" : "";
+      lines.push(t`${dim("PR")} #${prNum ?? "?"} ${fg(stateColor)(state + checks)}`);
     }
 
     // Commit stats
     if (this.data.commits > 0) {
-      lines.push(`Commits: ${this.data.commits}  +${this.data.diffAdded} -${this.data.diffRemoved}`);
+      lines.push(t`${this.data.commits} ${dim("commits")}  ${green(`+${this.data.diffAdded}`)} ${red(`-${this.data.diffRemoved}`)}`);
     }
 
-    this.headerText.content = lines.join("\n");
+    this.headerText.content = this.joinLines(lines);
   }
 
   private renderFiles(): void {
     const files = this.data.changedFiles;
     if (files.length === 0) {
-      this.filesText.content = "";
-      this.filesText.visible = false;
+      this.filesBox.visible = false;
       return;
     }
 
-    this.filesText.visible = true;
-    const header = `\n\u2500\u2500 Files (${files.length}) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500`;
-    const fileLines = files.map(f => ` ${f}`);
-    this.filesText.content = header + "\n" + fileLines.join("\n");
+    this.filesBox.visible = true;
+    this.filesBox.title = `Files (${files.length})`;
+
+    const lines: StyledText[] = [];
+    for (const f of files) {
+      const prefix = f.charAt(0);
+      const path = f.slice(2);
+      const colorFn = FILE_PREFIX_COLOR[prefix] ?? dim;
+      const truncated = this.truncPath(path, 30);
+      lines.push(t`${colorFn(prefix)} ${truncated}`);
+    }
+
+    this.filesText.content = this.joinLines(lines);
   }
 
   private renderHistory(): void {
     const events = this.data.historyEvents;
     if (events.length === 0) {
-      this.historyText.content = "";
-      this.historyText.visible = false;
+      this.historyBox.visible = false;
       return;
     }
 
-    this.historyText.visible = true;
-    const header = `\n\u2500\u2500 History \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500`;
-    // Show most recent events first, limited to 10
+    this.historyBox.visible = true;
+
     const recent = [...events].reverse().slice(0, 10);
-    const lines = recent.map(e => {
+    const lines: StyledText[] = [];
+    for (const e of recent) {
       const age = this.formatAge(e.timestamp);
       const desc = this.formatEvent(e);
-      return ` ${age}  ${desc}`;
-    });
-    this.historyText.content = header + "\n" + lines.join("\n");
+      const color = EVENT_COLOR[e.type];
+      lines.push(
+        color
+          ? t`${dim(age)}  ${fg(color)(desc)}`
+          : t`${dim(age)}  ${desc}`
+      );
+    }
+
+    this.historyText.content = this.joinLines(lines);
   }
 
   private renderTaskBody(): void {
     const task = this.data.task;
     if (!task?.body) {
-      this.taskText.content = "";
-      this.taskText.visible = false;
+      this.taskBox.visible = false;
       return;
     }
 
-    this.taskText.visible = true;
-    const header = `\n\u2500\u2500 Task \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500`;
-    // Show first lines of body, fills remaining height
+    this.taskBox.visible = true;
+
     const bodyLines = task.body.split("\n").slice(0, 20);
-    this.taskText.content = header + "\n" + bodyLines.map(l => ` ${l}`).join("\n");
+    const lines: StyledText[] = [];
+    for (const l of bodyLines) {
+      lines.push(t`${l}`);
+    }
+
+    this.taskText.content = this.joinLines(lines);
   }
 
   private formatAge(timestamp: string): string {
