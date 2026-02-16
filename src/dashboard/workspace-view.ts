@@ -259,6 +259,7 @@ export class WorkspaceViewer {
         const session = this.task.tmux_session;
         if (session) {
           this.deps.tmux.scrollPane(session, direction);
+          this.terminal.notifyActivity();
         }
         return true;
       }

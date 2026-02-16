@@ -184,6 +184,16 @@ export class TerminalViewer {
   }
 
   /**
+   * Notify that external activity happened (e.g. mouse scroll sent to tmux).
+   * Triggers a fast poll to pick up the updated pane content.
+   */
+  notifyActivity(): void {
+    if (!this.state.active) return;
+    this.state.lastActivityTime = Date.now();
+    this.schedulePoll(POLL_POST_KEYSTROKE);
+  }
+
+  /**
    * Update dimensions with debounce.
    */
   resize(width: number, height: number): void {
