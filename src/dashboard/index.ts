@@ -816,6 +816,14 @@ export async function runDashboard(
 
   // Keyboard handler
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
+    // In workspace mode, forward keys (including Ctrl+C) to workspace viewer
+    if (state.isWorkspaceMode()) {
+      if (workspaceViewer) {
+        workspaceViewer.handleKey(key.name ?? "", !!key.ctrl, key.sequence);
+      }
+      return;
+    }
+
     if (key.ctrl && key.name === "c") {
       const cleanup = workspaceViewer ? workspaceViewer.destroy() : Promise.resolve();
       cleanup.then(() => state.dispose()).then(() => {
@@ -823,14 +831,6 @@ export async function runDashboard(
         renderer.destroy();
         process.exit(0);
       });
-      return;
-    }
-
-    // In workspace mode, forward keys to workspace viewer
-    if (state.isWorkspaceMode()) {
-      if (workspaceViewer) {
-        workspaceViewer.handleKey(key.name ?? "", !!key.ctrl, key.sequence);
-      }
       return;
     }
 
