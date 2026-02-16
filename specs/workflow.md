@@ -14,11 +14,11 @@ Statuses defined in [data.md](./data.md#status).
             │                  ↕                       │
             ▼           ◄──────┘                       │
         working ◄──────── reviewing                    │
-            │                │                         │
-            ├──► agent-review┤                         │
-            │        │       ▼                         │
-            │        ▼      done                       │
-            │      stuck ─────────────────────────────►┘
+            │                ▲ │                       │
+            ├──► agent-review│ ▼                       │
+            │        │       │ done                    │
+            │        ▼       │                         │
+            │      stuck ────┘────────────────────────►┘
             └────────┘
 ```
 
@@ -37,16 +37,16 @@ Each transition has optional gates (artifact requirements) and hooks (side effec
 | clarification | cancelled | — | kill_session, release_workspace |
 | working | agent-review | ## Handoff valid | kill_session, spawn_agent(reviewer), increment review_round |
 | working | clarification | — | — |
-| working | stuck | — | — |
+| working | stuck | — | spawn_agent(stuck_fix) |
 | working | cancelled | — | kill_session, release_workspace |
 | agent-review | reviewing | ## Review, Verdict: PASS | kill_session |
 | agent-review | working | ## Review, Verdict: FAIL, round < 2 | kill_session, spawn_agent(worker_fix) |
-| agent-review | stuck | ## Review, Verdict: FAIL, round ≥ 2 | kill_session |
+| agent-review | stuck | ## Review, Verdict: FAIL, round ≥ 2 | kill_session, spawn_agent(stuck_fix) |
 | agent-review | cancelled | — | kill_session, release_workspace |
 | reviewing | working | — | spawn_agent(worker_fix) |
 | reviewing | done | — | release_workspace, delete_remote_branch, spawn_next |
 | reviewing | cancelled | — | kill_session, release_workspace |
-| stuck | working | — | spawn_agent(stuck_fix) |
+| stuck | reviewing | — | kill_session |
 | stuck | cancelled | — | kill_session, release_workspace |
 
 Any transition not in this map is rejected.
@@ -277,7 +277,9 @@ After discussion:
 3. orange task update --status working
 ```
 
-### Stuck Fix (respawn from stuck)
+### Stuck Fix (interactive session)
+
+Spawned automatically on entering stuck. Interactive — human works with agent to fix.
 
 ```
 # Stuck: {summary}
@@ -289,9 +291,12 @@ Review round: {review_round}
 Task stuck — review failed twice or repeated crashes.
 Read ## Review, ## Plan, and ## Handoff for what went wrong.
 
-1. Address the root issues
-2. Write updated ## Handoff
-3. orange task update --status agent-review
+You are in an interactive session. Work WITH the human to fix the issues.
+
+1. Summarize what went wrong and propose a fix approach
+2. Wait for human input before making changes
+3. After fixing, proactively ask: "Issue fixed — ready to send for review?"
+4. When human confirms: orange task update --status reviewing
 ```
 
 ## Orchestrator

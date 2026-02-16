@@ -132,13 +132,33 @@ describe("Transition Map", () => {
     ]);
   });
 
-  test("stuck → working spawns stuck_fix agent", () => {
+  test("stuck → reviewing kills session", () => {
     const task = createTask({ status: "stuck" });
-    const def = findTransition("stuck", "working", task);
+    const def = findTransition("stuck", "reviewing", task);
     expect(def).not.toBeNull();
     expect(def!.hooks).toHaveLength(1);
-    expect(def!.hooks[0].id).toBe("spawn_agent");
-    expect(def!.hooks[0].variant).toBe("stuck_fix");
+    expect(def!.hooks[0].id).toBe("kill_session");
+  });
+
+  test("stuck → working is rejected", () => {
+    const task = createTask({ status: "stuck" });
+    const def = findTransition("stuck", "working", task);
+    expect(def).toBeNull();
+  });
+
+  test("working → stuck spawns stuck_fix agent", () => {
+    const task = createTask({ status: "working" });
+    const def = findTransition("working", "stuck", task);
+    expect(def).not.toBeNull();
+    expect(def!.hooks.some(h => h.id === "spawn_agent" && h.variant === "stuck_fix")).toBe(true);
+  });
+
+  test("agent-review → stuck spawns stuck_fix agent", () => {
+    const task = createTask({ status: "agent-review", review_round: 2 });
+    const def = findTransition("agent-review", "stuck", task);
+    expect(def).not.toBeNull();
+    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "spawn_agent" && h.variant === "stuck_fix")).toBe(true);
   });
 
   test("invalid transition returns null", () => {

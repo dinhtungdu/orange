@@ -232,7 +232,8 @@ working ⇄ clarification
 working → agent-review (implementation done)
 agent-review → reviewing (review passed)
 agent-review → working (review failed)
-agent-review → stuck (round 2 failed)
+agent-review → stuck (round 2 failed, auto-spawns interactive agent)
+stuck → reviewing (human fixed interactively)
 Any active → cancelled
 reviewing → done
 ```

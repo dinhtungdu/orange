@@ -138,11 +138,13 @@ export const TRANSITION_MAP: TransitionDef[] = [
     to: "clarification",
     hooks: [],
   },
-  // working → stuck
+  // working → stuck: auto-spawn interactive stuck_fix agent
   {
     from: "working",
     to: "stuck",
-    hooks: [],
+    hooks: [
+      { id: "spawn_agent", variant: "stuck_fix" },
+    ],
   },
   // working → cancelled
   {
@@ -173,7 +175,7 @@ export const TRANSITION_MAP: TransitionDef[] = [
       { id: "spawn_agent", variant: "worker_fix" },
     ],
   },
-  // agent-review → stuck: review failed, round >= 2
+  // agent-review → stuck: review failed, round >= 2, auto-spawn interactive stuck_fix agent
   {
     from: "agent-review",
     to: "stuck",
@@ -181,6 +183,7 @@ export const TRANSITION_MAP: TransitionDef[] = [
     condition: (task) => task.review_round >= 2,
     hooks: [
       { id: "kill_session" },
+      { id: "spawn_agent", variant: "stuck_fix" },
     ],
   },
   // agent-review → cancelled
@@ -219,12 +222,12 @@ export const TRANSITION_MAP: TransitionDef[] = [
       { id: "release_workspace" },
     ],
   },
-  // stuck → working: human unsticks
+  // stuck → reviewing: human fixed it interactively with stuck_fix agent
   {
     from: "stuck",
-    to: "working",
+    to: "reviewing",
     hooks: [
-      { id: "spawn_agent", variant: "stuck_fix" },
+      { id: "kill_session" },
     ],
   },
   // stuck → cancelled

@@ -139,9 +139,12 @@ Review round: ${task.review_round}
 Task stuck — review failed twice or repeated crashes.
 Read ## Review, ## Plan, and ## Handoff for what went wrong.
 
-1. Address the root issues
-2. Write updated ## Handoff
-3. orange task update --status agent-review`;
+You are in an interactive session. Work WITH the human to fix the issues.
+
+1. Summarize what went wrong and propose a fix approach
+2. Wait for human input before making changes
+3. After fixing, proactively ask: "Issue fixed — ready to send for review?"
+4. When human confirms: orange task update --status reviewing`;
 }
 
 // --- Backwards-compatible aliases used by spawn.ts ---

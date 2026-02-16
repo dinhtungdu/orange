@@ -599,8 +599,9 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const hookExecutor = createHookExecutor(deps);
 
   if (task.status === "stuck") {
-    // stuck → working via transition engine (runs spawn_agent(stuck_fix) hook)
-    await executeTransition(task, "working", deps, hookExecutor);
+    // Re-spawn stuck_fix agent without status change (task stays stuck until agent sends to reviewing)
+    await acquireWorkspaceHook(deps, task);
+    await spawnAgentHook(deps, task, "stuck_fix");
     console.log(`Respawned agent for task ${taskId} in ${task.tmux_session}`);
     return;
   }

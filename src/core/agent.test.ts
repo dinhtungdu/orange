@@ -176,9 +176,10 @@ describe("Stuck fix prompt", () => {
     expect(prompt).toContain("Review round: 2");
   });
 
-  test("instructs to address root issues", () => {
+  test("instructs interactive session with human", () => {
     const prompt = buildStuckFixPrompt(createTask());
-    expect(prompt).toContain("Address the root issues");
+    expect(prompt).toContain("interactive session");
+    expect(prompt).toContain("Wait for human input");
   });
 
   test("instructs to read review and plan", () => {
