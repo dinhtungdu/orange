@@ -49,7 +49,7 @@ orange log [--level <level>] [--component <name>] [--grep <pattern>] [--lines N]
 
 ## JSON Output
 
-Task commands support `--json` for machine-readable output. Used by the pi extension (see [pi-extension.md](./pi-extension.md)).
+Task commands support `--json` for machine-readable output.
 
 ```bash
 orange task list --json
