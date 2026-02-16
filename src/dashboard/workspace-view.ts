@@ -255,12 +255,17 @@ export class WorkspaceViewer {
       }
 
       // Terminal area: scroll tmux scrollback via copy-mode (1 line per tick)
-      if (this.terminal.isActive() && !this.terminal.isSessionDead()) {
-        const session = this.task.tmux_session;
+      const active = this.terminal.isActive();
+      const dead = this.terminal.isSessionDead();
+      const session = this.task.tmux_session;
+      this.footer.content = ` [DEBUG] scroll=${direction} col=${event.col} active=${active} dead=${dead} session=${session ?? "null"}`;
+      if (active && !dead) {
         if (session) {
           this.deps.tmux.scrollPane(session, direction).then(() => {
             this.terminal.notifyActivity();
-          }).catch(() => { /* ignore scroll failures */ });
+          }).catch((err: unknown) => {
+            this.footer.content = ` [DEBUG] scrollPane error: ${err}`;
+          });
         }
         return true;
       }
