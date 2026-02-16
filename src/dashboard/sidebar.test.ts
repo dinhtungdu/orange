@@ -164,6 +164,85 @@ describe("Sidebar Sections", () => {
   });
 });
 
+describe("Sidebar Scroll State", () => {
+  // Test the scroll offset clamping logic used in sidebar
+  function clampOffset(offset: number, contentLines: number, visibleLines: number): number {
+    const maxOffset = Math.max(0, contentLines - visibleLines);
+    return Math.max(0, Math.min(maxOffset, offset));
+  }
+
+  test("scroll offset clamps to 0 when content fits", () => {
+    // 5 lines of content, 10 visible → maxOffset=0
+    expect(clampOffset(0, 5, 10)).toBe(0);
+    expect(clampOffset(3, 5, 10)).toBe(0);
+  });
+
+  test("scroll offset clamps to max when content overflows", () => {
+    // 20 lines, 8 visible → maxOffset=12
+    expect(clampOffset(15, 20, 8)).toBe(12);
+    expect(clampOffset(12, 20, 8)).toBe(12);
+    expect(clampOffset(5, 20, 8)).toBe(5);
+  });
+
+  test("scroll offset does not go negative", () => {
+    expect(clampOffset(-1, 20, 8)).toBe(0);
+  });
+
+  test("visible lines calculation with border", () => {
+    // Box height minus 2 for border (top+bottom)
+    const boxHeight = 10;
+    const visibleLines = Math.max(1, boxHeight - 2);
+    expect(visibleLines).toBe(8);
+  });
+
+  test("visible lines minimum is 1", () => {
+    const boxHeight = 2; // border-only box
+    const visibleLines = Math.max(1, boxHeight - 2);
+    expect(visibleLines).toBe(1);
+  });
+
+  // Test section hit-testing logic
+  function sectionAtRow(
+    row: number,
+    sections: Array<{ key: string; y: number; height: number; visible: boolean }>,
+  ): string | null {
+    for (const s of sections) {
+      if (!s.visible) continue;
+      if (row - 1 >= s.y && row - 1 < s.y + s.height) return s.key;
+    }
+    return null;
+  }
+
+  test("hit-test maps row to correct section", () => {
+    const sections = [
+      { key: "files", y: 5, height: 6, visible: true },
+      { key: "history", y: 12, height: 5, visible: true },
+      { key: "task", y: 18, height: 10, visible: true },
+    ];
+    // row is 1-based, y is 0-based
+    expect(sectionAtRow(6, sections)).toBe("files"); // row 6 → y=5, in files [5,11)
+    expect(sectionAtRow(13, sections)).toBe("history"); // row 13 → y=12, in history [12,17)
+    expect(sectionAtRow(20, sections)).toBe("task"); // row 20 → y=19, in task [18,28)
+  });
+
+  test("hit-test returns null for gap between sections", () => {
+    const sections = [
+      { key: "files", y: 5, height: 3, visible: true },
+      { key: "history", y: 10, height: 3, visible: true },
+    ];
+    // row 9 → y=8, not in files [5,8) or history [10,13)
+    expect(sectionAtRow(9, sections)).toBe(null);
+  });
+
+  test("hit-test skips hidden sections", () => {
+    const sections = [
+      { key: "files", y: 5, height: 6, visible: false },
+      { key: "history", y: 5, height: 6, visible: true },
+    ];
+    expect(sectionAtRow(6, sections)).toBe("history");
+  });
+});
+
 describe("Sidebar Data Pipeline", () => {
   test("refresh intervals per spec", () => {
     // Per workspace.md data pipeline table

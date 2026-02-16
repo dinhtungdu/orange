@@ -654,8 +654,14 @@ export async function runDashboard(
         const me = parseMouse(sequence);
         if (!me) return false;
 
+        // Workspace mode: forward to workspace viewer
+        if (mouseState.isWorkspaceMode()) {
+          if (workspaceViewer) workspaceViewer.handleMouse(me);
+          return true;
+        }
+
         // Ignore mouse in overlay modes
-        if (mouseState.isWorkspaceMode() || mouseState.isCreateMode() ||
+        if (mouseState.isCreateMode() ||
             mouseState.isConfirmMode() || mouseState.isFixMode()) {
           return true; // consume but ignore
         }

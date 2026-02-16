@@ -18,6 +18,8 @@ import type { Deps, Task } from "../core/types.js";
 import { loadProjects } from "../core/state.js";
 import { TerminalViewer } from "./terminal.js";
 import { Sidebar } from "./sidebar.js";
+import type { MouseEvent } from "./mouse.js";
+import { isLeftClick, isScrollUp, isScrollDown } from "./mouse.js";
 
 // Small terminal thresholds per spec
 const MIN_WIDTH_FOR_SIDEBAR = 80;
@@ -223,6 +225,47 @@ export class WorkspaceViewer {
     } else {
       return this.handleSidebarKey(key, ctrl, sequence);
     }
+  }
+
+  /**
+   * Handle mouse event.
+   */
+  handleMouse(event: MouseEvent): boolean {
+    if (!this.active) return false;
+
+    const dims = this.calculateDimensions();
+    const inSidebar = dims.showSidebar && event.col <= dims.sidebarWidth;
+
+    if (isLeftClick(event)) {
+      const newFocus: FocusMode = inSidebar ? "sidebar" : "terminal";
+      if (this.focus !== newFocus) {
+        this.focus = newFocus;
+        this.updateFocusIndicators();
+        this.updateFooter();
+      }
+      return true;
+    }
+
+    if (isScrollUp(event) || isScrollDown(event)) {
+      const direction = isScrollUp(event) ? "up" : "down";
+
+      if (inSidebar && this.sidebar) {
+        this.sidebar.handleScroll(event.row, direction);
+        return true;
+      }
+
+      // Terminal area: forward scroll to tmux
+      if (this.terminal.isActive() && !this.terminal.isSessionDead()) {
+        const tmuxKey = direction === "up" ? "PPage" : "NPage";
+        const session = this.task.tmux_session;
+        if (session) {
+          this.deps.tmux.sendKeys(session, tmuxKey);
+        }
+        return true;
+      }
+    }
+
+    return true; // consume all mouse events in workspace
   }
 
   /**

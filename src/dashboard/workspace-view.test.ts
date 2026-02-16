@@ -6,6 +6,8 @@
 
 import { describe, expect, test } from "bun:test";
 import type { FocusMode } from "./workspace-view.js";
+import type { MouseEvent } from "./mouse.js";
+import { isLeftClick, isScrollUp, isScrollDown } from "./mouse.js";
 
 describe("Focus Mode", () => {
   test("terminal focus forwards keys to tmux", () => {
@@ -159,5 +161,58 @@ describe("Footer Content", () => {
       : " Ctrl+\\:sidebar  Ctrl+]:fullscreen";
 
     expect(footer).toBe(" [Session ended]  Ctrl+\\:sidebar  Esc:dashboard");
+  });
+});
+
+describe("Mouse Focus Switching", () => {
+  // Simulate handleMouse focus logic from WorkspaceViewer
+  function determineFocus(
+    eventCol: number,
+    sidebarWidth: number,
+    showSidebar: boolean,
+  ): FocusMode {
+    const inSidebar = showSidebar && eventCol <= sidebarWidth;
+    return inSidebar ? "sidebar" : "terminal";
+  }
+
+  function makeClick(col: number, row: number): MouseEvent {
+    return { button: 0, col, row, type: "press", shift: false, ctrl: false, meta: false };
+  }
+
+  function makeScrollUp(col: number, row: number): MouseEvent {
+    return { button: 64, col, row, type: "press", shift: false, ctrl: false, meta: false };
+  }
+
+  function makeScrollDown(col: number, row: number): MouseEvent {
+    return { button: 65, col, row, type: "press", shift: false, ctrl: false, meta: false };
+  }
+
+  test("click in sidebar area switches to sidebar focus", () => {
+    // sidebarWidth=36, click at col=10 → sidebar
+    expect(determineFocus(10, 36, true)).toBe("sidebar");
+  });
+
+  test("click in terminal area switches to terminal focus", () => {
+    // sidebarWidth=36, click at col=50 → terminal
+    expect(determineFocus(50, 36, true)).toBe("terminal");
+  });
+
+  test("click at sidebar boundary is sidebar", () => {
+    expect(determineFocus(36, 36, true)).toBe("sidebar");
+  });
+
+  test("click past sidebar boundary is terminal", () => {
+    expect(determineFocus(37, 36, true)).toBe("terminal");
+  });
+
+  test("click always terminal when sidebar hidden", () => {
+    expect(determineFocus(5, 0, false)).toBe("terminal");
+  });
+
+  test("mouse event helpers work", () => {
+    expect(isLeftClick(makeClick(1, 1))).toBe(true);
+    expect(isScrollUp(makeScrollUp(1, 1))).toBe(true);
+    expect(isScrollDown(makeScrollDown(1, 1))).toBe(true);
+    expect(isLeftClick(makeScrollUp(1, 1))).toBe(false);
   });
 });

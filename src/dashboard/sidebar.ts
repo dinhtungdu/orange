@@ -121,6 +121,11 @@ export class Sidebar {
 
   private onChange: (() => void) | null = null;
 
+  // Per-section scroll offsets
+  private scrollOffset = { files: 0, history: 0, task: 0 };
+  // Content line counts (set during render)
+  private contentLines = { files: 0, history: 0, task: 0 };
+
   constructor(renderer: CliRenderer, options: SidebarOptions) {
     this.deps = options.deps;
     this.project = options.project;
@@ -220,6 +225,47 @@ export class Sidebar {
    */
   setOnChange(fn: () => void): void {
     this.onChange = fn;
+  }
+
+  /**
+   * Handle scroll event at a given screen row.
+   * Returns true if the scroll was handled.
+   */
+  handleScroll(row: number, direction: "up" | "down"): boolean {
+    const section = this.sectionAtRow(row);
+    if (!section) return false;
+
+    const delta = direction === "up" ? -1 : 1;
+    const maxOffset = Math.max(0, this.contentLines[section] - this.sectionVisibleLines(section));
+    this.scrollOffset[section] = Math.max(0, Math.min(maxOffset, this.scrollOffset[section] + delta));
+    this.render();
+    return true;
+  }
+
+  /** Determine which scrollable section contains the given screen row. */
+  private sectionAtRow(row: number): "files" | "history" | "task" | null {
+    const sections = [
+      { key: "files" as const, box: this.filesBox },
+      { key: "history" as const, box: this.historyBox },
+      { key: "task" as const, box: this.taskBox },
+    ];
+    for (const { key, box } of sections) {
+      if (!box.visible) continue;
+      // opentui layout coords: y is top edge, height is total height (1-based row → 0-based y)
+      const top = box.y;
+      const bottom = top + box.height;
+      if (row - 1 >= top && row - 1 < bottom) return key;
+    }
+    return null;
+  }
+
+  /** Visible content lines in a section (box height minus border). */
+  private sectionVisibleLines(section: "files" | "history" | "task"): number {
+    const box = section === "files" ? this.filesBox
+      : section === "history" ? this.historyBox
+      : this.taskBox;
+    // Box has border (2 rows) — visible content = height - 2
+    return Math.max(1, box.height - 2);
   }
 
   /**
@@ -510,7 +556,10 @@ export class Sidebar {
       lines.push(t`${colorFn(prefix)} ${truncated}`);
     }
 
-    this.filesText.content = this.joinLines(lines);
+    this.contentLines.files = lines.length;
+    const offset = Math.min(this.scrollOffset.files, Math.max(0, lines.length - 1));
+    this.scrollOffset.files = offset;
+    this.filesText.content = this.joinLines(lines.slice(offset));
   }
 
   private renderHistory(): void {
@@ -535,7 +584,10 @@ export class Sidebar {
       );
     }
 
-    this.historyText.content = this.joinLines(lines);
+    this.contentLines.history = lines.length;
+    const offset = Math.min(this.scrollOffset.history, Math.max(0, lines.length - 1));
+    this.scrollOffset.history = offset;
+    this.historyText.content = this.joinLines(lines.slice(offset));
   }
 
   private renderTaskBody(): void {
@@ -547,13 +599,16 @@ export class Sidebar {
 
     this.taskBox.visible = true;
 
-    const bodyLines = task.body.split("\n").slice(0, 20);
+    const bodyLines = task.body.split("\n");
     const lines: StyledText[] = [];
     for (const l of bodyLines) {
       lines.push(t`${l}`);
     }
 
-    this.taskText.content = this.joinLines(lines);
+    this.contentLines.task = lines.length;
+    const offset = Math.min(this.scrollOffset.task, Math.max(0, lines.length - 1));
+    this.scrollOffset.task = offset;
+    this.taskText.content = this.joinLines(lines.slice(offset));
   }
 
   private formatAge(timestamp: string): string {
