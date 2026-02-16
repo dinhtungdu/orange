@@ -144,6 +144,32 @@ describe("Dashboard State", () => {
     expect(state.getCursor()).toBe(0);
   });
 
+  test("setCursor for mouse click", async () => {
+    await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));
+    await saveTask(deps, createTask({ id: "t3", branch: "b3", created_at: "2024-01-03T00:00:00.000Z" }));
+
+    const { DashboardState } = await import("./state.js");
+    const state = new DashboardState(deps, { project: "testproj" });
+    await state.loadTasks();
+
+    expect(state.getCursor()).toBe(0);
+
+    // Set to valid index
+    state.setCursor(2);
+    expect(state.getCursor()).toBe(2);
+
+    // Same index — no change (no emit)
+    state.setCursor(2);
+    expect(state.getCursor()).toBe(2);
+
+    // Out of bounds — ignored
+    state.setCursor(10);
+    expect(state.getCursor()).toBe(2);
+    state.setCursor(-1);
+    expect(state.getCursor()).toBe(2);
+  });
+
   test("cursor navigation with arrow keys", async () => {
     await saveTask(deps, createTask({ id: "t1", branch: "b1", created_at: "2024-01-01T00:00:00.000Z" }));
     await saveTask(deps, createTask({ id: "t2", branch: "b2", created_at: "2024-01-02T00:00:00.000Z" }));

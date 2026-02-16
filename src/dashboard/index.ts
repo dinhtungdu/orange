@@ -33,6 +33,7 @@ import {
   type DashboardOptions,
 } from "./state.js";
 import { WorkspaceViewer } from "./workspace-view.js";
+import { parseMouse, isLeftClick, isScrollUp, isScrollDown } from "./mouse.js";
 
 // Re-export for external use and tests
 export { DashboardState } from "./state.js";
@@ -172,7 +173,7 @@ function createHeaderRow(renderer: CliRenderer): BoxRenderable {
 function buildDashboard(
   renderer: CliRenderer,
   state: DashboardState
-): { update: () => void; root: BoxRenderable } {
+): { update: () => void; root: BoxRenderable; taskIndexAtRow: (row: number) => number | null } {
   const s = state.data;
 
   // --- Root container ---
@@ -337,6 +338,10 @@ function buildDashboard(
   let taskRows: BoxRenderable[] = [];
   let viewLines: TextRenderable[] = [];
 
+  // Mouse hit-testing state (updated each render)
+  let taskListStartRow = 0;
+  let currentScrollStart = 0;
+
   function update() {
     const width = renderer.width;
 
@@ -476,6 +481,10 @@ function buildDashboard(
     const availableTaskHeight = Math.max(2, renderer.height - chromeHeight);
     const maxVisibleTasks = Math.floor(availableTaskHeight / 2);
 
+    // Compute task list start row for mouse hit-testing (0-based)
+    // header(1) + col-headers(1) + separator(1) + error(0-1) + message(0-1)
+    taskListStartRow = 3 + (s.error ? 1 : 0) + (s.message ? 1 : 0);
+
     if (s.tasks.length === 0) {
       const projectMsg = s.projectFilter
         ? ` for project '${s.projectFilter}'`
@@ -502,6 +511,7 @@ function buildDashboard(
         scrollStart = cursorPos;
       }
     }
+    currentScrollStart = scrollStart;
     const scrollEnd = Math.min(scrollStart + maxVisibleTasks, s.tasks.length);
 
     for (let i = scrollStart; i < scrollEnd; i++) {
@@ -609,24 +619,82 @@ function buildDashboard(
     }
   }
 
-  return { update, root };
+  /** Map a 1-based terminal row to a task index, or null if outside task list. */
+  function taskIndexAtRow(termRow: number): number | null {
+    const row0 = termRow - 1; // convert to 0-based
+    const offset = row0 - taskListStartRow;
+    if (offset < 0) return null;
+    const idx = currentScrollStart + Math.floor(offset / 2);
+    if (idx < 0 || idx >= s.tasks.length) return null;
+    return idx;
+  }
+
+  return { update, root, taskIndexAtRow };
 }
 
 /**
  * Run the dashboard.
  */
+// SGR mouse reporting escape sequences
+const MOUSE_ENABLE = "\x1b[?1002h\x1b[?1006h";
+const MOUSE_DISABLE = "\x1b[?1002l\x1b[?1006l";
+
 export async function runDashboard(
   deps: Deps,
   options: DashboardOptions = {}
 ): Promise<void> {
+  // Mutable refs for mouse handler (set after dashboard/state created)
+  let mouseState: DashboardState | null = null;
+  let mouseDashboard: { taskIndexAtRow: (row: number) => number | null } | null = null;
+
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
     targetFps: 10,
     useMouse: false,
+    prependInputHandlers: [
+      (sequence: string): boolean => {
+        if (!mouseState || !mouseDashboard) return false;
+        const me = parseMouse(sequence);
+        if (!me) return false;
+
+        // Ignore mouse in overlay modes
+        if (mouseState.isWorkspaceMode() || mouseState.isCreateMode() ||
+            mouseState.isConfirmMode() || mouseState.isFixMode()) {
+          return true; // consume but ignore
+        }
+
+        // View mode: scroll only
+        if (mouseState.isViewMode()) {
+          if (isScrollUp(me)) mouseState.handleInput("k");
+          else if (isScrollDown(me)) mouseState.handleInput("j");
+          return true;
+        }
+
+        // List mode
+        if (isLeftClick(me)) {
+          const idx = mouseDashboard.taskIndexAtRow(me.row);
+          if (idx !== null) {
+            mouseState.setCursor(idx);
+          }
+        } else if (isScrollUp(me)) {
+          mouseState.handleInput("k");
+        } else if (isScrollDown(me)) {
+          mouseState.handleInput("j");
+        }
+        return true;
+      },
+    ],
   });
+
+  // Enable SGR mouse reporting
+  process.stdout.write(MOUSE_ENABLE);
 
   const state = new DashboardState(deps, options);
   const dashboard = buildDashboard(renderer, state);
+
+  // Wire up mouse handler refs
+  mouseState = state;
+  mouseDashboard = dashboard;
 
   // --- Workspace viewer ---
   let workspaceViewer: WorkspaceViewer | null = null;
@@ -645,6 +713,7 @@ export async function runDashboard(
       },
       onAttach: async (session: string) => {
         await state.dispose();
+        disableMouse();
         renderer.destroy();
 
         // resizePane sets window-size=manual; reset so window fits client
@@ -722,9 +791,14 @@ export async function runDashboard(
     await enterWorkspace(task);
   });
 
+  function disableMouse(): void {
+    process.stdout.write(MOUSE_DISABLE);
+  }
+
   if (options.exitOnAttach) {
     state.onAttach(() => {
       state.dispose().then(() => {
+        disableMouse();
         renderer.destroy();
         process.exit(0);
       });
@@ -736,6 +810,7 @@ export async function runDashboard(
     if (key.ctrl && key.name === "c") {
       const cleanup = workspaceViewer ? workspaceViewer.destroy() : Promise.resolve();
       cleanup.then(() => state.dispose()).then(() => {
+        disableMouse();
         renderer.destroy();
         process.exit(0);
       });
@@ -808,6 +883,7 @@ export async function runDashboard(
 
     if (key.name === "q" && !key.ctrl && !key.meta) {
       state.dispose().then(() => {
+        disableMouse();
         renderer.destroy();
         process.exit(0);
       });

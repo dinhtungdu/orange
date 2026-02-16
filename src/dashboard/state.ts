@@ -376,6 +376,14 @@ export class DashboardState {
     return this.data.cursor;
   }
 
+  /** Set cursor to a specific task index (for mouse click). */
+  setCursor(index: number): void {
+    if (index >= 0 && index < this.data.tasks.length && index !== this.data.cursor) {
+      this.data.cursor = index;
+      this.emit();
+    }
+  }
+
   getStatusFilter(): StatusFilter {
     return this.data.statusFilter;
   }
