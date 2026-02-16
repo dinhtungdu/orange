@@ -45,14 +45,18 @@ interface AnsiState {
   reverse: boolean;
 }
 
+// Default colors for resolving reverse video when one side is unset
+const DEFAULT_FG = RGBA.fromValues(229 / 255, 229 / 255, 229 / 255, 1); // ~white
+const DEFAULT_BG = RGBA.fromValues(0, 0, 0, 1); // black
+
 function makeAttributes(state: AnsiState): number {
   // Match opentui's TextAttributes bit layout
+  // Note: reverse is resolved by swapping fg/bg at chunk creation, not passed through
   let attrs = 0;
   if (state.bold) attrs |= 1;
   if (state.italic) attrs |= 2;
   if (state.underline) attrs |= 4;
   if (state.dim) attrs |= 32;
-  if (state.reverse) attrs |= 64;
   return attrs;
 }
 
@@ -185,11 +189,15 @@ export function ansiToStyledText(input: string): StyledText {
     if (match.index > lastIndex) {
       const text = input.slice(lastIndex, match.index);
       if (text) {
+        // Resolve reverse video by swapping fg/bg at chunk creation
+        // instead of passing the attribute to opentui (which can bleed across boxes)
+        const chunkFg = state.reverse ? (state.bg ?? DEFAULT_BG) : state.fg;
+        const chunkBg = state.reverse ? (state.fg ?? DEFAULT_FG) : state.bg;
         chunks.push({
           __isChunk: true,
           text,
-          fg: state.fg,
-          bg: state.bg,
+          fg: chunkFg,
+          bg: chunkBg,
           attributes: makeAttributes(state),
         });
       }
@@ -212,11 +220,13 @@ export function ansiToStyledText(input: string): StyledText {
   if (lastIndex < input.length) {
     const text = input.slice(lastIndex);
     if (text) {
+      const chunkFg = state.reverse ? (state.bg ?? DEFAULT_BG) : state.fg;
+      const chunkBg = state.reverse ? (state.fg ?? DEFAULT_FG) : state.bg;
       chunks.push({
         __isChunk: true,
         text,
-        fg: state.fg,
-        bg: state.bg,
+        fg: chunkFg,
+        bg: chunkBg,
         attributes: makeAttributes(state),
       });
     }

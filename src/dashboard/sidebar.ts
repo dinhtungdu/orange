@@ -574,10 +574,7 @@ export class Sidebar {
     }
 
     this.contentLines.files = lines.length;
-    const visibleLines = this.sectionVisibleLines("files");
-    const offset = Math.min(this.scrollOffset.files, Math.max(0, lines.length - visibleLines));
-    this.scrollOffset.files = offset;
-    this.filesText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
+    this.filesText.content = this.joinLines(lines);
   }
 
   private renderHistory(): void {
@@ -603,10 +600,7 @@ export class Sidebar {
     }
 
     this.contentLines.history = lines.length;
-    const visibleLines = this.sectionVisibleLines("history");
-    const offset = Math.min(this.scrollOffset.history, Math.max(0, lines.length - visibleLines));
-    this.scrollOffset.history = offset;
-    this.historyText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
+    this.historyText.content = this.joinLines(lines);
   }
 
   private renderTaskBody(): void {
