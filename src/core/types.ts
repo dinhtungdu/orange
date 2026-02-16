@@ -136,6 +136,8 @@ export interface TmuxExecutor {
   renameSession(oldName: string, newName: string): Promise<void>;
   /** Send literal text (not interpreted as key names) via send-keys -l */
   sendLiteral(session: string, text: string): Promise<void>;
+  /** Scroll pane via copy-mode (enters copy-mode if needed, scrolls 1 line) */
+  scrollPane(session: string, direction: "up" | "down"): Promise<void>;
 }
 
 /**

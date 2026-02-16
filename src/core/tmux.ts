@@ -336,6 +336,14 @@ export class RealTmux implements TmuxExecutor {
       );
     }
   }
+
+  async scrollPane(session: string, direction: "up" | "down"): Promise<void> {
+    // Enter copy-mode (no-op if already in copy-mode)
+    await exec("tmux", ["copy-mode", "-t", session]);
+    // Send scroll command within copy-mode
+    const cmd = direction === "up" ? "scroll-up" : "scroll-down";
+    await exec("tmux", ["send-keys", "-X", "-t", session, cmd]);
+  }
 }
 
 /**
@@ -501,6 +509,14 @@ export class MockTmux implements TmuxExecutor {
       throw new Error(`Session '${session}' not found`);
     }
     sessionData.output.push(`[literal: ${text}]`);
+  }
+
+  async scrollPane(session: string, direction: "up" | "down"): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[scroll: ${direction}]`);
   }
 
   /**

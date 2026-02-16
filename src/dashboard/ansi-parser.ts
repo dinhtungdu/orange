@@ -165,9 +165,23 @@ function processParams(params: number[], state: AnsiState): void {
 }
 
 /**
+ * Strip non-SGR escape sequences that could cause cursor positioning
+ * or other terminal side effects when rendered by opentui.
+ * Keeps only SGR sequences (\x1b[...m) for color/style.
+ */
+function stripNonSgrEscapes(input: string): string {
+  // Remove all CSI sequences except SGR (ending in 'm')
+  // CSI = \x1b[ followed by params and a final byte in 0x40-0x7E range
+  // Also remove OSC (\x1b]...\x07), SS2/SS3 (\x1bN/\x1bO), and bare ESC+letter
+  return input.replace(/\x1b\[[^m]*?[A-LN-Za-ln-z@`]|\x1b\][^\x07]*\x07|\x1b[NO].|\x1b[^[\]]/g, "");
+}
+
+/**
  * Parse a string with ANSI escape sequences into a StyledText.
  */
 export function ansiToStyledText(input: string): StyledText {
+  // Strip non-SGR escape sequences to prevent cursor positioning bleed
+  const cleaned = stripNonSgrEscapes(input);
   const chunks: TextChunk[] = [];
   const state: AnsiState = {
     fg: undefined,
@@ -184,10 +198,10 @@ export function ansiToStyledText(input: string): StyledText {
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(input)) !== null) {
+  while ((match = regex.exec(cleaned)) !== null) {
     // Text before this escape sequence
     if (match.index > lastIndex) {
-      const text = input.slice(lastIndex, match.index);
+      const text = cleaned.slice(lastIndex, match.index);
       if (text) {
         // Resolve reverse video by swapping fg/bg at chunk creation
         // instead of passing the attribute to opentui (which can bleed across boxes)
@@ -217,8 +231,8 @@ export function ansiToStyledText(input: string): StyledText {
   }
 
   // Remaining text after last escape
-  if (lastIndex < input.length) {
-    const text = input.slice(lastIndex);
+  if (lastIndex < cleaned.length) {
+    const text = cleaned.slice(lastIndex);
     if (text) {
       const chunkFg = state.reverse ? (state.bg ?? DEFAULT_BG) : state.fg;
       const chunkBg = state.reverse ? (state.fg ?? DEFAULT_FG) : state.bg;
