@@ -258,8 +258,9 @@ export class WorkspaceViewer {
       if (this.terminal.isActive() && !this.terminal.isSessionDead()) {
         const session = this.task.tmux_session;
         if (session) {
-          this.deps.tmux.scrollPane(session, direction);
-          this.terminal.notifyActivity();
+          this.deps.tmux.scrollPane(session, direction).then(() => {
+            this.terminal.notifyActivity();
+          }).catch(() => { /* ignore scroll failures */ });
         }
         return true;
       }
