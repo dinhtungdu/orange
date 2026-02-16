@@ -250,9 +250,7 @@ export class TerminalViewer {
           this.state.output = output;
           const lines = output.split("\n");
           const visibleLines = lines.slice(-this.termHeight);
-          // Strip ALL ANSI codes for plain text rendering (diagnostic: highlight bleed)
-          const plain = visibleLines.join("\n").replace(/\x1b\[[^a-zA-Z]*[a-zA-Z]/g, "");
-          this.content.content = plain;
+          this.content.content = ansiToStyledText(visibleLines.join("\n"));
         }
 
         // Query cursor position

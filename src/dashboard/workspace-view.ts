@@ -254,21 +254,10 @@ export class WorkspaceViewer {
         return true;
       }
 
-      // Terminal area: scroll tmux scrollback via copy-mode (1 line per tick)
-      const active = this.terminal.isActive();
-      const dead = this.terminal.isSessionDead();
-      const session = this.task.tmux_session;
-      this.footer.content = ` [DEBUG] scroll=${direction} col=${event.col} active=${active} dead=${dead} session=${session ?? "null"}`;
-      if (active && !dead) {
-        if (session) {
-          this.deps.tmux.scrollPane(session, direction).then(() => {
-            this.terminal.notifyActivity();
-          }).catch((err: unknown) => {
-            this.footer.content = ` [DEBUG] scrollPane error: ${err}`;
-          });
-        }
-        return true;
-      }
+      // Terminal area: consume scroll silently
+      // Alternate-screen TUI apps (Claude Code) can't receive forwarded scroll
+      // events through tmux — user should attach (Ctrl+\ then 'a') for direct scrolling
+      return true;
     }
 
     return true; // consume all mouse events in workspace
