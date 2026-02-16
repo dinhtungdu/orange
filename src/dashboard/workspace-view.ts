@@ -41,6 +41,8 @@ export interface WorkspaceViewOptions {
   onAttach: (session: string) => void;
   /** Callback to spawn or respawn the task */
   onSpawn?: (task: Task) => Promise<void>;
+  /** Callback to request changes (reviewing → working with fix agent) */
+  onRequestChanges?: (task: Task) => void;
 }
 
 /**
@@ -52,6 +54,7 @@ export class WorkspaceViewer {
   private onExit: () => void;
   private onAttach: (session: string) => void;
   private onSpawn?: (task: Task) => Promise<void>;
+  private onRequestChanges?: (task: Task) => void;
   private spawning = false;
 
   private renderer: CliRenderer;
@@ -76,6 +79,7 @@ export class WorkspaceViewer {
     this.onExit = options.onExit;
     this.onAttach = options.onAttach;
     this.onSpawn = options.onSpawn;
+    this.onRequestChanges = options.onRequestChanges;
 
     // Root container (column: body + footer)
     this.container = new BoxRenderable(renderer, {
@@ -315,6 +319,11 @@ export class WorkspaceViewer {
         this.exit();
         return true;
       default:
+        // 'r' key: request changes for reviewing tasks
+        if (sequence === "r" && this.task.status === "reviewing" && this.onRequestChanges) {
+          this.onRequestChanges(this.task);
+          return true;
+        }
         // H/L resize (sequence is uppercase)
         if (sequence === "H") {
           this.resizeSidebar(-SIDEBAR_RESIZE_STEP);
@@ -495,7 +504,8 @@ export class WorkspaceViewer {
     } else {
       const hasSession = this.task.tmux_session && this.terminal.isActive() && !this.terminal.isSessionDead();
       const attachHint = hasSession ? "  a:attach" : "";
-      this.footer.content = ` ${focusLabel} H/L:resize  Ctrl+\\:terminal${attachHint}  Esc:dashboard`;
+      const fixHint = this.task.status === "reviewing" && this.onRequestChanges ? "  r:request changes" : "";
+      this.footer.content = ` ${focusLabel} H/L:resize  Ctrl+\\:terminal${attachHint}${fixHint}  Esc:dashboard`;
     }
   }
 }

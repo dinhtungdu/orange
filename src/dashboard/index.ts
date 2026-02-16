@@ -290,6 +290,14 @@ function buildDashboard(
   });
   root.add(confirmPrompt);
 
+  const fixPrompt = new TextRenderable(renderer, {
+    id: "fix-prompt",
+    content: "",
+    fg: "#FFAA00",
+    visible: false,
+  });
+  root.add(fixPrompt);
+
   // --- View overlay ---
   const viewOverlay = new BoxRenderable(renderer, {
     id: "view-overlay",
@@ -381,6 +389,13 @@ function buildDashboard(
     confirmPrompt.visible = cfm.active;
     if (cfm.active) {
       confirmPrompt.content = ` ${cfm.message} (y/N)`;
+    }
+
+    // Fix prompt
+    const fxm = s.fixMode;
+    fixPrompt.visible = fxm.active;
+    if (fxm.active) {
+      fixPrompt.content = ` Fix instructions (optional): [${fxm.instructions}█]  Enter:submit  Esc:cancel`;
     }
 
     // --- View overlay ---
@@ -659,6 +674,15 @@ export async function runDashboard(
           process.exit(code);
         }
       },
+      onRequestChanges: (t: Task) => {
+        // Exit workspace, enter fix mode on dashboard
+        exitWorkspace().then(() => {
+          // Find the task in dashboard state and select it
+          const idx = state.data.tasks.findIndex((task) => task.id === t.id);
+          if (idx >= 0) state.data.cursor = idx;
+          state.enterFixModeForTask(t.id);
+        });
+      },
       onSpawn: async (t: Task) => {
         if (t.status === "pending") {
           const { spawnTaskById } = await import("../core/spawn.js");
@@ -733,7 +757,7 @@ export async function runDashboard(
         state.handleInput("escape");
       } else if (name === "up" || name === "down") {
         state.handleInput(name);
-      } else if (key.sequence === "j" || key.sequence === "k" || key.sequence === "v" || key.sequence === "q") {
+      } else if (key.sequence === "j" || key.sequence === "k" || key.sequence === "v" || key.sequence === "q" || key.sequence === "r") {
         state.handleInput(key.sequence);
       }
       return;
@@ -746,6 +770,21 @@ export async function runDashboard(
         state.handleInput("escape");
       } else if (key.sequence === "y" || key.sequence === "Y") {
         state.handleInput("y");
+      }
+      return;
+    }
+
+    // In fix mode, text input keys go to state
+    if (state.isFixMode()) {
+      const name = key.name;
+      if (name === "escape") {
+        state.handleInput("escape");
+      } else if (name === "return") {
+        state.handleInput("enter");
+      } else if (name === "backspace") {
+        state.handleInput("backspace");
+      } else if (key.sequence && key.sequence.length === 1 && key.sequence >= " ") {
+        state.handleInput(key.sequence);
       }
       return;
     }
@@ -789,7 +828,7 @@ export async function runDashboard(
   });
 
   renderer.keyInput.on("paste", (event: PasteEvent) => {
-    if (state.isCreateMode()) {
+    if (state.isCreateMode() || state.isFixMode()) {
       for (const ch of event.text) {
         if (ch >= " ") {
           state.handleInput(ch);

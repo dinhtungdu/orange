@@ -73,9 +73,11 @@ Branch: ${task.branch}
 Review round: ${task.review_round}
 
 1. Read ## Review — specific feedback to address
+1b. Read ## Fix Instructions if present — user-specified scope (only fix listed items)
 2. Fix each issue
-3. Write updated ## Handoff
-4. orange task update --status agent-review
+3. Commit changes
+4. Write updated ## Handoff
+5. orange task update --status agent-review
 
 Do NOT push to remote.`;
 }

@@ -52,6 +52,7 @@ Context-aware footer shows available actions for the selected task.
 | c | Create task | Project-scoped only |
 | Enter | Spawn / attach / respawn | Context-dependent |
 | w | Open workspace view | Task has live session |
+| r | Request changes (optional instructions) | `reviewing` → spawns fix agent |
 | m | Merge | `reviewing` (force confirm from other active) |
 | p | Create or open PR | `reviewing` creates; any with PR opens in browser |
 | x | Cancel (with confirmation) | Active tasks |

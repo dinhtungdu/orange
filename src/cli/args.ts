@@ -195,6 +195,7 @@ function isSubcommand(command: string, arg: string): boolean {
       "cancel",
       "delete",
       "create-pr",
+      "request-changes",
     ],
     workspace: ["init", "list", "gc"],
   };
@@ -250,6 +251,7 @@ Task Management (project inferred from cwd):
   orange task cancel <task_id> [--yes] Cancel task (prompts for confirmation)
   orange task delete <task_id> [--yes] Delete task (only done/cancelled)
   orange task create-pr <task_id>     Create PR for reviewing task
+  orange task request-changes <task_id> Request changes (reviewing → working)
 
 Workspace Management (project inferred from cwd):
   orange workspace init               Create worktrees for current project

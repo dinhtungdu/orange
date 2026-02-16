@@ -154,6 +154,12 @@ export interface WorkspaceModeData {
   task: Task | null;
 }
 
+export interface FixModeData {
+  active: boolean;
+  instructions: string;
+  taskId: string | null;
+}
+
 export interface DashboardStateData {
   tasks: Task[];
   allTasks: Task[];
@@ -176,6 +182,7 @@ export interface DashboardStateData {
   confirmMode: ConfirmModeData;
   viewMode: ViewModeData;
   workspaceMode: WorkspaceModeData;
+  fixMode: FixModeData;
 }
 
 type ChangeListener = () => void;
@@ -226,6 +233,11 @@ export class DashboardState {
     workspaceMode: {
       active: false,
       task: null,
+    },
+    fixMode: {
+      active: false,
+      instructions: "",
+      taskId: null,
     },
   };
 
@@ -376,6 +388,20 @@ export class DashboardState {
     return this.data.createMode.active;
   }
 
+  isFixMode(): boolean {
+    return this.data.fixMode.active;
+  }
+
+  /** Enter fix mode for a specific task (used by workspace viewer callback). */
+  enterFixModeForTask(taskId: string): void {
+    this.data.fixMode = {
+      active: true,
+      instructions: "",
+      taskId,
+    };
+    this.emit();
+  }
+
   isConfirmMode(): boolean {
     return this.data.confirmMode.active;
   }
@@ -389,6 +415,11 @@ export class DashboardState {
   handleInput(key: string): void {
     if (this.data.viewMode.active) {
       this.handleViewInput(key);
+      return;
+    }
+
+    if (this.data.fixMode.active) {
+      this.handleFixInput(key);
       return;
     }
 
@@ -434,6 +465,9 @@ export class DashboardState {
         break;
       case "p":
         this.createOrOpenPR();
+        break;
+      case "r":
+        this.enterFixMode();
         break;
       case "R":
         this.refreshPR();
@@ -507,6 +541,89 @@ export class DashboardState {
     this.emit();
   }
 
+  // --- Fix mode ---
+
+  private enterFixMode(): void {
+    const task = this.data.tasks[this.data.cursor];
+    if (!task || task.status !== "reviewing") return;
+
+    this.data.fixMode = {
+      active: true,
+      instructions: "",
+      taskId: task.id,
+    };
+    this.emit();
+  }
+
+  private exitFixMode(): void {
+    this.data.fixMode = { active: false, instructions: "", taskId: null };
+    this.emit();
+  }
+
+  private handleFixInput(key: string): void {
+    const fm = this.data.fixMode;
+    switch (key) {
+      case "escape":
+        this.exitFixMode();
+        return;
+      case "enter":
+        this.submitFix();
+        return;
+      case "backspace":
+        fm.instructions = fm.instructions.slice(0, -1);
+        this.emit();
+        return;
+      default:
+        if (key.length === 1 && key >= " ") {
+          fm.instructions += key;
+          this.emit();
+        }
+        return;
+    }
+  }
+
+  private async submitFix(): Promise<void> {
+    const fm = this.data.fixMode;
+    const taskId = fm.taskId;
+    const instructions = fm.instructions.trim();
+
+    this.data.fixMode = { active: false, instructions: "", taskId: null };
+
+    if (!taskId) return;
+
+    // Find task
+    const task = this.data.tasks.find((t) => t.id === taskId);
+    if (!task || task.status !== "reviewing") return;
+
+    // Append fix instructions to task body if non-empty
+    if (instructions) {
+      task.body = (task.body || "") + `\n\n## Fix Instructions\n\n${instructions}`;
+      await saveTask(this.deps, task);
+    }
+
+    // Shell out to CLI
+    this.data.pendingOps.add(taskId);
+    this.data.message = `Requesting changes for ${task.branch}...`;
+    this.emit();
+
+    const proc = Bun.spawn(this.getOrangeCommand(["task", "request-changes", taskId]), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    proc.exited.then(async (exitCode) => {
+      this.data.pendingOps.delete(taskId);
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        this.data.error = `Request changes failed: ${cleanErrorMessage(stderr) || "Unknown error"}`;
+      } else {
+        this.data.message = `Requested changes for ${task.branch}`;
+      }
+      await this.refreshTasks();
+      this.emit();
+    });
+  }
+
   // --- Workspace mode ---
 
   private openWorkspace(): void {
@@ -548,6 +665,18 @@ export class DashboardState {
           this.emit();
         }
         break;
+      case "r": {
+        // Request changes from view mode (reviewing tasks only)
+        const task = this.data.viewMode.task;
+        if (task && task.status === "reviewing") {
+          this.exitViewMode();
+          // Select the task
+          const idx = this.data.tasks.findIndex((t) => t.id === task.id);
+          if (idx >= 0) this.data.cursor = idx;
+          this.enterFixModeForTask(task.id);
+        }
+        break;
+      }
     }
   }
 
@@ -1537,7 +1666,13 @@ export class DashboardState {
    */
   getContextKeys(): string {
     if (this.data.viewMode.active) {
-      return " j/k:scroll  Esc:close";
+      const task = this.data.viewMode.task;
+      const fixHint = task?.status === "reviewing" ? "  r:request changes" : "";
+      return ` j/k:scroll${fixHint}  Esc:close`;
+    }
+
+    if (this.data.fixMode.active) {
+      return " Enter:submit  Escape:cancel";
     }
 
     if (this.data.createMode.active) {
@@ -1561,7 +1696,7 @@ export class DashboardState {
     } else if (task.status === "cancelled") {
       keys += "  d:del";
     } else if (task.status === "reviewing") {
-      keys += "  Enter:open";
+      keys += "  Enter:open  r:request changes";
       keys += task.pr_url ? "  p:open PR" : "  m:merge  p:create PR";
       keys += "  x:cancel";
     } else {

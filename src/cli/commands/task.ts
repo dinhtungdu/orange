@@ -182,6 +182,10 @@ export async function runTaskCommand(
       await respawnTask(parsed, deps);
       break;
 
+    case "request-changes":
+      await requestChanges(parsed, deps);
+      break;
+
     case "update":
       await updateTask(parsed, deps);
       break;
@@ -195,7 +199,7 @@ export async function runTaskCommand(
         `Unknown task subcommand: ${parsed.subcommand ?? "(none)"}`
       );
       console.error(
-        "Usage: orange task <create|list|show|spawn|attach|respawn|update|complete|stuck|merge|cancel|delete|create-pr>"
+        "Usage: orange task <create|list|show|spawn|attach|respawn|update|complete|stuck|merge|cancel|delete|create-pr|request-changes>"
       );
       process.exit(1);
   }
@@ -664,6 +668,42 @@ async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
   const tasks = await listTasks(deps, {});
   const task = tasks.find((t) => t.workspace === workspaceName);
   return task?.id ?? null;
+}
+
+/**
+ * Request changes on a reviewing task (reviewing → working).
+ * Runs the transition engine which spawns worker_fix agent.
+ */
+async function requestChanges(parsed: ParsedArgs, deps: Deps): Promise<void> {
+  const log = deps.logger.child("task");
+
+  if (parsed.args.length < 1) {
+    console.error("Usage: orange task request-changes <task_id>");
+    process.exit(1);
+  }
+
+  const taskId = parsed.args[0];
+
+  const tasks = await listTasks(deps, {});
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) {
+    console.error(`Task '${taskId}' not found`);
+    process.exit(1);
+  }
+
+  if (task.status !== "reviewing") {
+    console.error(`Task '${taskId}' is not reviewing (status: ${task.status})`);
+    process.exit(1);
+  }
+
+  const { executeTransition } = await import("../../core/transitions.js");
+  const { createHookExecutor } = await import("../../core/hooks.js");
+  const hookExecutor = createHookExecutor(deps);
+
+  await executeTransition(task, "working", deps, hookExecutor);
+
+  log.info("Requested changes", { taskId });
+  console.log(`Task ${taskId} moved to working (fix agent spawned)`);
 }
 
 /**
