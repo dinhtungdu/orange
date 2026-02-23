@@ -200,7 +200,7 @@ export function createHookExecutor(deps: Deps): HookExecutor {
 
       case "release_workspace":
         if (task.workspace) {
-          await releaseWorkspace(deps, task.workspace);
+          await releaseWorkspace(deps, task.workspace, { force: true });
           task.workspace = null;
           await saveTask(deps, task);
         }

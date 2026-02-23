@@ -1222,7 +1222,7 @@ export class DashboardState {
         // Task doesn't exist — orphaned workspace (task was deleted)
         log.info("Releasing orphaned workspace (task deleted)", { workspace, task: entry.task });
         try {
-          await releaseWorkspace(this.deps, workspace);
+          await releaseWorkspace(this.deps, workspace, { force: true });
         } catch (err) {
           log.warn("Failed to release orphaned workspace", {
             workspace,
@@ -1250,7 +1250,7 @@ export class DashboardState {
         }
 
         try {
-          await releaseWorkspace(this.deps, workspace);
+          await releaseWorkspace(this.deps, workspace, { force: true });
           // Clear workspace from task
           task.workspace = null;
           task.tmux_session = null;
@@ -1272,7 +1272,7 @@ export class DashboardState {
           task: task.id,
         });
         try {
-          await releaseWorkspace(this.deps, workspace);
+          await releaseWorkspace(this.deps, workspace, { force: true });
           task.workspace = null;
           await saveTask(this.deps, task);
         } catch (err) {

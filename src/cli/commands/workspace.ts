@@ -157,7 +157,7 @@ async function gcWorkspaces(deps: Deps): Promise<void> {
   // Release each orphaned workspace
   for (const name of orphaned) {
     log.info("Releasing orphaned workspace", { workspace: name });
-    await releaseWorkspace(deps, name);
+    await releaseWorkspace(deps, name, { force: true });
     console.log(`Released ${name}`);
   }
 

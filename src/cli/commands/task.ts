@@ -1177,7 +1177,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Release workspace
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
-    await releaseWorkspace(deps, task.workspace);
+    await releaseWorkspace(deps, task.workspace, { force: mergeVia === "pr" });
   }
 
   // Kill tmux session (safe - ignores errors if session already gone)
@@ -1249,7 +1249,7 @@ async function cancelTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Release workspace (no auto-spawn - cancelled is terminal, not a trigger for next task)
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
-    await releaseWorkspace(deps, task.workspace, false);
+    await releaseWorkspace(deps, task.workspace, { force: true });
   }
 
   // Kill tmux session (safe - ignores errors if session already gone)
@@ -1328,7 +1328,7 @@ async function deleteTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Release workspace if still bound (defensive - should already be released)
   if (task.workspace) {
     log.debug("Releasing workspace", { workspace: task.workspace });
-    await releaseWorkspace(deps, task.workspace);
+    await releaseWorkspace(deps, task.workspace, { force: true });
   }
 
   // Kill tmux session if still exists (defensive)

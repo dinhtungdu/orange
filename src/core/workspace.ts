@@ -297,7 +297,7 @@ export async function acquireWorkspace(
 export async function releaseWorkspace(
   deps: Deps,
   workspace: string,
-  _autoSpawn?: boolean // Deprecated, ignored. spawn_next hook handles this.
+  options?: { force?: boolean }
 ): Promise<void> {
   const log = deps.logger.child("workspace");
 
@@ -329,12 +329,14 @@ export async function releaseWorkspace(
     const workspacePath = join(getWorkspacesDir(deps), workspace);
     log.debug("Cleaning workspace", { workspace, path: workspacePath });
 
-    // Check for uncommitted changes
-    const isDirty = await deps.git.isDirty(workspacePath);
-    if (isDirty) {
-      throw new Error(
-        `Workspace has uncommitted changes. Review the workspace before merging.`
-      );
+    // Check for uncommitted changes (skip when force — e.g. PR already merged)
+    if (!options?.force) {
+      const isDirty = await deps.git.isDirty(workspacePath);
+      if (isDirty) {
+        throw new Error(
+          `Workspace has uncommitted changes. Review the workspace before merging.`
+        );
+      }
     }
 
     // Get project's default branch
