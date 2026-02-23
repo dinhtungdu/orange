@@ -100,13 +100,26 @@ function countProjectWorkspaces(state: PoolState, projectName: string): number {
 
 /**
  * Get the next workspace number for a project.
+ * Considers both pool state AND directories on disk to avoid collisions.
  */
-function getNextWorkspaceNumber(state: PoolState, projectName: string): number {
+function getNextWorkspaceNumber(
+  state: PoolState,
+  projectName: string,
+  existingDirs: string[]
+): number {
   const prefix = `${projectName}--`;
-  const numbers = Object.keys(state.workspaces)
+
+  // Collect numbers from both pool state and disk
+  const stateNumbers = Object.keys(state.workspaces)
     .filter((name) => name.startsWith(prefix))
-    .map((name) => parseInt(name.slice(prefix.length), 10))
-    .filter((n) => !isNaN(n));
+    .map((name) => parseInt(name.slice(prefix.length), 10));
+  const diskNumbers = existingDirs
+    .filter((name) => name.startsWith(prefix))
+    .map((name) => parseInt(name.slice(prefix.length), 10));
+
+  const numbers = [...new Set([...stateNumbers, ...diskNumbers])].filter(
+    (n) => !isNaN(n)
+  );
 
   if (numbers.length === 0) return 1;
   return Math.max(...numbers) + 1;
@@ -121,23 +134,10 @@ async function createWorktree(
   project: Project,
   state: PoolState
 ): Promise<string> {
-  const number = getNextWorkspaceNumber(state, project.name);
+  const existingDirs = await getExistingWorkspaces(deps);
+  const number = getNextWorkspaceNumber(state, project.name, existingDirs);
   const name = `${project.name}--${number}`;
   const worktreePath = join(getWorkspacesDir(deps), name);
-
-  // Safety check: verify the directory doesn't already exist
-  const { stat } = await import("node:fs/promises");
-  try {
-    await stat(worktreePath);
-    throw new Error(
-      `Workspace directory '${worktreePath}' already exists but wasn't in pool state. ` +
-      `This may indicate stale state. Try running 'orange workspace gc'.`
-    );
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw err;
-    }
-  }
 
   console.log(`Creating workspace ${name}...`);
   await deps.git.addWorktree(project.path, worktreePath, project.default_branch);
