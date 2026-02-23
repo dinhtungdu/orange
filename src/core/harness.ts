@@ -90,8 +90,9 @@ export const HARNESSES: Record<Harness, HarnessConfig> = {
   claude: {
     binary: "claude",
     spawnCommand: (prompt) => `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`,
-    // Block Task tool to prevent plugin agents (e.g., pr-review-toolkit) from posting to GitHub
-    reviewSpawnCommand: (prompt) => `claude --dangerously-skip-permissions --disallowedTools Task "${shellEscape(prompt)}"`,
+    // Block Task tool to prevent plugin agents (e.g., pr-review-toolkit) from posting to GitHub.
+    // --disallowedTools is variadic, so use = to avoid it consuming the prompt as a tool name.
+    reviewSpawnCommand: (prompt) => `claude --dangerously-skip-permissions --disallowedTools=Task "${shellEscape(prompt)}"`,
     respawnCommand: (prompt) => `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`,
     workspaceSetup: async (workspacePath) => {
       // Create .claude/settings.local.json for autonomous agent permissions
