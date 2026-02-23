@@ -18,6 +18,8 @@ export interface HarnessConfig {
   binary: string;
   /** Command to spawn agent with full permissions */
   spawnCommand: (prompt: string) => string;
+  /** Command to spawn reviewer agent (may restrict tools to prevent unwanted side effects) */
+  reviewSpawnCommand?: (prompt: string) => string;
   /** Command to respawn agent with reduced permissions */
   respawnCommand: (prompt: string) => string;
   /** Setup harness-specific files in workspace (optional) */
@@ -88,6 +90,8 @@ export const HARNESSES: Record<Harness, HarnessConfig> = {
   claude: {
     binary: "claude",
     spawnCommand: (prompt) => `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`,
+    // Block Task tool to prevent plugin agents (e.g., pr-review-toolkit) from posting to GitHub
+    reviewSpawnCommand: (prompt) => `claude --dangerously-skip-permissions --disallowedTools Task "${shellEscape(prompt)}"`,
     respawnCommand: (prompt) => `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`,
     workspaceSetup: async (workspacePath) => {
       // Create .claude/settings.local.json for autonomous agent permissions

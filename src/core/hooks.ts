@@ -149,8 +149,13 @@ export async function spawnAgentHook(
 
   // Empty prompt = interactive session
   const isRespawnVariant = variant === "worker_respawn" || variant === "stuck_fix";
+  const isReviewer = variant === "reviewer";
   const command = prompt
-    ? (isRespawnVariant ? harnessConfig.respawnCommand(prompt) : harnessConfig.spawnCommand(prompt))
+    ? (isRespawnVariant
+        ? harnessConfig.respawnCommand(prompt)
+        : isReviewer
+          ? (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt)
+          : harnessConfig.spawnCommand(prompt))
     : harnessConfig.binary;
 
   // Kill existing session to clean up stale windows from previous agents
@@ -180,6 +185,8 @@ export async function spawnAgentHook(
  * Spawn reviewer in a background tmux window within the existing session.
  *
  * Worker session stays alive in the main window. Reviewer runs in a new window.
+ * Uses reviewSpawnCommand if available (e.g., Claude blocks Task tool to prevent
+ * plugin agents from posting to GitHub).
  */
 export async function spawnReviewerHook(deps: Deps, task: Task): Promise<void> {
   const log = deps.logger.child("hooks");
@@ -193,7 +200,7 @@ export async function spawnReviewerHook(deps: Deps, task: Task): Promise<void> {
   const prompt = buildReviewerPrompt(task);
   const windowName = `review-${task.review_round}`;
 
-  const command = harnessConfig.spawnCommand(prompt);
+  const command = (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt);
 
   await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
 

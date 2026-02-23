@@ -55,7 +55,7 @@ async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof 
 
   const prompt = buildReviewPrompt(task);
   const harnessConfig = HARNESSES[task.review_harness];
-  const command = harnessConfig.spawnCommand(prompt);
+  const command = (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt);
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
   const windowName = `review-${task.review_round}`;
 
