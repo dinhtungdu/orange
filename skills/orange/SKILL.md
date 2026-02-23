@@ -113,8 +113,9 @@ Core workflow is in the spawn prompt. This section covers details.
    3. Update LoginPage to pass returnUrl
    EOF
    ```
-4. **Monitor** — `orange task list`
-5. **Notify** — when tasks reach `reviewing`
+4. **Report** — tell the user what was created, then **stop**
+
+**Do NOT poll or monitor tasks.** No `sleep`, no loops, no periodic `orange task list`. The dashboard handles monitoring. Your job is done after creating tasks. Only check status if the user explicitly asks.
 
 ### Task Design
 
