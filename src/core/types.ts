@@ -144,6 +144,10 @@ export interface TmuxExecutor {
   killWindow(session: string, window: string): Promise<void>;
   /** Kill a specific window, ignoring errors */
   killWindowSafe(session: string, window: string): Promise<void>;
+  /** Select (focus) a specific window in a session */
+  selectWindow(session: string, window: string): Promise<void>;
+  /** Select a specific window, ignoring errors */
+  selectWindowSafe(session: string, window: string): Promise<void>;
 }
 
 /**

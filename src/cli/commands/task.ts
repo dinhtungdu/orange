@@ -538,9 +538,14 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  // Use switch-client if inside tmux, attach if outside
+  // Use switch-client if inside tmux, attach if outside.
+  // Target worker window so user lands on the main agent, not a background reviewer.
   log.debug("Attaching to session", { session: task.tmux_session, insideTmux: !!process.env.TMUX });
   const insideTmux = !!process.env.TMUX;
+
+  // Select worker window first (best-effort — may not exist if renamed)
+  await deps.tmux.selectWindowSafe(task.tmux_session!, "worker");
+
   const cmd = insideTmux
     ? ["tmux", "switch-client", "-t", task.tmux_session]
     : ["tmux", "attach-session", "-t", task.tmux_session];

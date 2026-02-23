@@ -363,6 +363,26 @@ export class RealTmux implements TmuxExecutor {
       // Ignore errors - window may not exist
     }
   }
+
+  async selectWindow(session: string, window: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "select-window",
+      "-t",
+      `${session}:${window}`,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to select window '${window}' in session '${session}': ${stderr}`);
+    }
+  }
+
+  async selectWindowSafe(session: string, window: string): Promise<void> {
+    try {
+      await this.selectWindow(session, window);
+    } catch {
+      // Ignore errors - window may not exist
+    }
+  }
 }
 
 /**
@@ -549,6 +569,22 @@ export class MockTmux implements TmuxExecutor {
   async killWindowSafe(session: string, window: string): Promise<void> {
     try {
       await this.killWindow(session, window);
+    } catch {
+      // Ignore
+    }
+  }
+
+  async selectWindow(session: string, window: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[select-window: ${window}]`);
+  }
+
+  async selectWindowSafe(session: string, window: string): Promise<void> {
+    try {
+      await this.selectWindow(session, window);
     } catch {
       // Ignore
     }

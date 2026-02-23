@@ -173,7 +173,7 @@ export class WorkspaceViewer {
     // Calculate layout dimensions
     const dims = this.calculateDimensions();
 
-    // Set up sidebar
+    // Set up sidebar structure (non-blocking — data loads in background)
     await this.setupSidebar(dims);
 
     // Set sidebar dimensions
@@ -184,6 +184,8 @@ export class WorkspaceViewer {
     if (session) {
       const exists = await this.deps.tmux.sessionExists(session);
       if (exists) {
+        // Focus worker window so workspace view shows the main agent, not background reviewer
+        await this.deps.tmux.selectWindowSafe(session, "worker");
         await this.terminal.start(session, dims.terminalWidth, dims.terminalHeight);
       } else {
         this.terminal.showPlaceholder(this.getPlaceholderMessage());
@@ -527,7 +529,15 @@ export class WorkspaceViewer {
     });
 
     this.sidebarBox.add(this.sidebar.getRenderable());
-    await this.sidebar.start();
+
+    // Wire up change listener so sidebar data updates trigger screen redraws
+    this.sidebar.setOnChange(() => {
+      // opentui re-renders on next frame automatically when renderable content changes
+    });
+
+    // Start data pipeline in background — don't block workspace entry.
+    // Sidebar renders progressively as each data source loads.
+    this.sidebar.start();
   }
 
   // --- Private: Footer ---

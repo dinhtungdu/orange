@@ -1364,6 +1364,9 @@ export class DashboardState {
 
     const insideTmux = !!process.env.TMUX;
     if (insideTmux) {
+      // Select worker window so user lands on the main agent, not a background reviewer
+      await this.deps.tmux.selectWindowSafe(session, "worker");
+
       const proc = Bun.spawn(["tmux", "switch-client", "-t", session], {
         stdout: "pipe",
         stderr: "pipe",

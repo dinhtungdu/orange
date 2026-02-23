@@ -734,6 +734,9 @@ export async function runDashboard(
 
         const insideTmux = !!process.env.TMUX;
         if (insideTmux) {
+          // Focus worker window so user lands on main agent, not background reviewer
+          await deps.tmux.selectWindowSafe(session, "worker");
+
           // Switch client to workspace session, keep orange alive in this pane.
           // When user switches back to this session, they see the dashboard.
           await Bun.spawn(["tmux", "switch-client", "-t", session], {
@@ -744,6 +747,9 @@ export async function runDashboard(
           }).exited;
           await runDashboard(deps, options);
         } else {
+          // Focus worker window so user lands on main agent, not background reviewer
+          await deps.tmux.selectWindowSafe(session, "worker");
+
           // attach-session will auto-size with window-size=largest
           const proc = Bun.spawn(["tmux", "attach-session", "-t", session], {
             stdin: "inherit",
