@@ -184,6 +184,20 @@ export class TerminalViewer {
   }
 
   /**
+   * Forward pasted text to the tmux session as literal input.
+   */
+  async handlePaste(text: string): Promise<boolean> {
+    if (!this.state.active || !this.state.session || this.state.sessionDead) {
+      return false;
+    }
+
+    this.state.lastActivityTime = Date.now();
+    await this.tmux.sendLiteral(this.state.session, text);
+    this.schedulePoll(POLL_POST_KEYSTROKE);
+    return true;
+  }
+
+  /**
    * Notify that external activity happened (e.g. mouse scroll sent to tmux).
    * Triggers a fast poll to pick up the updated pane content.
    */

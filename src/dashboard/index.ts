@@ -913,6 +913,10 @@ export async function runDashboard(
   });
 
   renderer.keyInput.on("paste", (event: PasteEvent) => {
+    if (state.isWorkspaceMode()) {
+      workspaceViewer?.handlePaste(event.text);
+      return;
+    }
     if (state.isCreateMode() || state.isFixMode()) {
       for (const ch of event.text) {
         if (ch >= " ") {

@@ -217,6 +217,11 @@ export class WorkspaceViewer {
   /**
    * Handle key input with focus-aware routing.
    */
+  async handlePaste(text: string): Promise<boolean> {
+    if (!this.active || this.focus !== "terminal") return false;
+    return this.terminal.handlePaste(text);
+  }
+
   async handleKey(key: string, ctrl: boolean, sequence?: string): Promise<boolean> {
     if (!this.active) return false;
 
