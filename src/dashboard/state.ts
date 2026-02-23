@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { Deps, Task, TaskStatus, PRStatus, Harness } from "../core/types.js";
 import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
-import { loadProjects, saveTask, appendHistory } from "../core/state.js";
+import { loadProjects, loadTask, saveTask, appendHistory } from "../core/state.js";
 import { createTaskRecord } from "../core/task.js";
 import { getWorkspacePath, loadPoolState, releaseWorkspace } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
@@ -1049,6 +1049,12 @@ export class DashboardState {
           const stderr = await new Response(proc.stderr).text();
           this.data.error = `Auto-cancel failed for ${task.branch}: ${cleanErrorMessage(stderr) || "Unknown error"}`;
         } else {
+          // Save PR state on the cancelled task so dashboard can display it without re-fetching
+          const updated = await loadTask(this.deps, task.project, task.id);
+          if (updated) {
+            updated.pr_state = "CLOSED";
+            await saveTask(this.deps, updated);
+          }
           this.data.message = `Auto-cancelled ${task.branch} (PR closed without merge)`;
         }
         await this.refreshTasks();

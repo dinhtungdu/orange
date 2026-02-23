@@ -96,6 +96,7 @@ export async function loadTask(
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
       pr_url: (data.pr_url as string) ?? null,
+      pr_state: (data.pr_state as Task["pr_state"]) ?? null,
     };
   } catch {
     return null;
@@ -134,6 +135,9 @@ export async function saveTask(deps: Deps, task: Task): Promise<void> {
   };
   if (task.pr_url) {
     frontmatter.pr_url = task.pr_url;
+  }
+  if (task.pr_state) {
+    frontmatter.pr_state = task.pr_state;
   }
 
   const content = matter.stringify(task.body, frontmatter);

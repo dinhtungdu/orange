@@ -1196,6 +1196,7 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const now = deps.clock.now();
   const previousStatus = task.status;
   task.status = "done";
+  task.pr_state = mergeVia === "pr" ? "MERGED" : (task.pr_url ? "MERGED" : null);
   task.workspace = null;
   task.tmux_session = null;
   task.updated_at = now;

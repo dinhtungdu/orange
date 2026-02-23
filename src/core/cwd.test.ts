@@ -150,6 +150,7 @@ describe("CWD detection", () => {
         review_round: 0,
         crash_count: 0,
         pr_url: null,
+    pr_state: null,
       };
       await saveTask(deps, task);
 

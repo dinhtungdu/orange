@@ -68,6 +68,8 @@ export interface Task {
   updated_at: string;
   /** GitHub PR URL, null if no PR created */
   pr_url: string | null;
+  /** Final PR state, saved on terminal transition so we don't need to re-fetch */
+  pr_state: "OPEN" | "CLOSED" | "MERGED" | null;
 }
 
 /**

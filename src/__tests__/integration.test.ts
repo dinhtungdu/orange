@@ -224,6 +224,7 @@ describe("Integration: Workspace Pool", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
     await saveTask(deps, task);
     
@@ -285,6 +286,7 @@ describe("Integration: Full Task Lifecycle", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task);
@@ -318,6 +320,7 @@ describe("Integration: Full Task Lifecycle", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
     const task2 = {
       id: "task2",
@@ -335,6 +338,7 @@ describe("Integration: Full Task Lifecycle", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task1);
@@ -363,6 +367,7 @@ describe("Integration: Full Task Lifecycle", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task);
@@ -381,6 +386,7 @@ describe("Integration: Full Task Lifecycle", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, updatedTask);
@@ -475,6 +481,7 @@ describe("Integration: Multiple Projects", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
     const task2 = {
       id: "t2", project: "repo2", branch: "feat2", harness: "claude" as const, status: "working" as const,
@@ -484,6 +491,7 @@ describe("Integration: Multiple Projects", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task1);

@@ -83,6 +83,7 @@ export async function createTaskRecord(
     created_at: now,
     updated_at: now,
     pr_url: null,
+    pr_state: null,
   };
 
   // Create task directory

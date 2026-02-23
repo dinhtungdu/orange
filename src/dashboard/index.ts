@@ -546,17 +546,20 @@ function buildDashboard(
       let statusCol: string = pending ? "processing…" : task.status;
 
       // PR column: PR info when available
+      // Use live prStatus from GitHub polling for active tasks,
+      // fall back to persisted pr_state for terminal tasks (done/cancelled)
       let prCol = "";
       let prColor = "#888888";
       if (task.pr_url) {
         const prNum = task.pr_url.match(/\/pull\/(\d+)/)?.[1];
         const prStatus = s.prStatuses.get(task.id);
-        if (prNum && prStatus) {
-          const checksIcon = prStatus.checks ? CHECKS_ICON[prStatus.checks] : "";
-          if (prStatus.state === "MERGED") {
+        const effectiveState = prStatus?.state ?? task.pr_state;
+        if (prNum && effectiveState) {
+          const checksIcon = prStatus?.checks ? CHECKS_ICON[prStatus.checks] : "";
+          if (effectiveState === "MERGED") {
             prCol = `#${prNum} merged`;
             prColor = "#22BB22";
-          } else if (prStatus.state === "CLOSED") {
+          } else if (effectiveState === "CLOSED") {
             prCol = `#${prNum} closed`;
             prColor = "#888888";
           } else {
@@ -731,14 +734,15 @@ export async function runDashboard(
 
         const insideTmux = !!process.env.TMUX;
         if (insideTmux) {
-          // Switch first, then resize (client must be attached for sizing)
+          // Switch client to workspace session, keep orange alive in this pane.
+          // When user switches back to this session, they see the dashboard.
           await Bun.spawn(["tmux", "switch-client", "-t", session], {
             stdout: "pipe", stderr: "pipe",
           }).exited;
           await Bun.spawn(["tmux", "resize-window", "-A", "-t", session], {
             stdout: "pipe", stderr: "pipe",
           }).exited;
-          process.exit(0);
+          await runDashboard(deps, options);
         } else {
           // attach-session will auto-size with window-size=largest
           const proc = Bun.spawn(["tmux", "attach-session", "-t", session], {
@@ -746,8 +750,9 @@ export async function runDashboard(
             stdout: "inherit",
             stderr: "inherit",
           });
-          const code = await proc.exited;
-          process.exit(code);
+          await proc.exited;
+          // Return to dashboard after tmux detach (or server crash)
+          await runDashboard(deps, options);
         }
       },
       onRequestChanges: (t: Task) => {

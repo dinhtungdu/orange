@@ -38,6 +38,7 @@ const createTask = (overrides: Partial<Task> = {}): Task => ({
   created_at: "2024-01-15T10:00:00.000Z",
   updated_at: "2024-01-15T10:00:00.000Z",
   pr_url: null,
+    pr_state: null,
   ...overrides,
 });
 
@@ -745,6 +746,7 @@ describe("Dashboard Poll Cycle", () => {
       review_harness: "claude",
     review_round: 0,
     pr_url: null,
+    pr_state: null,
     });
     await saveTask(deps, task);
 
@@ -804,6 +806,7 @@ describe("Dashboard Poll Cycle", () => {
       review_harness: "claude",
     review_round: 0,
     pr_url: null,
+    pr_state: null,
     });
     await saveTask(deps, task);
 
@@ -945,6 +948,7 @@ describe("Dashboard v2 Features", () => {
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "reviewing",
       pr_url: null,
+    pr_state: null,
     }));
 
     const { DashboardState } = await import("./state.js");

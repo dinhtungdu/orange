@@ -119,6 +119,7 @@ describe("Task state (TASK.md)", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task);
@@ -149,6 +150,7 @@ describe("Task state (TASK.md)", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task);
@@ -180,6 +182,7 @@ describe("Task state (TASK.md)", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
 
     await saveTask(deps, task);
@@ -236,6 +239,7 @@ describe("History (history.jsonl)", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
     await saveTask(deps, task);
 
@@ -272,6 +276,7 @@ describe("History (history.jsonl)", () => {
     review_round: 0,
     crash_count: 0,
     pr_url: null,
+    pr_state: null,
     };
     await saveTask(deps, task);
 

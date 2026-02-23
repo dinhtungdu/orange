@@ -31,6 +31,7 @@ describe("Task types", () => {
       review_round: 0,
       crash_count: 0,
       pr_url: null,
+    pr_state: null,
     };
 
     expect(task.id).toBe("abc12345");
@@ -72,6 +73,7 @@ describe("Task types", () => {
       review_round: 0,
       crash_count: 0,
       pr_url: null,
+    pr_state: null,
     };
 
     // Simulate new state machine: pending → planning → working
@@ -112,6 +114,7 @@ describe("Task types", () => {
       review_round: 0,
       crash_count: 0,
       pr_url: null,
+    pr_state: null,
     };
 
     // Simulate crashes
