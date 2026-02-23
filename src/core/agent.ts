@@ -1,8 +1,9 @@
 /**
  * Agent prompt templates.
  *
- * Each spawn_agent hook uses a prompt template.
- * Variables: {summary}, {project}, {branch}, {review_round}, {status}.
+ * Persistent worker model: one worker session for the entire task lifecycle.
+ * Worker plans, implements, waits for review, fixes if needed.
+ * Reviewer spawns in background window.
  *
  * See specs/workflow.md § Agent Prompts for the canonical definitions.
  */
@@ -10,8 +11,8 @@
 import type { Task } from "./types.js";
 
 /**
- * Worker prompt (pending → planning → working).
- * Single agent session covering both planning and implementation phases.
+ * Worker prompt (persistent — entire task lifecycle).
+ * Single agent session covering planning, implementation, and review-fix cycles.
  */
 export function buildWorkerPrompt(task: Task): string {
   return `# Task: ${task.summary}
@@ -32,6 +33,13 @@ Phase 2 — Implement:
 8. Write ## Handoff (at least one of DONE/REMAINING/DECISIONS/UNCERTAIN)
 9. orange task update --status agent-review
 
+After setting agent-review, WAIT. A reviewer will evaluate your work in a
+separate session. When review completes, you'll receive a notification.
+Then:
+- Read ## Review in TASK.md
+- If back in working status: fix the issues, update ## Handoff, set agent-review again
+- If in reviewing status: review passed — you're done, no further action needed
+
 Do NOT push to remote.
 Do NOT set --status reviewing — always use agent-review.`;
 }
@@ -47,7 +55,7 @@ Branch: ${task.branch}
 Status: ${task.status}
 Review round: ${task.review_round}
 
-Read TASK.md — check ## Plan and ## Handoff for previous progress.
+Read TASK.md — check ## Plan, ## Handoff, and ## Review for previous progress.
 
 If status is planning:
   1. Write ## Plan if not yet written
@@ -55,35 +63,19 @@ If status is planning:
   3. Continue to implementation
 
 If status is working:
-  1. Pick up where last session left off
-  2. Write updated ## Handoff
-  3. orange task update --status agent-review
+  1. Check ## Review — if present, fix issues from review feedback first
+  2. Pick up where last session left off
+  3. Write updated ## Handoff
+  4. orange task update --status agent-review
+
+After setting agent-review, WAIT for reviewer notification.
+Then read ## Review and act accordingly (see above).
 
 Do NOT push to remote.`;
 }
 
 /**
- * Worker fix prompt (review failed, address feedback).
- */
-export function buildWorkerFixPrompt(task: Task): string {
-  return `# Fixing: ${task.summary}
-
-Project: ${task.project}
-Branch: ${task.branch}
-Review round: ${task.review_round}
-
-1. Read ## Review — specific feedback to address
-1b. Read ## Fix Instructions if present — user-specified scope (only fix listed items)
-2. Fix each issue
-3. Commit changes
-4. Write updated ## Handoff
-5. orange task update --status agent-review
-
-Do NOT push to remote.`;
-}
-
-/**
- * Reviewer prompt (working → agent-review).
+ * Reviewer prompt (background — working → agent-review).
  */
 export function buildReviewerPrompt(task: Task): string {
   return `# Review: ${task.summary}

@@ -343,6 +343,26 @@ export class RealTmux implements TmuxExecutor {
     const cmd = direction === "up" ? "scroll-up" : "scroll-down";
     await exec("tmux", ["send-keys", "-X", "-t", session, cmd]);
   }
+
+  async killWindow(session: string, window: string): Promise<void> {
+    const { exitCode, stderr } = await exec("tmux", [
+      "kill-window",
+      "-t",
+      `${session}:${window}`,
+    ]);
+
+    if (exitCode !== 0) {
+      throw new Error(`Failed to kill window '${window}' in session '${session}': ${stderr}`);
+    }
+  }
+
+  async killWindowSafe(session: string, window: string): Promise<void> {
+    try {
+      await this.killWindow(session, window);
+    } catch {
+      // Ignore errors - window may not exist
+    }
+  }
 }
 
 /**
@@ -516,6 +536,22 @@ export class MockTmux implements TmuxExecutor {
       throw new Error(`Session '${session}' not found`);
     }
     sessionData.output.push(`[scroll: ${direction}]`);
+  }
+
+  async killWindow(session: string, window: string): Promise<void> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) {
+      throw new Error(`Session '${session}' not found`);
+    }
+    sessionData.output.push(`[kill-window: ${window}]`);
+  }
+
+  async killWindowSafe(session: string, window: string): Promise<void> {
+    try {
+      await this.killWindow(session, window);
+    } catch {
+      // Ignore
+    }
   }
 
   /**

@@ -22,6 +22,17 @@ Statuses defined in [data.md](./data.md#status).
             └────────┘
 ```
 
+## Persistent Worker Model
+
+The worker agent persists through the entire task lifecycle. One session from `pending` to completion. The reviewer spawns as a background agent in a separate tmux window within the same session. When the reviewer finishes, the worker is notified via `tmux send-keys` and continues working.
+
+Key properties:
+- Worker never killed during normal flow (only on cancel/done)
+- Reviewer is ephemeral — spawns in background window, writes `## Review`, sets status, gets killed
+- Worker resumes after review via notification: reads `## Review` and fixes or waits for human
+- No `worker_fix` variant — the persistent worker handles fixes itself
+- Max 1 worker session + up to 2 reviewer sessions per task lifecycle
+
 ## Transitions
 
 Each transition has optional gates (artifact requirements) and hooks (side effects).
@@ -35,23 +46,27 @@ Each transition has optional gates (artifact requirements) and hooks (side effec
 | planning | cancelled | — | kill_session, release_workspace |
 | clarification | planning | — | — |
 | clarification | cancelled | — | kill_session, release_workspace |
-| working | agent-review | ## Handoff valid | kill_session, spawn_agent(reviewer), increment review_round |
+| working | agent-review | ## Handoff valid | spawn_reviewer, increment review_round |
 | working | clarification | — | — |
-| working | stuck | — | spawn_agent(stuck_fix) |
+| working | stuck | — | — |
 | working | cancelled | — | kill_session, release_workspace |
-| agent-review | reviewing | ## Review, Verdict: PASS | kill_session |
-| agent-review | working | ## Review, Verdict: FAIL, round < 2 | kill_session, spawn_agent(worker_fix) |
-| agent-review | stuck | ## Review, Verdict: FAIL, round ≥ 2 | kill_session, spawn_agent(stuck_fix) |
-| agent-review | cancelled | — | kill_session, release_workspace |
-| reviewing | working | — | spawn_agent(worker_fix) |
-| reviewing | done | — | release_workspace, delete_remote_branch, spawn_next |
+| agent-review | reviewing | ## Review, Verdict: PASS | kill_reviewer |
+| agent-review | working | ## Review, Verdict: FAIL, round < 2 | kill_reviewer, notify_worker |
+| agent-review | stuck | ## Review, Verdict: FAIL, round ≥ 2 | kill_reviewer |
+| agent-review | cancelled | — | kill_reviewer, kill_session, release_workspace |
+| reviewing | working | — | notify_worker |
+| reviewing | done | — | kill_session, release_workspace, delete_remote_branch, spawn_next |
 | reviewing | cancelled | — | kill_session, release_workspace |
-| stuck | reviewing | — | kill_session |
+| stuck | reviewing | — | — |
 | stuck | cancelled | — | kill_session, release_workspace |
 
 Any transition not in this map is rejected.
 
-**Note:** `planning → working` has no hooks — the same agent session continues. The agent plans, transitions to working, then implements. One spawn, one session, two phases.
+**Note:** `planning → working` has no hooks — the same agent session continues. The agent plans, transitions to working, then implements. One spawn, one session.
+
+**Note:** `working → agent-review` does NOT kill the worker. The worker session stays alive while the reviewer runs in a background window.
+
+**Note:** `reviewing → working` does NOT spawn a new agent. The persistent worker is notified and resumes.
 
 ## Artifact Gates
 
@@ -78,10 +93,14 @@ See [data.md](./data.md) for artifact format details.
 |------|--------------|
 | acquire_workspace | Bind worktree from pool to task |
 | release_workspace | Unbind worktree, reset to default branch. Never auto-spawns. |
-| spawn_agent | Create tmux window, run agent with prompt |
-| kill_session | Kill tmux session |
+| spawn_agent | Create tmux session, run worker agent |
+| spawn_reviewer | Create new tmux window in existing session for reviewer agent |
+| kill_session | Kill entire tmux session |
+| kill_reviewer | Kill reviewer tmux window only (worker stays alive) |
+| notify_worker | Send message to worker via tmux send-keys |
 | spawn_next | Pop next pending task for project, spawn it |
 | delete_remote_branch | Remove remote branch after merge |
+| increment_review_round | Increment review_round counter |
 
 Hooks execute in array order. All idempotent — silently succeed when nothing to do.
 
@@ -89,13 +108,36 @@ Hook failure after status write: log error, mark task for attention. Don't roll 
 
 ### spawn_agent
 
+Creates tmux session for the worker. One session per task, persists until done/cancelled.
+
 | Detail | Value |
 |--------|-------|
-| Harness | `task.harness` for workers, `task.review_harness` for reviewers |
-| Tmux windows | Named per role: `worker`, `review-1`, `worker-2`, `review-2` |
+| Harness | `task.harness` |
 | Session naming | `<project>/<branch>` |
+| Window name | `worker` |
 
-Windows kept open — history preserved for debugging.
+### spawn_reviewer
+
+Creates a new window in the existing tmux session for the reviewer agent.
+
+| Detail | Value |
+|--------|-------|
+| Harness | `task.review_harness` |
+| Window name | `review-{review_round}` |
+| Target | existing session `<project>/<branch>` |
+
+### kill_reviewer
+
+Kills the reviewer window only: `tmux kill-window -t <session>:review-{review_round}`.
+Worker window stays alive.
+
+### notify_worker
+
+Sends a message to the worker window via `tmux send-keys`. The message tells the worker to read `## Review` and continue.
+
+Target: `<session>:worker`. Message varies by context:
+- Review failed: notification tells worker to read `## Review` and fix issues
+- Human requests changes from reviewing: notification tells worker to read human feedback
 
 ## Transition Execution
 
@@ -135,7 +177,7 @@ Compare `tmux list-sessions` against tasks with active `tmux_session`. Session g
 
 **agent-review:**
 - ## Review with Verdict: PASS → advance to reviewing
-- ## Review with Verdict: FAIL + round < 2 → advance to working (spawn worker)
+- ## Review with Verdict: FAIL + round < 2 → advance to working (notify worker)
 - ## Review with Verdict: FAIL + round ≥ 2 → advance to stuck
 - No verdict → crash (increment crash_count)
   - crash_count ≥ 2 → advance to stuck
@@ -158,17 +200,17 @@ Auto-advance checks current status before acting. If a CLI command already trans
 ## Review Rounds
 
 - `review_round` starts at 0, incremented on each reviewer spawn
-- Round 1: review fails → worker respawned → fixes → agent-review again
+- Round 1: review fails → worker notified → fixes → agent-review again
 - Round 2: review fails → stuck
-- Max 4 agent sessions per task: worker → reviewer → worker → reviewer
+- Max 1 worker session + 2 reviewer sessions per task lifecycle
 
 ## Agent Prompts
 
-Each `spawn_agent` hook uses a prompt template. Variables: `{summary}`, `{project}`, `{branch}`, `{review_round}`, `{status}`.
+Each `spawn_agent` / `spawn_reviewer` hook uses a prompt template. Variables: `{summary}`, `{project}`, `{branch}`, `{review_round}`, `{status}`.
 
-### Worker (pending → planning → working)
+### Worker (persistent — entire task lifecycle)
 
-Single agent session covering both planning and implementation phases.
+Single agent session covering planning, implementation, and review-fix cycles.
 
 ```
 # Task: {summary}
@@ -189,6 +231,13 @@ Phase 2 — Implement:
 8. Write ## Handoff (at least one of DONE/REMAINING/DECISIONS/UNCERTAIN)
 9. orange task update --status agent-review
 
+After setting agent-review, WAIT. A reviewer will evaluate your work in a
+separate session. When review completes, you'll receive a notification.
+Then:
+- Read ## Review in TASK.md
+- If back in working status: fix the issues, update ## Handoff, set agent-review again
+- If in reviewing status: review passed — you're done, no further action needed
+
 Do NOT push to remote.
 Do NOT set --status reviewing — always use agent-review.
 ```
@@ -203,7 +252,7 @@ Branch: {branch}
 Status: {status}
 Review round: {review_round}
 
-Read TASK.md — check ## Plan and ## Handoff for previous progress.
+Read TASK.md — check ## Plan, ## Handoff, and ## Review for previous progress.
 
 If status is planning:
   1. Write ## Plan if not yet written
@@ -211,31 +260,18 @@ If status is planning:
   3. Continue to implementation
 
 If status is working:
-  1. Pick up where last session left off
-  2. Write updated ## Handoff
-  3. orange task update --status agent-review
+  1. Check ## Review — if present, fix issues from review feedback first
+  2. Pick up where last session left off
+  3. Write updated ## Handoff
+  4. orange task update --status agent-review
+
+After setting agent-review, WAIT for reviewer notification.
+Then read ## Review and act accordingly (see above).
 
 Do NOT push to remote.
 ```
 
-### Worker Fix (review failed)
-
-```
-# Fixing: {summary}
-
-Project: {project}
-Branch: {branch}
-Review round: {review_round}
-
-1. Read ## Review — specific feedback to address
-2. Fix each issue
-3. Write updated ## Handoff
-4. orange task update --status agent-review
-
-Do NOT push to remote.
-```
-
-### Reviewer (working → agent-review)
+### Reviewer (background — working → agent-review)
 
 ```
 # Review: {summary}

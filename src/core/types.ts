@@ -138,6 +138,10 @@ export interface TmuxExecutor {
   sendLiteral(session: string, text: string): Promise<void>;
   /** Scroll pane via copy-mode (enters copy-mode if needed, scrolls 1 line) */
   scrollPane(session: string, direction: "up" | "down"): Promise<void>;
+  /** Kill a specific window in a session */
+  killWindow(session: string, window: string): Promise<void>;
+  /** Kill a specific window, ignoring errors */
+  killWindowSafe(session: string, window: string): Promise<void>;
 }
 
 /**

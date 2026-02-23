@@ -9,7 +9,6 @@ import type { Task } from "./types.js";
 import {
   buildWorkerPrompt,
   buildWorkerRespawnPrompt,
-  buildWorkerFixPrompt,
   buildReviewerPrompt,
   buildClarificationPrompt,
   buildStuckFixPrompt,
@@ -68,6 +67,20 @@ describe("Worker prompt", () => {
     const prompt = buildWorkerPrompt(createTask());
     expect(prompt).toContain("Do NOT set --status reviewing");
   });
+
+  test("includes wait-for-review instruction", () => {
+    const prompt = buildWorkerPrompt(createTask());
+    expect(prompt).toContain("WAIT");
+    expect(prompt).toContain("reviewer will evaluate");
+    expect(prompt).toContain("notification");
+  });
+
+  test("includes post-review instructions", () => {
+    const prompt = buildWorkerPrompt(createTask());
+    expect(prompt).toContain("Read ## Review");
+    expect(prompt).toContain("working status: fix the issues");
+    expect(prompt).toContain("reviewing status: review passed");
+  });
 });
 
 describe("Worker respawn prompt", () => {
@@ -91,32 +104,16 @@ describe("Worker respawn prompt", () => {
     expect(prompt).toContain("## Plan");
   });
 
-  test("includes instructions for working status", () => {
+  test("includes instructions for working status with review check", () => {
     const prompt = buildWorkerRespawnPrompt(createTask({ status: "working" }));
     expect(prompt).toContain("## Handoff");
-  });
-});
-
-describe("Worker fix prompt", () => {
-  test("includes Fixing header", () => {
-    const prompt = buildWorkerFixPrompt(createTask({ review_round: 1 }));
-    expect(prompt).toContain("# Fixing: Implement auth");
-  });
-
-  test("includes review round", () => {
-    const prompt = buildWorkerFixPrompt(createTask({ review_round: 1 }));
-    expect(prompt).toContain("Review round: 1");
-  });
-
-  test("instructs to read Review and fix issues", () => {
-    const prompt = buildWorkerFixPrompt(createTask());
     expect(prompt).toContain("## Review");
-    expect(prompt).toContain("Fix each issue");
+    expect(prompt).toContain("fix issues from review feedback");
   });
 
-  test("includes no-push instruction", () => {
-    const prompt = buildWorkerFixPrompt(createTask());
-    expect(prompt).toContain("Do NOT push to remote");
+  test("includes wait-for-review instruction", () => {
+    const prompt = buildWorkerRespawnPrompt(createTask({ status: "working" }));
+    expect(prompt).toContain("WAIT for reviewer");
   });
 });
 

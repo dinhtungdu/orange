@@ -1,8 +1,8 @@
 /**
  * Hook executor factory.
  *
- * Extracts hook implementations from spawn.ts and exit-monitor.ts
- * into a standalone module consumed by executeTransition().
+ * Persistent worker model: worker session lives from pending to done/cancelled.
+ * Reviewer spawns in background tmux window, worker gets notified via send-keys.
  */
 
 import { join } from "node:path";
@@ -13,7 +13,6 @@ import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } 
 import {
   buildWorkerPrompt,
   buildWorkerRespawnPrompt,
-  buildWorkerFixPrompt,
   buildReviewerPrompt,
   buildStuckFixPrompt,
 } from "./agent.js";
@@ -31,8 +30,6 @@ function buildPromptForVariant(variant: SpawnAgentVariant, task: Task): string {
       return task.summary.trim() ? buildWorkerPrompt(task) : "";
     case "worker_respawn":
       return task.summary.trim() ? buildWorkerRespawnPrompt(task) : "";
-    case "worker_fix":
-      return buildWorkerFixPrompt(task);
     case "reviewer":
       return buildReviewerPrompt(task);
     case "stuck_fix":
@@ -55,9 +52,7 @@ function windowNameForVariant(variant: SpawnAgentVariant, task: Task): string {
     case "worker":
       return "worker";
     case "worker_respawn":
-      return "worker-resume";
-    case "worker_fix":
-      return `worker-fix-${task.review_round}`;
+      return "worker";
     case "reviewer":
       return `review-${task.review_round}`;
     case "stuck_fix":
@@ -131,9 +126,9 @@ export async function acquireWorkspaceHook(deps: Deps, task: Task): Promise<void
 }
 
 /**
- * Spawn agent in tmux session/window.
+ * Spawn agent in tmux session.
  *
- * If tmux session exists, creates new window; otherwise creates new session.
+ * Creates new tmux session for the worker. One session per task.
  * Writes task.tmux_session, logs agent.spawned.
  */
 export async function spawnAgentHook(
@@ -182,6 +177,84 @@ export async function spawnAgentHook(
 }
 
 /**
+ * Spawn reviewer in a background tmux window within the existing session.
+ *
+ * Worker session stays alive in the main window. Reviewer runs in a new window.
+ */
+export async function spawnReviewerHook(deps: Deps, task: Task): Promise<void> {
+  const log = deps.logger.child("hooks");
+
+  if (!task.workspace) throw new Error("Cannot spawn reviewer without workspace");
+  if (!task.tmux_session) throw new Error("Cannot spawn reviewer without active tmux session");
+
+  const workspacePath = getWorkspacePath(deps, task.workspace);
+  const harness = task.review_harness;
+  const harnessConfig = HARNESSES[harness];
+  const prompt = buildReviewerPrompt(task);
+  const windowName = `review-${task.review_round}`;
+
+  const command = harnessConfig.spawnCommand(prompt);
+
+  await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
+
+  log.debug("Reviewer spawned in background window", {
+    session: task.tmux_session,
+    window: windowName,
+  });
+
+  await appendHistory(deps, task.project, task.id, {
+    type: "agent.spawned",
+    timestamp: deps.clock.now(),
+    workspace: task.workspace,
+    tmux_session: task.tmux_session,
+  });
+}
+
+/**
+ * Kill reviewer window only, leaving worker session alive.
+ */
+export async function killReviewerHook(deps: Deps, task: Task): Promise<void> {
+  if (!task.tmux_session) return;
+
+  const windowName = `review-${task.review_round}`;
+  await deps.tmux.killWindowSafe(task.tmux_session, windowName);
+
+  deps.logger.child("hooks").debug("Reviewer window killed", {
+    session: task.tmux_session,
+    window: windowName,
+  });
+}
+
+/**
+ * Notify worker via tmux send-keys that review is complete.
+ *
+ * Sends a message to the worker window telling it to read ## Review.
+ */
+export async function notifyWorkerHook(deps: Deps, task: Task): Promise<void> {
+  if (!task.tmux_session) return;
+
+  const target = `${task.tmux_session}:worker`;
+  const message = [
+    "",
+    "# ━━━ Review complete ━━━",
+    "# Status changed to: " + task.status,
+    "# Read ## Review in TASK.md and continue.",
+    "# If working: fix issues, update ## Handoff, set --status agent-review",
+    "# If reviewing: review passed — you're done.",
+    "",
+  ].join("\n");
+
+  try {
+    await deps.tmux.sendKeys(target, message + "\n");
+  } catch {
+    // Worker window may not exist (crashed). Best-effort.
+    deps.logger.child("hooks").warn("Failed to notify worker", {
+      session: task.tmux_session,
+    });
+  }
+}
+
+/**
  * Create a HookExecutor that dispatches to the hook implementations above.
  */
 export function createHookExecutor(deps: Deps): HookExecutor {
@@ -196,6 +269,18 @@ export function createHookExecutor(deps: Deps): HookExecutor {
       case "spawn_agent":
         if (!hook.variant) throw new Error("spawn_agent hook requires variant");
         await spawnAgentHook(deps, task, hook.variant);
+        break;
+
+      case "spawn_reviewer":
+        await spawnReviewerHook(deps, task);
+        break;
+
+      case "kill_reviewer":
+        await killReviewerHook(deps, task);
+        break;
+
+      case "notify_worker":
+        await notifyWorkerHook(deps, task);
         break;
 
       case "release_workspace":

@@ -17,6 +17,7 @@ import {
   executeTransition,
   type HookExecutor,
 } from "./transitions.js";
+import { spawnAgentHook } from "./hooks.js";
 
 /** Crash count threshold before auto-advancing to stuck. */
 const CRASH_THRESHOLD = 2;
@@ -186,7 +187,16 @@ async function handleWorkingExit(
 
 /**
  * Handle dead session in agent-review status.
- * Verdict: PASS → reviewing; FAIL + round < 2 → working; FAIL + round >= 2 → stuck. Else crash.
+ *
+ * Persistent worker model: when the entire session dies during agent-review,
+ * both worker and reviewer are dead. If reviewer left a verdict, we advance
+ * the status but also need to respawn the worker (since notify_worker will
+ * fail on a dead session).
+ *
+ * Verdict: PASS → reviewing (no respawn needed, human reviews).
+ * Verdict: FAIL + round < 2 → working + respawn worker.
+ * Verdict: FAIL + round >= 2 → stuck + respawn worker (interactive).
+ * No verdict → crash.
  */
 async function handleAgentReviewExit(
   task: Task,
@@ -208,16 +218,20 @@ async function handleAgentReviewExit(
   if (validateReviewGate(task.body, "FAIL")) {
     if (task.review_round < 2) {
       await executeTransition(task, "working", deps, executeHook);
+      // Session is dead — respawn worker so it can read ## Review and fix
+      await respawnWorkerAfterCrash(task, deps);
       await appendHistory(deps, task.project, task.id, {
         type: "auto.advanced",
         timestamp: deps.clock.now(),
         from: "agent-review",
         to: "working",
-        reason: "Verdict: FAIL, respawning worker",
+        reason: "Verdict: FAIL, worker respawned",
       });
       return { task, action: "advanced", from: "agent-review", to: "working", reason: "Verdict: FAIL, round < 2" };
     } else {
       await executeTransition(task, "stuck", deps, executeHook);
+      // Session is dead — respawn as stuck_fix for interactive session
+      await respawnStuckAfterCrash(task, deps);
       await appendHistory(deps, task.project, task.id, {
         type: "auto.advanced",
         timestamp: deps.clock.now(),
@@ -230,6 +244,35 @@ async function handleAgentReviewExit(
   }
 
   return await handleCrash(task, deps);
+}
+
+/**
+ * Respawn worker after session crash during agent-review with FAIL verdict.
+ * Uses worker_respawn variant so the agent reads ## Review and picks up.
+ */
+async function respawnWorkerAfterCrash(task: Task, deps: Deps): Promise<void> {
+  const log = deps.logger.child("exit-monitor");
+  try {
+    await spawnAgentHook(deps, task, "worker_respawn");
+    log.info("Worker respawned after crash", { taskId: task.id });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log.error("Failed to respawn worker after crash", { taskId: task.id, error: errMsg });
+  }
+}
+
+/**
+ * Respawn stuck_fix agent after session crash during agent-review at max rounds.
+ */
+async function respawnStuckAfterCrash(task: Task, deps: Deps): Promise<void> {
+  const log = deps.logger.child("exit-monitor");
+  try {
+    await spawnAgentHook(deps, task, "stuck_fix");
+    log.info("Stuck fix agent spawned after crash", { taskId: task.id });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log.error("Failed to spawn stuck fix after crash", { taskId: task.id, error: errMsg });
+  }
 }
 
 /**

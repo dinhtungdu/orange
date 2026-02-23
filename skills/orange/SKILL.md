@@ -34,7 +34,7 @@ Triggers: empty summary, ambiguous requirements, scope larger than expected.
 
 ### Session Handoff
 
-Write `## Handoff` to TASK.md before stopping (before `--status agent-review`):
+Write `## Handoff` to TASK.md before setting `--status agent-review`:
 
 ```markdown
 ## Handoff
@@ -51,7 +51,14 @@ UNCERTAIN: Should tokens expire on password change?
 - **DECISIONS** — Choices made and why (prevents next session from re-deciding)
 - **UNCERTAIN** — Open questions, unknowns, things that need human input
 
-On respawn, read `## Handoff` first — it's the structured state from the previous session.
+### Persistent Worker
+
+Worker session persists through the entire task lifecycle. After setting `agent-review`, **WAIT** — a reviewer runs in a background tmux window. When review completes, you'll receive a notification via tmux send-keys. Then:
+- Read `## Review` in TASK.md
+- If status is `working`: fix issues, update `## Handoff`, set `agent-review` again
+- If status is `reviewing`: review passed — you're done
+
+On respawn, read `## Handoff` and `## Review` for previous state.
 
 ### Rules
 
@@ -226,14 +233,14 @@ orange task list [--status <status>] [--all]
 ### Transitions
 
 ```
-pending → working (with summary)
-pending → clarification (empty summary)
+pending → planning → working (worker persists)
 working ⇄ clarification
-working → agent-review (implementation done)
-agent-review → reviewing (review passed)
-agent-review → working (review failed)
-agent-review → stuck (round 2 failed, auto-spawns interactive agent)
+working → agent-review (reviewer spawns in background window)
+agent-review → reviewing (review passed, reviewer killed)
+agent-review → working (review failed, worker notified to fix)
+agent-review → stuck (round 2 failed)
+reviewing → working (human requests changes, worker notified)
+reviewing → done
 stuck → reviewing (human fixed interactively)
 Any active → cancelled
-reviewing → done
 ```

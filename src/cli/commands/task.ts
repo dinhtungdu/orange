@@ -39,6 +39,10 @@ import { requireProject, detectProject } from "../../core/cwd.js";
  * Spawn review agent in a new tmux window for a task in agent-review status.
  * Increments review_round and saves task.
  */
+/**
+ * Spawn reviewer in a background tmux window within the existing worker session.
+ * Worker session stays alive.
+ */
 async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof deps.logger.child>): Promise<void> {
   if (!task.tmux_session || !task.workspace) return;
 
@@ -55,11 +59,8 @@ async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof 
   const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
   const windowName = `review-${task.review_round}`;
 
-  // Kill existing session to clean up stale windows from previous agents
-  await deps.tmux.killSessionSafe(task.tmux_session);
-
-  await deps.tmux.newSession(task.tmux_session, workspacePath, command);
-  try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
+  // Create new window in existing session (worker stays alive)
+  await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
 
   await appendHistory(deps, task.project, task.id, {
     type: "review.started",
@@ -67,33 +68,34 @@ async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof 
     attempt: task.review_round,
   });
 
-  log.info("Review agent spawned", { taskId: task.id, round: task.review_round });
-  console.log(`Review agent spawned (round ${task.review_round})`);
+  log.info("Review agent spawned in background", { taskId: task.id, round: task.review_round });
+  console.log(`Review agent spawned in background (round ${task.review_round})`);
 }
 
 /**
- * Respawn worker agent in a new tmux window after review failure.
+ * Notify persistent worker that review is complete.
+ * Sends message via tmux send-keys to the worker window.
  */
-async function spawnWorkerWindow(deps: Deps, task: Task, log: ReturnType<typeof deps.logger.child>): Promise<void> {
-  if (!task.tmux_session || !task.workspace) return;
+async function notifyWorker(deps: Deps, task: Task, log: ReturnType<typeof deps.logger.child>): Promise<void> {
+  if (!task.tmux_session) return;
 
-  const { buildRespawnPrompt } = await import("../../core/agent.js");
-  const { HARNESSES } = await import("../../core/harness.js");
+  const target = `${task.tmux_session}:worker`;
+  const message = [
+    "",
+    "# ━━━ Review complete ━━━",
+    "# Status changed to: " + task.status,
+    "# Read ## Review in TASK.md and continue.",
+    "",
+  ].join("\n");
 
-  const prompt = buildRespawnPrompt(task);
-  const harnessConfig = HARNESSES[task.harness];
-  const command = prompt ? harnessConfig.respawnCommand(prompt) : harnessConfig.binary;
-  const workspacePath = join(deps.dataDir, "workspaces", task.workspace);
-  const windowName = `worker-${task.review_round + 1}`;
-
-  // Kill existing session to clean up stale windows from previous agents
-  await deps.tmux.killSessionSafe(task.tmux_session);
-
-  await deps.tmux.newSession(task.tmux_session, workspacePath, command);
-  try { await deps.tmux.renameWindow(task.tmux_session, windowName); } catch { /* best-effort */ }
-
-  log.info("Worker respawned after review", { taskId: task.id, round: task.review_round });
-  console.log(`Worker respawned (fix round ${task.review_round})`);
+  try {
+    await deps.tmux.sendKeys(target, message + "\n");
+    log.info("Worker notified of review result", { taskId: task.id, status: task.status });
+    console.log("Worker notified of review result");
+  } catch {
+    log.warn("Failed to notify worker (window may not exist)", { taskId: task.id });
+    console.error("Warning: failed to notify worker — session may need respawn");
+  }
 }
 
 import { buildPRBody } from "../../core/github.js";
@@ -669,7 +671,7 @@ async function getTaskIdFromWorkspace(deps: Deps): Promise<string | null> {
 
 /**
  * Request changes on a reviewing task (reviewing → working).
- * Runs the transition engine which spawns worker_fix agent.
+ * Runs the transition engine which notifies the persistent worker.
  */
 async function requestChanges(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
@@ -700,7 +702,7 @@ async function requestChanges(parsed: ParsedArgs, deps: Deps): Promise<void> {
   await executeTransition(task, "working", deps, hookExecutor);
 
   log.info("Requested changes", { taskId });
-  console.log(`Task ${taskId} moved to working (fix agent spawned)`);
+  console.log(`Task ${taskId} moved to working (worker notified)`);
 }
 
 /**
@@ -865,12 +867,16 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
       }
     }
 
-    // agent-review → working (review failed): respawn worker in new window
+    // agent-review → working (review failed): notify persistent worker
     if (newStatus === "working" && oldStatus === "agent-review" && task.review_round > 0) {
+      // Kill reviewer window
       try {
-        await spawnWorkerWindow(deps, task, log);
+        await deps.tmux.killWindowSafe(task.tmux_session!, `review-${task.review_round}`);
+      } catch { /* best-effort */ }
+      try {
+        await notifyWorker(deps, task, log);
       } catch (err) {
-        console.error(`Warning: failed to respawn worker: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`Warning: failed to notify worker: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }

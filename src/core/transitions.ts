@@ -4,6 +4,9 @@
  * Agents write artifacts, the engine validates and gates transitions.
  * No agent decides its own fate.
  *
+ * Persistent worker model: worker session lives from pending to done/cancelled.
+ * Reviewer spawns in background window, worker gets notified when review completes.
+ *
  * See specs/workflow.md for the full specification.
  */
 
@@ -24,7 +27,10 @@ export type HookId =
   | "acquire_workspace"
   | "release_workspace"
   | "spawn_agent"
+  | "spawn_reviewer"
   | "kill_session"
+  | "kill_reviewer"
+  | "notify_worker"
   | "spawn_next"
   | "delete_remote_branch"
   | "increment_review_round";
@@ -32,7 +38,7 @@ export type HookId =
 /**
  * Spawn agent variants passed as hook argument.
  */
-export type SpawnAgentVariant = "worker" | "worker_respawn" | "worker_fix" | "reviewer" | "stuck_fix";
+export type SpawnAgentVariant = "worker" | "worker_respawn" | "reviewer" | "stuck_fix";
 
 /**
  * Hook entry in a transition definition.
@@ -67,6 +73,9 @@ export interface TransitionDef {
 /**
  * The complete transition map. Every valid transition is listed here.
  * Any transition not in this map is rejected.
+ *
+ * Persistent worker model: worker never killed during normal flow.
+ * Reviewer spawns in background window via spawn_reviewer hook.
  */
 export const TRANSITION_MAP: TransitionDef[] = [
   // pending → planning: acquire workspace and spawn worker agent
@@ -121,14 +130,13 @@ export const TRANSITION_MAP: TransitionDef[] = [
       { id: "release_workspace" },
     ],
   },
-  // working → agent-review: requires valid ## Handoff
+  // working → agent-review: worker stays alive, reviewer spawns in background window
   {
     from: "working",
     to: "agent-review",
     gate: validateHandoffGate,
     hooks: [
-      { id: "kill_session" },
-      { id: "spawn_agent", variant: "reviewer" },
+      { id: "spawn_reviewer" },
       { id: "increment_review_round" },
     ],
   },
@@ -138,13 +146,11 @@ export const TRANSITION_MAP: TransitionDef[] = [
     to: "clarification",
     hooks: [],
   },
-  // working → stuck: auto-spawn interactive stuck_fix agent
+  // working → stuck: no spawn — worker session is still alive for human interaction
   {
     from: "working",
     to: "stuck",
-    hooks: [
-      { id: "spawn_agent", variant: "stuck_fix" },
-    ],
+    hooks: [],
   },
   // working → cancelled
   {
@@ -155,52 +161,52 @@ export const TRANSITION_MAP: TransitionDef[] = [
       { id: "release_workspace" },
     ],
   },
-  // agent-review → reviewing: review passed
+  // agent-review → reviewing: review passed, kill reviewer window only
   {
     from: "agent-review",
     to: "reviewing",
     gate: (body) => validateReviewGate(body, "PASS"),
     hooks: [
-      { id: "kill_session" },
+      { id: "kill_reviewer" },
     ],
   },
-  // agent-review → working: review failed, round < 2
+  // agent-review → working: review failed, round < 2, kill reviewer + notify worker
   {
     from: "agent-review",
     to: "working",
     gate: (body) => validateReviewGate(body, "FAIL"),
     condition: (task) => task.review_round < 2,
     hooks: [
-      { id: "kill_session" },
-      { id: "spawn_agent", variant: "worker_fix" },
+      { id: "kill_reviewer" },
+      { id: "notify_worker" },
     ],
   },
-  // agent-review → stuck: review failed, round >= 2, auto-spawn interactive stuck_fix agent
+  // agent-review → stuck: review failed, round >= 2, kill reviewer only (worker still alive)
   {
     from: "agent-review",
     to: "stuck",
     gate: (body) => validateReviewGate(body, "FAIL"),
     condition: (task) => task.review_round >= 2,
     hooks: [
-      { id: "kill_session" },
-      { id: "spawn_agent", variant: "stuck_fix" },
+      { id: "kill_reviewer" },
     ],
   },
-  // agent-review → cancelled
+  // agent-review → cancelled: kill both reviewer and worker
   {
     from: "agent-review",
     to: "cancelled",
     hooks: [
+      { id: "kill_reviewer" },
       { id: "kill_session" },
       { id: "release_workspace" },
     ],
   },
-  // reviewing → working: human requests changes
+  // reviewing → working: human requests changes, notify persistent worker
   {
     from: "reviewing",
     to: "working",
     hooks: [
-      { id: "spawn_agent", variant: "worker_fix" },
+      { id: "notify_worker" },
     ],
   },
   // reviewing → done: human approves
@@ -208,6 +214,7 @@ export const TRANSITION_MAP: TransitionDef[] = [
     from: "reviewing",
     to: "done",
     hooks: [
+      { id: "kill_session" },
       { id: "release_workspace" },
       { id: "delete_remote_branch" },
       { id: "spawn_next" },
@@ -222,13 +229,11 @@ export const TRANSITION_MAP: TransitionDef[] = [
       { id: "release_workspace" },
     ],
   },
-  // stuck → reviewing: human fixed it interactively with stuck_fix agent
+  // stuck → reviewing: human fixed it interactively
   {
     from: "stuck",
     to: "reviewing",
-    hooks: [
-      { id: "kill_session" },
-    ],
+    hooks: [],
   },
   // stuck → cancelled
   {

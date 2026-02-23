@@ -3,6 +3,9 @@
  *
  * Covers: transition map, gate validation, condition evaluation,
  * hook execution order, and rejection of invalid transitions.
+ *
+ * Persistent worker model: worker never killed during normal flow.
+ * Reviewer spawns in background window, worker notified on review complete.
  */
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
@@ -83,22 +86,36 @@ describe("Transition Map", () => {
     expect(def!.hooks).toHaveLength(0); // Same session continues
   });
 
-  test("working → agent-review requires handoff gate", () => {
+  test("working → agent-review spawns reviewer in background (no kill_session)", () => {
     const task = createTask({ status: "working" });
     const def = findTransition("working", "agent-review", task);
     expect(def).not.toBeNull();
     expect(def!.gate).toBeDefined();
-    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(true);
-    expect(def!.hooks.some(h => h.id === "spawn_agent" && h.variant === "reviewer")).toBe(true);
+    // No kill_session — worker stays alive
+    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(false);
+    // Reviewer spawns in background window
+    expect(def!.hooks.some(h => h.id === "spawn_reviewer")).toBe(true);
     expect(def!.hooks.some(h => h.id === "increment_review_round")).toBe(true);
   });
 
-  test("agent-review → working requires FAIL verdict and round < 2", () => {
+  test("agent-review → reviewing kills reviewer only (not session)", () => {
+    const task = createTask({ status: "agent-review", review_round: 1 });
+    const def = findTransition("agent-review", "reviewing", task);
+    expect(def).not.toBeNull();
+    expect(def!.hooks.some(h => h.id === "kill_reviewer")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(false);
+  });
+
+  test("agent-review → working kills reviewer and notifies worker (no spawn)", () => {
     const task = createTask({ status: "agent-review", review_round: 1 });
     const def = findTransition("agent-review", "working", task);
     expect(def).not.toBeNull();
     expect(def!.gate).toBeDefined();
     expect(def!.condition).toBeDefined();
+    expect(def!.hooks.some(h => h.id === "kill_reviewer")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "notify_worker")).toBe(true);
+    // No spawn_agent — persistent worker handles fixes
+    expect(def!.hooks.some(h => h.id === "spawn_agent")).toBe(false);
   });
 
   test("agent-review → working rejected when round >= 2", () => {
@@ -112,32 +129,49 @@ describe("Transition Map", () => {
     const def = findTransition("agent-review", "stuck", task);
     expect(def).not.toBeNull();
     expect(def!.gate).toBeDefined();
+    expect(def!.hooks.some(h => h.id === "kill_reviewer")).toBe(true);
   });
 
   test("agent-review → stuck rejected when round < 2", () => {
     const task = createTask({ status: "agent-review", review_round: 1 });
-    // The stuck transition has condition: round >= 2
     const def = findTransition("agent-review", "stuck", task);
     expect(def).toBeNull();
   });
 
-  test("reviewing → done has correct hooks", () => {
+  test("agent-review → cancelled kills both reviewer and session", () => {
+    const task = createTask({ status: "agent-review" });
+    const def = findTransition("agent-review", "cancelled", task);
+    expect(def).not.toBeNull();
+    expect(def!.hooks.some(h => h.id === "kill_reviewer")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "release_workspace")).toBe(true);
+  });
+
+  test("reviewing → working notifies worker (no spawn)", () => {
+    const task = createTask({ status: "reviewing" });
+    const def = findTransition("reviewing", "working", task);
+    expect(def).not.toBeNull();
+    expect(def!.hooks.some(h => h.id === "notify_worker")).toBe(true);
+    expect(def!.hooks.some(h => h.id === "spawn_agent")).toBe(false);
+  });
+
+  test("reviewing → done kills session and releases workspace", () => {
     const task = createTask({ status: "reviewing" });
     const def = findTransition("reviewing", "done", task);
     expect(def).not.toBeNull();
     expect(def!.hooks.map(h => h.id)).toEqual([
+      "kill_session",
       "release_workspace",
       "delete_remote_branch",
       "spawn_next",
     ]);
   });
 
-  test("stuck → reviewing kills session", () => {
+  test("stuck → reviewing has no hooks (worker session still alive)", () => {
     const task = createTask({ status: "stuck" });
     const def = findTransition("stuck", "reviewing", task);
     expect(def).not.toBeNull();
-    expect(def!.hooks).toHaveLength(1);
-    expect(def!.hooks[0].id).toBe("kill_session");
+    expect(def!.hooks).toHaveLength(0);
   });
 
   test("stuck → working is rejected", () => {
@@ -146,19 +180,11 @@ describe("Transition Map", () => {
     expect(def).toBeNull();
   });
 
-  test("working → stuck spawns stuck_fix agent", () => {
+  test("working → stuck has no hooks (worker session still alive)", () => {
     const task = createTask({ status: "working" });
     const def = findTransition("working", "stuck", task);
     expect(def).not.toBeNull();
-    expect(def!.hooks.some(h => h.id === "spawn_agent" && h.variant === "stuck_fix")).toBe(true);
-  });
-
-  test("agent-review → stuck spawns stuck_fix agent", () => {
-    const task = createTask({ status: "agent-review", review_round: 2 });
-    const def = findTransition("agent-review", "stuck", task);
-    expect(def).not.toBeNull();
-    expect(def!.hooks.some(h => h.id === "kill_session")).toBe(true);
-    expect(def!.hooks.some(h => h.id === "spawn_agent" && h.variant === "stuck_fix")).toBe(true);
+    expect(def!.hooks).toHaveLength(0);
   });
 
   test("invalid transition returns null", () => {
@@ -321,6 +347,41 @@ describe("executeTransition", () => {
     await executeTransition(task, "planning", deps, trackingHook);
 
     expect(hookOrder).toEqual(["acquire_workspace", "spawn_agent"]);
+  });
+
+  test("working → agent-review hooks: spawn_reviewer + increment (no kill_session)", async () => {
+    const task = createTask({
+      status: "working",
+      body: "## Handoff\n\nDONE: Implemented feature",
+    });
+    await saveTask(deps, task);
+
+    const hookOrder: string[] = [];
+    const trackingHook = async (hook: TransitionHook) => {
+      hookOrder.push(hook.id);
+    };
+
+    await executeTransition(task, "agent-review", deps, trackingHook);
+
+    expect(hookOrder).toEqual(["spawn_reviewer", "increment_review_round"]);
+  });
+
+  test("agent-review → working hooks: kill_reviewer + notify_worker", async () => {
+    const task = createTask({
+      status: "agent-review",
+      review_round: 1,
+      body: "## Review\n\nVerdict: FAIL\n\nNeeds fixes",
+    });
+    await saveTask(deps, task);
+
+    const hookOrder: string[] = [];
+    const trackingHook = async (hook: TransitionHook) => {
+      hookOrder.push(hook.id);
+    };
+
+    await executeTransition(task, "working", deps, trackingHook);
+
+    expect(hookOrder).toEqual(["kill_reviewer", "notify_worker"]);
   });
 
   test("continues after hook failure", async () => {
