@@ -913,7 +913,7 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
             console.error(`Warning: failed to notify worker: ${err instanceof Error ? err.message : String(err)}`);
           }
         } else {
-          // No worker (e.g., PR review task) — spawn one to fix issues
+          // Defensive fallback — worker window died unexpectedly (OOM, manual close, etc.)
           try {
             await deps.tmux.killSessionSafe(task.tmux_session);
             const { spawnAgentHook } = await import("../../core/hooks.js");
