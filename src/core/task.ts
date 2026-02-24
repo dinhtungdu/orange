@@ -99,6 +99,7 @@ export async function createTaskRecord(
     project: project.name,
     branch,
     summary,
+    status,
   });
 
   log.info("Task created", { taskId: id, project: project.name, branch });

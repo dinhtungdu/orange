@@ -107,6 +107,11 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     task.review_round += 1;
     await saveTask(deps, task);
     await spawnAgentHook(deps, task, "reviewer");
+    await appendHistory(deps, task.project, task.id, {
+      type: "review.started",
+      timestamp: deps.clock.now(),
+      attempt: task.review_round,
+    });
     return;
   }
 

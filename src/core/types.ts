@@ -325,6 +325,7 @@ export interface TaskCreatedEvent extends HistoryEventBase {
   project: string;
   branch: string;
   summary: string;
+  status?: string;
 }
 
 /**
