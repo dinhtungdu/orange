@@ -13,7 +13,7 @@ import { loadProjects, saveTask, appendHistory, getTaskPath } from "./state.js";
 import { listTasks } from "./db.js";
 import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } from "./workspace.js";
 import { executeTransition } from "./transitions.js";
-import { createHookExecutor, acquireWorkspaceHook, spawnAgentHook } from "./hooks.js";
+import { createHookExecutor, acquireWorkspaceHook, spawnAgentHook, spawnReviewerHook } from "./hooks.js";
 
 /**
  * Get the actual git directory path.
@@ -102,11 +102,13 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
   }
 
   if (task.status === "agent-review") {
-    // No status change — spawn review agent for review-type tasks
+    // Spawn persistent worker first, then reviewer in background window.
+    // Worker waits for review notification — same as normal working→agent-review flow.
     await acquireWorkspaceHook(deps, task);
+    await spawnAgentHook(deps, task, "worker");
     task.review_round += 1;
     await saveTask(deps, task);
-    await spawnAgentHook(deps, task, "reviewer");
+    await spawnReviewerHook(deps, task);
     await appendHistory(deps, task.project, task.id, {
       type: "review.started",
       timestamp: deps.clock.now(),

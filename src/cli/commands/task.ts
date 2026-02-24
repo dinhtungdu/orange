@@ -636,16 +636,22 @@ async function respawnTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // No status change — just re-establish workspace + session
   await acquireWorkspaceHook(deps, task);
 
-  type VariantType = "worker" | "worker_respawn" | "reviewer";
-  const variantMap: Record<string, VariantType> = {
-    working: "worker_respawn",
-    planning: "worker_respawn",
-    "agent-review": "reviewer",
-    reviewing: "worker_respawn",
-    clarification: "worker",
-  };
-  const variant = variantMap[task.status] ?? "worker_respawn";
-  await spawnAgentHook(deps, task, variant);
+  if (task.status === "agent-review") {
+    // Spawn persistent worker first, then reviewer in background window
+    await spawnAgentHook(deps, task, "worker_respawn");
+    const { spawnReviewerHook } = await import("../../core/hooks.js");
+    await spawnReviewerHook(deps, task);
+  } else {
+    type VariantType = "worker" | "worker_respawn";
+    const variantMap: Record<string, VariantType> = {
+      working: "worker_respawn",
+      planning: "worker_respawn",
+      reviewing: "worker_respawn",
+      clarification: "worker",
+    };
+    const variant = variantMap[task.status] ?? "worker_respawn";
+    await spawnAgentHook(deps, task, variant);
+  }
 
   console.log(`Respawned agent for task ${taskId} in ${task.tmux_session}`);
 }
