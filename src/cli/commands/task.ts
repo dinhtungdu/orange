@@ -527,18 +527,16 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     process.exit(1);
   }
 
-  if (!task.tmux_session) {
-    log.error("Task has no session", { taskId });
-    console.error(`Task '${taskId}' has no session`);
-    process.exit(1);
-  }
-
-  // Check session exists
-  const exists = await deps.tmux.sessionExists(task.tmux_session);
-  if (!exists) {
-    log.error("Session no longer exists", { taskId, session: task.tmux_session });
-    console.error(`Session '${task.tmux_session}' no longer exists`);
-    process.exit(1);
+  // Auto-respawn session if missing (e.g., PR review task after reviewer exited)
+  if (!task.tmux_session || !(await deps.tmux.sessionExists(task.tmux_session))) {
+    if (!task.workspace) {
+      const { acquireWorkspaceHook } = await import("../../core/hooks.js");
+      await acquireWorkspaceHook(deps, task);
+    }
+    const { spawnAgentHook } = await import("../../core/hooks.js");
+    await spawnAgentHook(deps, task, "worker_respawn");
+    log.info("Respawned session for attach", { taskId });
+    console.log("Respawned session");
   }
 
   // Use switch-client if inside tmux, attach if outside.
@@ -546,12 +544,14 @@ async function attachTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   log.debug("Attaching to session", { session: task.tmux_session, insideTmux: !!process.env.TMUX });
   const insideTmux = !!process.env.TMUX;
 
+  const session = task.tmux_session!;
+
   // Select worker window first (best-effort — may not exist if renamed)
-  await deps.tmux.selectWindowSafe(task.tmux_session!, "worker");
+  await deps.tmux.selectWindowSafe(session, "worker");
 
   const cmd = insideTmux
-    ? ["tmux", "switch-client", "-t", task.tmux_session]
-    : ["tmux", "attach-session", "-t", task.tmux_session];
+    ? ["tmux", "switch-client", "-t", session]
+    : ["tmux", "attach-session", "-t", session];
 
   const proc = Bun.spawn(cmd, {
     stdin: "inherit",
