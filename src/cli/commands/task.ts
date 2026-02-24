@@ -62,6 +62,9 @@ async function spawnReviewWindow(deps: Deps, task: Task, log: ReturnType<typeof 
   // Create new window in existing session (worker stays alive)
   await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
 
+  // Switch back to worker window so reviewer stays in background
+  await deps.tmux.selectWindowSafe(task.tmux_session, "worker");
+
   await appendHistory(deps, task.project, task.id, {
     type: "review.started",
     timestamp: deps.clock.now(),

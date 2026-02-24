@@ -204,6 +204,10 @@ export async function spawnReviewerHook(deps: Deps, task: Task): Promise<void> {
 
   await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
 
+  // Switch back to worker window so reviewer stays in background
+  // and doesn't inherit the workspace view's manual window size
+  await deps.tmux.selectWindowSafe(task.tmux_session, "worker");
+
   log.debug("Reviewer spawned in background window", {
     session: task.tmux_session,
     window: windowName,
