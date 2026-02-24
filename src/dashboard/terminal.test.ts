@@ -31,7 +31,7 @@ describe("TerminalViewer Key Forwarding", () => {
 
   beforeEach(() => {
     mockTmux = new MockTmux();
-    mockTmux.sessions.set("test-session", { cwd: "/tmp", command: "bash", output: ["$ "] });
+    mockTmux.sessions.set("test-session", { cwd: "/tmp", command: "bash", output: ["$ "], windows: new Set() });
   });
 
   test("sendLiteral is called for printable characters", async () => {

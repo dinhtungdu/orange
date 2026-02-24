@@ -319,19 +319,6 @@ export function createHookExecutor(deps: Deps): HookExecutor {
         await spawnNextPending(deps, task.project);
         break;
 
-      case "delete_remote_branch": {
-        const projects = await loadProjects(deps);
-        const project = projects.find((p) => p.name === task.project);
-        if (project) {
-          try {
-            await deps.git.deleteRemoteBranch(project.path, task.branch);
-          } catch {
-            log.debug("Remote branch deletion failed (may not exist)", { branch: task.branch });
-          }
-        }
-        break;
-      }
-
       default:
         log.warn("Unknown hook", { hook: hook.id });
         break;

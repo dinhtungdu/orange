@@ -163,7 +163,6 @@ describe("Transition Map", () => {
     expect(def!.hooks.map(h => h.id)).toEqual([
       "kill_session",
       "release_workspace",
-      "delete_remote_branch",
       "spawn_next",
     ]);
   });

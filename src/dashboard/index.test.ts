@@ -708,7 +708,7 @@ describe("Dashboard Poll Cycle", () => {
   test("orphan cleanup kills session for terminal task", async () => {
     const mockTmux = deps.tmux as MockTmux;
     // Create a session using the Map interface
-    mockTmux.sessions.set("testproj/done-branch", { cwd: "/tmp", command: "echo", output: [] });
+    mockTmux.sessions.set("testproj/done-branch", { cwd: "/tmp", command: "echo", output: [], windows: new Set() });
 
     const task = createTask({
       id: "done-task",
@@ -897,7 +897,7 @@ describe("Dashboard v2 Features", () => {
 
   test("context keys show Enter:open for task with live session", async () => {
     const mockTmux = deps.tmux as MockTmux;
-    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [], windows: new Set() });
 
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "working",
@@ -963,7 +963,7 @@ describe("Dashboard v2 Features", () => {
 
   test("w key enters workspace mode for task with live session", async () => {
     const mockTmux = deps.tmux as MockTmux;
-    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [], windows: new Set() });
 
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "working",
@@ -1011,7 +1011,7 @@ describe("Dashboard v2 Features", () => {
 
   test("exitWorkspaceMode clears workspace mode", async () => {
     const mockTmux = deps.tmux as MockTmux;
-    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [], windows: new Set() });
 
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "working",
@@ -1032,7 +1032,7 @@ describe("Dashboard v2 Features", () => {
 
   test("onWorkspace listener fires when entering workspace mode", async () => {
     const mockTmux = deps.tmux as MockTmux;
-    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [] });
+    mockTmux.sessions.set("testproj/feature-x", { cwd: "/tmp", command: "", output: [], windows: new Set() });
 
     await saveTask(deps, createTask({
       id: "t1", branch: "feature-x", status: "working",

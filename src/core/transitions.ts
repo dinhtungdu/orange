@@ -32,7 +32,6 @@ export type HookId =
   | "kill_reviewer"
   | "notify_worker"
   | "spawn_next"
-  | "delete_remote_branch"
   | "increment_review_round";
 
 /**
@@ -216,7 +215,6 @@ export const TRANSITION_MAP: TransitionDef[] = [
     hooks: [
       { id: "kill_session" },
       { id: "release_workspace" },
-      { id: "delete_remote_branch" },
       { id: "spawn_next" },
     ],
   },

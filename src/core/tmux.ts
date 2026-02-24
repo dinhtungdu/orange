@@ -383,6 +383,21 @@ export class RealTmux implements TmuxExecutor {
       // Ignore errors - window may not exist
     }
   }
+
+  async windowExists(session: string, window: string): Promise<boolean> {
+    const { exitCode, stdout } = await exec("tmux", [
+      "list-windows",
+      "-t",
+      session,
+      "-F",
+      "#{window_name}",
+    ]);
+
+    if (exitCode !== 0) return false;
+
+    const windows = stdout.trim().split("\n").filter(Boolean);
+    return windows.includes(window);
+  }
 }
 
 /**
@@ -391,7 +406,7 @@ export class RealTmux implements TmuxExecutor {
  */
 export class MockTmux implements TmuxExecutor {
   /** In-memory session storage */
-  sessions: Map<string, { cwd: string; command: string; output: string[] }> =
+  sessions: Map<string, { cwd: string; command: string; output: string[]; windows: Set<string> }> =
     new Map();
 
   /** Mock availability state - defaults to true for tests */
@@ -412,7 +427,7 @@ export class MockTmux implements TmuxExecutor {
     if (this.sessions.has(name)) {
       throw new Error(`Session '${name}' already exists`);
     }
-    this.sessions.set(name, { cwd, command, output: [] });
+    this.sessions.set(name, { cwd, command, output: [], windows: new Set() });
   }
 
   async killSession(name: string): Promise<void> {
@@ -498,6 +513,7 @@ export class MockTmux implements TmuxExecutor {
     if (!sessionData) {
       throw new Error(`Session '${session}' not found`);
     }
+    sessionData.windows.add(name);
     sessionData.output.push(`[window: ${name} cmd: ${command}]`);
   }
 
@@ -506,6 +522,7 @@ export class MockTmux implements TmuxExecutor {
     if (!sessionData) {
       throw new Error(`Session '${session}' not found`);
     }
+    sessionData.windows.add(name);
     sessionData.output.push(`[rename-window: ${name}]`);
   }
 
@@ -528,7 +545,7 @@ export class MockTmux implements TmuxExecutor {
   async attachOrCreate(name: string, cwd: string): Promise<void> {
     // For testing, we just create the session if it doesn't exist
     if (!this.sessions.has(name)) {
-      this.sessions.set(name, { cwd, command: "", output: [] });
+      this.sessions.set(name, { cwd, command: "", output: [], windows: new Set() });
     }
     // In mock, there's no actual attach - just simulate the session exists
   }
@@ -563,6 +580,7 @@ export class MockTmux implements TmuxExecutor {
     if (!sessionData) {
       throw new Error(`Session '${session}' not found`);
     }
+    sessionData.windows.delete(window);
     sessionData.output.push(`[kill-window: ${window}]`);
   }
 
@@ -588,6 +606,12 @@ export class MockTmux implements TmuxExecutor {
     } catch {
       // Ignore
     }
+  }
+
+  async windowExists(session: string, window: string): Promise<boolean> {
+    const sessionData = this.sessions.get(session);
+    if (!sessionData) return false;
+    return sessionData.windows.has(window);
   }
 
   /**

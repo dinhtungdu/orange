@@ -875,16 +875,49 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
       }
     }
 
-    // agent-review → working (review failed): notify persistent worker
+    // agent-review → reviewing (review passed): kill reviewer, clean up if no worker
+    if (newStatus === "reviewing" && oldStatus === "agent-review") {
+      if (task.tmux_session) {
+        try {
+          await deps.tmux.killWindowSafe(task.tmux_session, `review-${task.review_round}`);
+        } catch { /* best-effort */ }
+        // If no worker window, the session is dead — clear reference
+        const hasWorker = await deps.tmux.windowExists(task.tmux_session, "worker");
+        if (!hasWorker) {
+          await deps.tmux.killSessionSafe(task.tmux_session);
+          task.tmux_session = null;
+          await saveTask(deps, task);
+        }
+      }
+    }
+
+    // agent-review → working (review failed): kill reviewer, notify or spawn worker
     if (newStatus === "working" && oldStatus === "agent-review" && task.review_round > 0) {
-      // Kill reviewer window
-      try {
-        await deps.tmux.killWindowSafe(task.tmux_session!, `review-${task.review_round}`);
-      } catch { /* best-effort */ }
-      try {
-        await notifyWorker(deps, task, log);
-      } catch (err) {
-        console.error(`Warning: failed to notify worker: ${err instanceof Error ? err.message : String(err)}`);
+      if (task.tmux_session) {
+        // Kill reviewer window
+        try {
+          await deps.tmux.killWindowSafe(task.tmux_session, `review-${task.review_round}`);
+        } catch { /* best-effort */ }
+        // Check if worker window exists — if not, spawn one
+        const hasWorker = await deps.tmux.windowExists(task.tmux_session, "worker");
+        if (hasWorker) {
+          try {
+            await notifyWorker(deps, task, log);
+          } catch (err) {
+            console.error(`Warning: failed to notify worker: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          // No worker (e.g., PR review task) — spawn one to fix issues
+          try {
+            await deps.tmux.killSessionSafe(task.tmux_session);
+            const { spawnAgentHook } = await import("../../core/hooks.js");
+            await spawnAgentHook(deps, task, "worker_respawn");
+            log.info("Spawned worker to fix review issues", { taskId: task.id });
+            console.log("Spawned worker to fix review issues");
+          } catch (err) {
+            console.error(`Warning: failed to spawn worker: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
       }
     }
   }
@@ -1178,14 +1211,6 @@ async function mergeTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     } catch {
       log.debug("Push failed (may be local-only repo)");
     }
-  }
-
-  // Delete remote branch
-  try {
-    log.debug("Deleting remote branch", { branch: task.branch });
-    await deps.git.deleteRemoteBranch(project.path, task.branch);
-  } catch {
-    log.debug("Remote branch deletion failed (may not exist)", { branch: task.branch });
   }
 
   // Release workspace

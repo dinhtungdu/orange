@@ -33,6 +33,12 @@ Key properties:
 - No `worker_fix` variant — the persistent worker handles fixes itself
 - Max 1 worker session + up to 2 reviewer sessions per task lifecycle
 
+### On-Demand Worker Spawning
+
+Tasks created with `--status agent-review` (e.g., PR review tasks) start with only a reviewer — no worker. If the reviewer verdict is FAIL, a worker is spawned on demand (`worker_respawn` variant) to fix issues. This worker then follows the normal persistent worker lifecycle.
+
+When review passes on a task with no worker, the reviewer's tmux session is cleaned up (no worker to keep alive). The task moves to `reviewing` for human review.
+
 ## Transitions
 
 Each transition has optional gates (artifact requirements) and hooks (side effects).
@@ -55,7 +61,7 @@ Each transition has optional gates (artifact requirements) and hooks (side effec
 | agent-review | stuck | ## Review, Verdict: FAIL, round ≥ 2 | kill_reviewer |
 | agent-review | cancelled | — | kill_reviewer, kill_session, release_workspace |
 | reviewing | working | — | notify_worker |
-| reviewing | done | — | kill_session, release_workspace, delete_remote_branch, spawn_next |
+| reviewing | done | — | kill_session, release_workspace, spawn_next |
 | reviewing | cancelled | — | kill_session, release_workspace |
 | stuck | reviewing | — | — |
 | stuck | cancelled | — | kill_session, release_workspace |
@@ -99,7 +105,6 @@ See [data.md](./data.md) for artifact format details.
 | kill_reviewer | Kill reviewer tmux window only (worker stays alive) |
 | notify_worker | Send message to worker via tmux send-keys |
 | spawn_next | Pop next pending task for project, spawn it |
-| delete_remote_branch | Remove remote branch after merge |
 | increment_review_round | Increment review_round counter |
 
 Hooks execute in array order. All idempotent — silently succeed when nothing to do.

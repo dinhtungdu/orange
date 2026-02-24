@@ -148,6 +148,8 @@ export interface TmuxExecutor {
   selectWindow(session: string, window: string): Promise<void>;
   /** Select a specific window, ignoring errors */
   selectWindowSafe(session: string, window: string): Promise<void>;
+  /** Check if a specific window exists in a session */
+  windowExists(session: string, window: string): Promise<boolean>;
 }
 
 /**

@@ -266,7 +266,7 @@ describe("Dashboard Visual", () => {
     await saveTask(deps, createTask({ id: "t3", branch: "password-reset", status: "reviewing", summary: "Password reset flow", created_at: "2024-01-15T10:00:00.000Z" }));
 
     // Mock tmux to return the working task's session as alive
-    (deps.tmux as MockTmux).sessions.set("testproj/login-fix", { cwd: "/tmp", command: "", output: [] });
+    (deps.tmux as MockTmux).sessions.set("testproj/login-fix", { cwd: "/tmp", command: "", output: [], windows: new Set() });
 
     const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
       width: 80,
