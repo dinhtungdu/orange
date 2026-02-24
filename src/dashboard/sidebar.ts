@@ -88,6 +88,7 @@ export class Sidebar {
   private defaultBranch: string;
 
   private container: BoxRenderable;
+  private destroyed = false;
 
   // Section widgets — each a rounded box with text content
   readonly headerBox: BoxRenderable;
@@ -289,12 +290,18 @@ export class Sidebar {
    * Start data pipeline (watchers + polls).
    */
   async start(): Promise<void> {
-    // Initial data load
+    // Initial data load — parallelize independent fetches
+    // Task data must load first (other refreshes depend on this.data.task)
     await this.refreshTaskData();
-    await this.refreshGitData();
-    await this.refreshSessionAlive();
-    await this.refreshPRStatus();
-    this.render();
+    this.render(); // Render immediately with task data
+
+    // Remaining fetches are independent — run in parallel
+    await Promise.all([
+      this.refreshGitData().then(() => this.render()),
+      this.refreshSessionAlive().then(() => this.render()),
+      // PR status is slow (network) — don't block on it
+      this.refreshPRStatus().then(() => this.render()),
+    ]);
 
     // File watcher for TASK.md and history.jsonl
     this.startFileWatcher();
@@ -337,6 +344,7 @@ export class Sidebar {
    * Cleanup resources.
    */
   async destroy(): Promise<void> {
+    this.destroyed = true;
     await this.stop();
     this.container.destroyRecursively();
   }
@@ -490,6 +498,7 @@ export class Sidebar {
   // --- Private: Rendering ---
 
   private render(): void {
+    if (this.destroyed) return;
     this.renderHeader();
     this.renderFiles();
     this.renderHistory();
