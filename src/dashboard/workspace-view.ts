@@ -2,7 +2,8 @@
  * Workspace view — primary working view per workspace.md spec.
  *
  * Layout: Sidebar (resizable, default 30%) + Terminal + Footer (1 row)
- * Focus modes: terminal (default) and sidebar. Toggle with Ctrl+\.
+ * Focus modes: sidebar (default on enter) and terminal.
+ * Enter key switches from sidebar to terminal. Ctrl+\ switches back to sidebar.
  * Sidebar resize: H/L or arrow keys in sidebar focus mode (15%–50%).
  *
  * Entry: Enter key on task in task manager.
@@ -167,7 +168,7 @@ export class WorkspaceViewer {
    */
   async enter(): Promise<void> {
     this.active = true;
-    this.focus = "terminal";
+    this.focus = "sidebar";
     this.container.visible = true;
 
     // Calculate layout dimensions
@@ -558,7 +559,7 @@ export class WorkspaceViewer {
       const hasSession = this.task.tmux_session && this.terminal.isActive() && !this.terminal.isSessionDead();
       const attachHint = hasSession ? "  a:attach" : "";
       const fixHint = this.task.status === "reviewing" && this.onRequestChanges ? "  r:request changes" : "";
-      this.footer.content = ` ${focusLabel} H/L:resize  Ctrl+\\:terminal${attachHint}${fixHint}  Esc:dashboard`;
+      this.footer.content = ` ${focusLabel} H/L:resize  Enter:terminal${attachHint}${fixHint}  Esc:dashboard`;
     }
   }
 }
