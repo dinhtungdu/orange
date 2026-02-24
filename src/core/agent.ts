@@ -45,6 +45,29 @@ Do NOT set --status reviewing — always use agent-review.`;
 }
 
 /**
+ * Worker wait prompt (agent-review initial spawn).
+ * Worker is spawned alongside reviewer — just wait for notification.
+ */
+export function buildWorkerWaitPrompt(task: Task): string {
+  return `# Waiting for review: ${task.summary}
+
+Project: ${task.project}
+Branch: ${task.branch}
+Review round: ${task.review_round}
+
+A reviewer is evaluating this code in a background session.
+WAIT for notification. Do NOT start working yet.
+
+When review completes, you'll receive a notification. Then:
+- Read ## Review in TASK.md
+- If back in working status: fix the issues, update ## Handoff, set agent-review again
+- If in reviewing status: review passed — you're done, no further action needed
+
+Do NOT push to remote.
+Do NOT set --status reviewing — always use agent-review.`;
+}
+
+/**
  * Worker respawn prompt (crashed session resume).
  */
 export function buildWorkerRespawnPrompt(task: Task): string {

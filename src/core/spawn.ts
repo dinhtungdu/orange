@@ -105,7 +105,7 @@ export async function spawnTaskById(deps: Deps, taskId: string): Promise<void> {
     // Spawn persistent worker first, then reviewer in background window.
     // Worker waits for review notification — same as normal working→agent-review flow.
     await acquireWorkspaceHook(deps, task);
-    await spawnAgentHook(deps, task, "worker");
+    await spawnAgentHook(deps, task, "worker_wait");
     task.review_round += 1;
     await saveTask(deps, task);
     await spawnReviewerHook(deps, task);

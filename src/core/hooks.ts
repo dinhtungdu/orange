@@ -13,6 +13,7 @@ import { acquireWorkspace, releaseWorkspace, addGitExcludes, getWorkspacePath } 
 import {
   buildWorkerPrompt,
   buildWorkerRespawnPrompt,
+  buildWorkerWaitPrompt,
   buildReviewerPrompt,
   buildStuckFixPrompt,
 } from "./agent.js";
@@ -30,6 +31,8 @@ function buildPromptForVariant(variant: SpawnAgentVariant, task: Task): string {
       return task.summary.trim() ? buildWorkerPrompt(task) : "";
     case "worker_respawn":
       return task.summary.trim() ? buildWorkerRespawnPrompt(task) : "";
+    case "worker_wait":
+      return buildWorkerWaitPrompt(task);
     case "reviewer":
       return buildReviewerPrompt(task);
     case "stuck_fix":
@@ -52,6 +55,8 @@ function windowNameForVariant(variant: SpawnAgentVariant, task: Task): string {
     case "worker":
       return "worker";
     case "worker_respawn":
+      return "worker";
+    case "worker_wait":
       return "worker";
     case "reviewer":
       return `review-${task.review_round}`;

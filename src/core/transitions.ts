@@ -37,7 +37,7 @@ export type HookId =
 /**
  * Spawn agent variants passed as hook argument.
  */
-export type SpawnAgentVariant = "worker" | "worker_respawn" | "reviewer" | "stuck_fix";
+export type SpawnAgentVariant = "worker" | "worker_respawn" | "worker_wait" | "reviewer" | "stuck_fix";
 
 /**
  * Hook entry in a transition definition.
