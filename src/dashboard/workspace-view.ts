@@ -262,9 +262,8 @@ export class WorkspaceViewer {
         return true;
       }
 
-      // Terminal area: consume scroll silently
-      // Alternate-screen TUI apps (Claude Code) can't receive forwarded scroll
-      // events through tmux — user should attach (Ctrl+\ then 'a') for direct scrolling
+      // Terminal area: scroll via tmux copy-mode
+      this.terminal.scroll(direction);
       return true;
     }
 

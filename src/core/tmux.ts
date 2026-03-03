@@ -124,14 +124,15 @@ export class RealTmux implements TmuxExecutor {
     return stdout;
   }
 
-  async capturePaneAnsi(session: string, _lines: number): Promise<string> {
+  async capturePaneAnsi(session: string, lines: number): Promise<string> {
     const { stdout, exitCode, stderr } = await exec("tmux", [
       "capture-pane",
       "-t",
       session,
       "-p",
       "-e", // Preserve ANSI escape sequences
-      // No -S flag: captures visible viewport (respects copy-mode scroll position)
+      "-S",
+      `-${lines}`,
     ]);
 
     if (exitCode !== 0) {

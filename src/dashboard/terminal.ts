@@ -28,6 +28,10 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 // Resize debounce
 const RESIZE_DEBOUNCE = 100;
 
+// Scrollback: how many lines of history to capture beyond the viewport
+const SCROLLBACK_LINES = 500;
+const SCROLL_STEP = 3; // lines per scroll event
+
 export interface TerminalViewerOptions {
   /** tmux executor for capture/send operations */
   tmux: TmuxExecutor;
@@ -54,6 +58,8 @@ export interface TerminalViewerState {
   consecutiveFailures: number;
   /** Whether session is confirmed dead */
   sessionDead: boolean;
+  /** Scroll offset from bottom (0 = live/latest, >0 = scrolled up) */
+  scrollOffset: number;
 }
 
 /**
@@ -81,6 +87,7 @@ export class TerminalViewer {
     pollGeneration: 0,
     consecutiveFailures: 0,
     sessionDead: false,
+    scrollOffset: 0,
   };
 
   constructor(renderer: CliRenderer, options: TerminalViewerOptions) {
@@ -139,6 +146,7 @@ export class TerminalViewer {
     this.state.output = "";
     this.state.consecutiveFailures = 0;
     this.state.sessionDead = false;
+    this.state.scrollOffset = 0;
 
     this.termHeight = Math.max(1, height);
     this.termWidth = Math.max(20, width);
@@ -175,6 +183,8 @@ export class TerminalViewer {
     }
 
     this.state.lastActivityTime = Date.now();
+    // Snap to bottom on any user input
+    this.state.scrollOffset = 0;
     await this.sendKeyToTmux(key, ctrl, sequence);
 
     // Post-keystroke fast poll
@@ -192,6 +202,7 @@ export class TerminalViewer {
     }
 
     this.state.lastActivityTime = Date.now();
+    this.state.scrollOffset = 0;
     await this.tmux.sendLiteral(this.state.session, text);
     this.schedulePoll(POLL_POST_KEYSTROKE);
     return true;
@@ -205,6 +216,28 @@ export class TerminalViewer {
     if (!this.state.active) return;
     this.state.lastActivityTime = Date.now();
     this.schedulePoll(POLL_POST_KEYSTROKE);
+  }
+
+  /**
+   * Scroll the terminal view up or down through captured scrollback.
+   * Does not use tmux copy-mode — manages viewport offset locally.
+   */
+  scroll(direction: "up" | "down"): boolean {
+    if (!this.state.active || !this.state.session || this.state.sessionDead) {
+      return false;
+    }
+
+    if (direction === "up") {
+      // Max offset = total captured lines - viewport height
+      const lines = this.state.output.split("\n");
+      const maxOffset = Math.max(0, lines.length - this.termHeight);
+      this.state.scrollOffset = Math.min(maxOffset, this.state.scrollOffset + SCROLL_STEP);
+    } else {
+      this.state.scrollOffset = Math.max(0, this.state.scrollOffset - SCROLL_STEP);
+    }
+
+    this.renderViewport();
+    return true;
   }
 
   /**
@@ -248,8 +281,9 @@ export class TerminalViewer {
     const currentGen = this.state.pollGeneration;
 
     try {
-      // Capture pane output with ANSI escape sequences
-      const output = await this.tmux.capturePaneAnsiSafe(this.state.session, this.termHeight);
+      // Capture pane output with ANSI escape sequences + scrollback history
+      const captureLines = this.termHeight + SCROLLBACK_LINES;
+      const output = await this.tmux.capturePaneAnsiSafe(this.state.session, captureLines);
 
       // Check if still active and same generation
       if (!this.state.active || currentGen !== this.state.pollGeneration) {
@@ -262,9 +296,7 @@ export class TerminalViewer {
 
         if (output !== this.state.output) {
           this.state.output = output;
-          const lines = output.split("\n");
-          const visibleLines = lines.slice(-this.termHeight);
-          this.content.content = ansiToStyledText(visibleLines.join("\n"));
+          this.renderViewport();
         }
 
         // Query cursor position
@@ -328,6 +360,32 @@ export class TerminalViewer {
   private calculatePollInterval(): number {
     const inactivity = Date.now() - this.state.lastActivityTime;
     return inactivity > ACTIVITY_THRESHOLD ? POLL_IDLE : POLL_ACTIVE;
+  }
+
+  /**
+   * Render the visible portion of captured output based on scroll offset.
+   * offset=0 means bottom (live view), offset>0 means scrolled up.
+   */
+  private renderViewport(): void {
+    const lines = this.state.output.split("\n");
+    const total = lines.length;
+    const viewportHeight = this.termHeight;
+
+    // Clamp offset
+    const maxOffset = Math.max(0, total - viewportHeight);
+    this.state.scrollOffset = Math.min(this.state.scrollOffset, maxOffset);
+
+    const end = total - this.state.scrollOffset;
+    const start = Math.max(0, end - viewportHeight);
+    const visibleLines = lines.slice(start, end);
+
+    // Prepend scroll indicator when not at bottom (before ANSI parsing)
+    let raw = visibleLines.join("\n");
+    if (this.state.scrollOffset > 0) {
+      raw = `\x1b[33m↑ scrolled ${this.state.scrollOffset} lines\x1b[0m\n` + raw;
+    }
+
+    this.content.content = ansiToStyledText(raw);
   }
 
   /**
