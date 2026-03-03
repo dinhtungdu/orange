@@ -40,7 +40,7 @@ export { DashboardState } from "./state.js";
 export type { DashboardOptions } from "./state.js";
 
 // Column widths (fixed)
-const COL_STATUS = 12;
+const COL_STATUS = 13;
 const COL_PR = 14;
 const COL_COMMITS = 8;
 const COL_CHANGES = 14;
@@ -91,6 +91,7 @@ function createTableRow(
     content: opts.status,
     fg: opts.statusColor,
     width: COL_STATUS,
+    truncate: true,
   });
 
   // PR column: fixed width
