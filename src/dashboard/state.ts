@@ -978,8 +978,8 @@ export class DashboardState {
               discoveredPRs.push({ task, url: status.url });
             }
 
-            // Auto-cleanup when PR is merged (any active task with merged PR becomes done)
-            const activeStatuses: TaskStatus[] = ["working", "agent-review", "reviewing", "stuck"];
+            // Auto-cleanup when PR is merged (any non-terminal task with merged PR becomes done)
+            const activeStatuses: TaskStatus[] = ["pending", "clarification", "working", "agent-review", "reviewing", "stuck"];
             if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
               mergedTasks.push(task);
             }
