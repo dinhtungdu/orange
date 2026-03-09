@@ -136,7 +136,7 @@ async function isHarnessInstalled(harness: Harness): Promise<boolean> {
  * Get list of installed harnesses in preference order.
  */
 export async function getInstalledHarnesses(): Promise<Harness[]> {
-  const order: Harness[] = ["pi", "opencode", "claude", "codex"];
+  const order: Harness[] = ["claude", "pi", "opencode", "codex"];
   const installed: Harness[] = [];
 
   for (const harness of order) {

@@ -4,7 +4,7 @@ Agent orchestration. TS + opentui + tmux.
 
 ## Related Projects
 
-- opentui: `~/workspace/pi-mono/packages/tui/` — TUI framework (@opentui/core)
+- opentui: `~/workspace/opentui/` — TUI framework (@opentui/core)
 
 ## Setup
 
