@@ -88,7 +88,7 @@ function createTableRow(
   // Status column: fixed width
   const statusCell = new TextRenderable(renderer, {
     id: `${id}-status`,
-    content: opts.status,
+    content: opts.selected ? t`${bold(opts.status)}` : opts.status,
     fg: opts.statusColor,
     width: COL_STATUS,
     truncate: true,
@@ -97,7 +97,7 @@ function createTableRow(
   // PR column: fixed width
   const prCell = new TextRenderable(renderer, {
     id: `${id}-pr`,
-    content: opts.pr,
+    content: opts.selected ? t`${bold(opts.pr)}` : opts.pr,
     fg: opts.prColor,
     width: COL_PR,
   });
@@ -105,7 +105,7 @@ function createTableRow(
   // Commits column: fixed width
   const commitsCell = new TextRenderable(renderer, {
     id: `${id}-commits`,
-    content: opts.commits,
+    content: opts.selected ? t`${bold(opts.commits)}` : opts.commits,
     fg: "#CCCCCC",
     width: COL_COMMITS,
   });
@@ -126,7 +126,7 @@ function createTableRow(
   }
   const changesCell = new TextRenderable(renderer, {
     id: `${id}-changes`,
-    content: changesText,
+    content: opts.selected ? t`${bold(changesText)}` : changesText,
     fg: changesColor,
     width: COL_CHANGES,
   });
@@ -135,7 +135,7 @@ function createTableRow(
   // but we can pad the content
   const activityCell = new TextRenderable(renderer, {
     id: `${id}-activity`,
-    content: opts.activity,
+    content: opts.selected ? t`${bold(opts.activity)}` : opts.activity,
     fg: "#888888",
     width: COL_ACTIVITY,
   });
