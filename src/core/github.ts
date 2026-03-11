@@ -238,20 +238,9 @@ export class MockGitHub implements GitHubExecutor {
 }
 
 /**
- * Build PR body from task summary, body content, and optional PR template.
+ * Load PR template from common locations, if any.
  */
-export async function buildPRBody(
-  projectPath: string,
-  summary: string,
-  taskBody: string
-): Promise<string> {
-  let body = `## Task\n\n${summary}`;
-
-  if (taskBody.trim()) {
-    body += `\n\n${taskBody}`;
-  }
-
-  // Try to load PR template
+async function loadPRTemplate(projectPath: string): Promise<string | null> {
   const templatePaths = [
     join(projectPath, ".github", "pull_request_template.md"),
     join(projectPath, ".github", "PULL_REQUEST_TEMPLATE.md"),
@@ -261,15 +250,118 @@ export async function buildPRBody(
 
   for (const templatePath of templatePaths) {
     try {
-      const template = await readFile(templatePath, "utf-8");
-      body += `\n\n---\n\n${template}`;
-      break;
+      return await readFile(templatePath, "utf-8");
     } catch {
       // Template not found at this path, try next
     }
   }
+  return null;
+}
 
+/**
+ * Build a static PR body (fallback when LLM is unavailable).
+ */
+function buildStaticPRBody(summary: string, taskBody: string, template: string | null): string {
+  let body = `## Task\n\n${summary}`;
+  if (taskBody.trim()) {
+    body += `\n\n${taskBody}`;
+  }
+  if (template) {
+    body += `\n\n---\n\n${template}`;
+  }
   return body;
+}
+
+export interface PRContent {
+  title: string;
+  body: string;
+}
+
+/**
+ * Build PR title and body using LLM (claude -p) with diff context.
+ * Falls back to static content if LLM fails.
+ */
+export async function buildPRContent(
+  projectPath: string,
+  summary: string,
+  taskBody: string,
+  options?: { workspacePath?: string; baseBranch?: string }
+): Promise<PRContent> {
+  const template = await loadPRTemplate(projectPath);
+  const staticBody = buildStaticPRBody(summary, taskBody, template);
+  const staticTitle = summary.split("\n")[0];
+  const fallback: PRContent = { title: staticTitle, body: staticBody };
+
+  const workspacePath = options?.workspacePath;
+  const baseBranch = options?.baseBranch;
+  if (!workspacePath || !baseBranch) return fallback;
+
+  // Get diff against base branch
+  let diff: string;
+  try {
+    const diffProc = Bun.spawn(["git", "diff", `${baseBranch}...HEAD`, "--stat"], {
+      cwd: workspacePath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await diffProc.exited;
+    const statDiff = await new Response(diffProc.stdout).text();
+
+    const fullProc = Bun.spawn(["git", "diff", `${baseBranch}...HEAD`], {
+      cwd: workspacePath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await fullProc.exited;
+    const fullDiff = await new Response(fullProc.stdout).text();
+
+    // Truncate large diffs to ~50k chars
+    diff = fullDiff.length > 50_000
+      ? `${statDiff}\n\n(Full diff truncated to first 50k chars)\n\n${fullDiff.slice(0, 50_000)}`
+      : `${statDiff}\n\n${fullDiff}`;
+  } catch {
+    return fallback;
+  }
+
+  if (!diff.trim()) return fallback;
+
+  let prompt = `Write a concise PR title and description for the following changes. Target audience: developers reviewing the PR.\n\n`;
+  prompt += `Task summary: ${summary}\n`;
+  if (taskBody.trim()) {
+    prompt += `\nTask details:\n${taskBody}\n`;
+  }
+  if (template) {
+    prompt += `\nFill in this PR template for the body:\n${template}\n`;
+  } else {
+    prompt += `\nBody format: a short overview (2-4 bullet points), then a test plan section.\n`;
+  }
+  prompt += `\nDiff:\n\`\`\`\n${diff}\n\`\`\``;
+  prompt += `\n\nRules:\n- Title: short (<70 chars), no prefix like "PR:"\n- Body: concise, no bold text, overview not tutorial\n- Output format: first line is the title, then a blank line, then the body markdown. Nothing else.`;
+
+  try {
+    const proc = Bun.spawn(["claude", "-p", "--model", "haiku"], {
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: new Response(prompt),
+    });
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) return fallback;
+
+    const output = (await new Response(proc.stdout).text()).trim();
+    if (!output) return fallback;
+
+    // Parse: first line = title, rest = body
+    const newlineIdx = output.indexOf("\n");
+    if (newlineIdx === -1) return fallback;
+
+    const title = output.slice(0, newlineIdx).trim();
+    const body = output.slice(newlineIdx + 1).trim();
+    if (!title || !body) return fallback;
+
+    return { title, body };
+  } catch {
+    return fallback;
+  }
 }
 
 /**

@@ -101,7 +101,7 @@ async function notifyWorker(deps: Deps, task: Task, log: ReturnType<typeof deps.
   }
 }
 
-import { buildPRBody } from "../../core/github.js";
+import { buildPRContent } from "../../core/github.js";
 
 /**
  * Output JSON to stdout and exit.
@@ -1105,9 +1105,14 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
   }
 
-  // Create PR
-  const title = task.summary.split("\n")[0];
-  const body = await buildPRBody(project.path, task.summary, task.body);
+  // Create PR (LLM-generated title + body, falls back to static)
+  const workspacePath = task.workspace
+    ? join(deps.dataDir, "workspaces", task.workspace)
+    : undefined;
+  const { title, body } = await buildPRContent(project.path, task.summary, task.body, {
+    workspacePath,
+    baseBranch: project.default_branch,
+  });
 
   const prUrl = await deps.github.createPR(project.path, {
     branch: task.branch,

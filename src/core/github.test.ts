@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "node:path";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { MockGitHub, buildPRBody, getGitHubHost } from "./github.js";
+import { MockGitHub, buildPRContent, getGitHubHost } from "./github.js";
 
 describe("getGitHubHost", () => {
   test("extracts host from HTTPS URL", () => {
@@ -103,7 +103,7 @@ describe("MockGitHub", () => {
   });
 });
 
-describe("buildPRBody", () => {
+describe("buildPRContent", () => {
   let tempDir: string;
 
   beforeEach(async () => {
@@ -114,14 +114,15 @@ describe("buildPRBody", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  test("builds body with description only", async () => {
-    const body = await buildPRBody(tempDir, "Add dark mode", "");
+  test("returns static fallback without workspace options", async () => {
+    const { title, body } = await buildPRContent(tempDir, "Add dark mode", "");
+    expect(title).toBe("Add dark mode");
     expect(body).toContain("## Task");
     expect(body).toContain("Add dark mode");
   });
 
-  test("builds body with description and context", async () => {
-    const body = await buildPRBody(tempDir, "Add dark mode", "## Context\n\nUse CSS variables");
+  test("includes task body in static fallback", async () => {
+    const { body } = await buildPRContent(tempDir, "Add dark mode", "## Context\n\nUse CSS variables");
     expect(body).toContain("## Task");
     expect(body).toContain("Add dark mode");
     expect(body).toContain("## Context");
@@ -135,7 +136,7 @@ describe("buildPRBody", () => {
       "## Checklist\n- [ ] Tests\n- [ ] Docs"
     );
 
-    const body = await buildPRBody(tempDir, "Add feature", "");
+    const { body } = await buildPRContent(tempDir, "Add feature", "");
     expect(body).toContain("Add feature");
     expect(body).toContain("## Checklist");
     expect(body).toContain("- [ ] Tests");
@@ -148,7 +149,7 @@ describe("buildPRBody", () => {
       "## Review\nPlease review"
     );
 
-    const body = await buildPRBody(tempDir, "Fix bug", "");
+    const { body } = await buildPRContent(tempDir, "Fix bug", "");
     expect(body).toContain("Fix bug");
     expect(body).toContain("## Review");
   });
@@ -159,12 +160,12 @@ describe("buildPRBody", () => {
       "## Notes\nRoot template"
     );
 
-    const body = await buildPRBody(tempDir, "Update", "");
+    const { body } = await buildPRContent(tempDir, "Update", "");
     expect(body).toContain("Root template");
   });
 
   test("works without PR template", async () => {
-    const body = await buildPRBody(tempDir, "Simple task", "## Context\n\nSome context");
+    const { body } = await buildPRContent(tempDir, "Simple task", "## Context\n\nSome context");
     expect(body).toContain("Simple task");
     expect(body).toContain("Some context");
     // No template separator when no template
@@ -182,8 +183,13 @@ describe("buildPRBody", () => {
       "Root template"
     );
 
-    const body = await buildPRBody(tempDir, "Task", "");
+    const { body } = await buildPRContent(tempDir, "Task", "");
     expect(body).toContain("GitHub template");
     expect(body).not.toContain("Root template");
+  });
+
+  test("uses first line of summary as static title", async () => {
+    const { title } = await buildPRContent(tempDir, "First line\nSecond line", "");
+    expect(title).toBe("First line");
   });
 });
