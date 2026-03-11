@@ -1598,13 +1598,6 @@ export class DashboardState {
       return;
     }
 
-    // Create PR — only for reviewing tasks without a PR
-    if (task.status !== "reviewing") {
-      this.data.error = "Only reviewing tasks can have PRs created.";
-      this.emit();
-      return;
-    }
-
     const taskBranch = task.branch;
     this.data.pendingOps.add(task.id);
     this.emit();
@@ -1720,7 +1713,7 @@ export class DashboardState {
     } else {
       // working, planning, clarification, agent-review, stuck (+ dead sessions)
       keys += "  Enter:open  m:force merge  x:cancel";
-      if (task.pr_url) keys += "  p:open PR";
+      keys += task.pr_url ? "  p:open PR" : "  p:create PR";
     }
     // PR refresh for tasks with PR
     if (task.pr_url) keys += "  R:refresh";

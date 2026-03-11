@@ -1050,8 +1050,7 @@ async function stuckTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
  * - Local merge + push + cleanup (original behavior)
  */
 /**
- * Create a PR for an approved task.
- * Used when approve didn't create a PR (e.g. gh was unavailable) or for retry.
+ * Create a PR for a task in any non-terminal status.
  */
 async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   const log = deps.logger.child("task");
@@ -1068,11 +1067,6 @@ async function createPRCommand(parsed: ParsedArgs, deps: Deps): Promise<void> {
   if (!task) {
     log.error("Task not found for create-pr", { taskId });
     console.error(`Task '${taskId}' not found`);
-    process.exit(1);
-  }
-
-  if (task.status !== "reviewing") {
-    console.error(`Task '${taskId}' is not ready for PR (status: ${task.status})`);
     process.exit(1);
   }
 
