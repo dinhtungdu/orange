@@ -979,7 +979,7 @@ export class DashboardState {
             }
 
             // Auto-cleanup when PR is merged (any non-terminal task with merged PR becomes done)
-            const activeStatuses: TaskStatus[] = ["pending", "clarification", "working", "agent-review", "reviewing", "stuck"];
+            const activeStatuses: TaskStatus[] = ["pending", "planning", "clarification", "working", "agent-review", "reviewing", "stuck"];
             if (status.state === "MERGED" && activeStatuses.includes(task.status)) {
               mergedTasks.push(task);
             }
@@ -1720,6 +1720,7 @@ export class DashboardState {
     } else {
       // working, planning, clarification, agent-review, stuck (+ dead sessions)
       keys += "  Enter:open  m:force merge  x:cancel";
+      if (task.pr_url) keys += "  p:open PR";
     }
     // PR refresh for tasks with PR
     if (task.pr_url) keys += "  R:refresh";
