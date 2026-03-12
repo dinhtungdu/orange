@@ -47,10 +47,20 @@ const COL_CHANGES = 14;
 const COL_ACTIVITY = 9;
 const FIXED_COLS = COL_STATUS + COL_PR + COL_COMMITS + COL_CHANGES + COL_ACTIVITY;
 
-/** Create a flex row (horizontal box) with table cells. */
-function createTableRow(
-  renderer: CliRenderer,
-  id: string,
+/** Pad or truncate a plain string to exact column width. */
+function col(s: string, w: number): string {
+  if (w <= 0) return "";
+  if (s.length > w) return s.slice(0, w - 1) + "…";
+  return s + " ".repeat(w - s.length);
+}
+
+/**
+ * Format a table row as a single styled text string with manually positioned columns.
+ * Bypasses flex layout to guarantee columns never overlap regardless of terminal width.
+ * Layout: 1(pad) + 1(selector) + 1(space) + taskText + FIXED_COLS = width
+ */
+function formatRow(
+  width: number,
   opts: {
     task: string;
     taskColor: string;
@@ -59,113 +69,24 @@ function createTableRow(
     pr: string;
     prColor: string;
     commits: string;
-    changes: string;
-    changesAdded: string;
-    changesRemoved: string;
+    changesText: string;
+    changesColor: string;
     activity: string;
     selected?: boolean;
   }
-): BoxRenderable {
-  const row = new BoxRenderable(renderer, {
-    id,
-    flexDirection: "row",
-    width: "100%",
-    paddingLeft: 1,
-  });
+) {
+  const taskTextWidth = Math.max(0, width - 3 - FIXED_COLS);
+  const taskStr = col(opts.task, taskTextWidth);
+  const statusStr = col(opts.status, COL_STATUS);
+  const prStr = col(opts.pr, COL_PR);
+  const commitsStr = col(opts.commits, COL_COMMITS);
+  const changesStr = col(opts.changesText, COL_CHANGES);
+  const activityStr = col(opts.activity, COL_ACTIVITY);
 
-  // Selection indicator + task column: flex-grows to fill remaining space
-  const taskContent = opts.selected
-    ? t`${fg("#00DDFF")("❯")} ${bold(fg(opts.taskColor)(opts.task))}`
-    : t`  ${fg(opts.taskColor)(opts.task)}`;
-  const taskCell = new TextRenderable(renderer, {
-    id: `${id}-task`,
-    content: taskContent,
-    flexGrow: 1,
-    flexShrink: 1,
-    truncate: true,
-  });
-
-  // Status column: fixed width
-  const statusCell = new TextRenderable(renderer, {
-    id: `${id}-status`,
-    content: opts.selected ? t`${bold(opts.status)}` : opts.status,
-    fg: opts.statusColor,
-    width: COL_STATUS,
-    truncate: true,
-  });
-
-  // PR column: fixed width
-  const prCell = new TextRenderable(renderer, {
-    id: `${id}-pr`,
-    content: opts.selected ? t`${bold(opts.pr)}` : opts.pr,
-    fg: opts.prColor,
-    width: COL_PR,
-  });
-
-  // Commits column: fixed width
-  const commitsCell = new TextRenderable(renderer, {
-    id: `${id}-commits`,
-    content: opts.selected ? t`${bold(opts.commits)}` : opts.commits,
-    fg: "#CCCCCC",
-    width: COL_COMMITS,
-  });
-
-  // Changes column: fixed width, colored parts
-  // We show "+N -M" as a single string; coloring per-part would need two cells
-  // For now use added color if only adds, removed if only removes, white if both
-  let changesText = opts.changes || "";
-  let changesColor = "#CCCCCC";
-  if (opts.changesAdded && opts.changesRemoved) {
-    changesText = `${opts.changesAdded} ${opts.changesRemoved}`;
-  } else if (opts.changesAdded) {
-    changesText = opts.changesAdded;
-    changesColor = "#44FF44";
-  } else if (opts.changesRemoved) {
-    changesText = opts.changesRemoved;
-    changesColor = "#FF4444";
+  if (opts.selected) {
+    return t` ${fg("#00DDFF")("❯")} ${bold(fg(opts.taskColor)(taskStr))}${bold(fg(opts.statusColor)(statusStr))}${bold(fg(opts.prColor)(prStr))}${bold(fg("#CCCCCC")(commitsStr))}${bold(fg(opts.changesColor)(changesStr))}${bold(fg("#888888")(activityStr))}`;
   }
-  const changesCell = new TextRenderable(renderer, {
-    id: `${id}-changes`,
-    content: opts.selected ? t`${bold(changesText)}` : changesText,
-    fg: changesColor,
-    width: COL_CHANGES,
-  });
-
-  // Activity column: fixed width, right-aligned not easily done per-cell,
-  // but we can pad the content
-  const activityCell = new TextRenderable(renderer, {
-    id: `${id}-activity`,
-    content: opts.selected ? t`${bold(opts.activity)}` : opts.activity,
-    fg: "#888888",
-    width: COL_ACTIVITY,
-  });
-
-  row.add(taskCell);
-  row.add(statusCell);
-  row.add(prCell);
-  row.add(commitsCell);
-  row.add(changesCell);
-  row.add(activityCell);
-
-  return row;
-}
-
-/** Create the column header row. */
-function createHeaderRow(renderer: CliRenderer): BoxRenderable {
-  return createTableRow(renderer, "col-headers", {
-    task: "Task",
-    taskColor: "#666666",
-    status: "Status",
-    statusColor: "#666666",
-    pr: "PR",
-    prColor: "#666666",
-    commits: "Commits",
-    changes: "Changes",
-    changesAdded: "",
-    changesRemoved: "",
-    activity: "Activity",
-    selected: false,
-  });
+  return t`   ${fg(opts.taskColor)(taskStr)}${fg(opts.statusColor)(statusStr)}${fg(opts.prColor)(prStr)}${fg("#CCCCCC")(commitsStr)}${fg(opts.changesColor)(changesStr)}${fg("#888888")(activityStr)}`;
 }
 
 /**
@@ -193,8 +114,11 @@ function buildDashboard(
     fg: "#00DDFF",
   });
 
-  // --- Column headers (flex row) ---
-  const colHeaderRow = createHeaderRow(renderer);
+  // --- Column headers (single text row, updated each render) ---
+  const colHeaderRow = new TextRenderable(renderer, {
+    id: "col-headers",
+    content: "",
+  });
 
   // --- Separator ---
   const separator = new TextRenderable(renderer, {
@@ -355,6 +279,20 @@ function buildDashboard(
         : `${s.projectLabel}${statusLabel}`;
     const poolLabel = s.poolTotal > 0 ? `  pool: ${s.poolUsed}/${s.poolTotal}` : "";
     header.content = ` ${headerLabel}${poolLabel}`;
+
+    // Column headers
+    colHeaderRow.content = formatRow(width, {
+      task: "Task",
+      taskColor: "#666666",
+      status: "Status",
+      statusColor: "#666666",
+      pr: "PR",
+      prColor: "#666666",
+      commits: "Commits",
+      changesText: "Changes",
+      changesColor: "#666666",
+      activity: "Activity",
+    });
 
     // Separator
     separator.content = "─".repeat(width);
@@ -577,6 +515,17 @@ function buildDashboard(
       const commitsCol = stats && stats.commits > 0 ? String(stats.commits) : "";
       const changesAdded = stats && stats.added > 0 ? `+${stats.added}` : "";
       const changesRemoved = stats && stats.removed > 0 ? `-${stats.removed}` : "";
+      let changesText = "";
+      let changesColor = "#CCCCCC";
+      if (changesAdded && changesRemoved) {
+        changesText = `${changesAdded} ${changesRemoved}`;
+      } else if (changesAdded) {
+        changesText = changesAdded;
+        changesColor = "#44FF44";
+      } else if (changesRemoved) {
+        changesText = changesRemoved;
+        changesColor = "#FF4444";
+      }
 
       // Outer container for row + summary
       const rowContainer = new BoxRenderable(renderer, {
@@ -585,20 +534,22 @@ function buildDashboard(
         width: "100%",
       });
 
-      // Table row with flex columns
-      const tableRow = createTableRow(renderer, `task-cells-${i}`, {
-        task: `${sessionIcon} ${taskDisplay}`,
-        taskColor: sessionColor,
-        status: statusCol,
-        statusColor: STATUS_COLOR[task.status],
-        pr: prCol,
-        prColor,
-        commits: commitsCol,
-        changes: "",
-        changesAdded,
-        changesRemoved,
-        activity,
-        selected,
+      // Table row as single pre-formatted text (no flex column layout)
+      const tableRow = new TextRenderable(renderer, {
+        id: `task-cells-${i}`,
+        content: formatRow(width, {
+          task: `${sessionIcon} ${taskDisplay}`,
+          taskColor: sessionColor,
+          status: statusCol,
+          statusColor: STATUS_COLOR[task.status],
+          pr: prCol,
+          prColor,
+          commits: commitsCol,
+          changesText,
+          changesColor,
+          activity,
+          selected,
+        }),
       });
 
       rowContainer.add(tableRow);
