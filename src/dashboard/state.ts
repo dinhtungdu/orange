@@ -848,6 +848,7 @@ export class DashboardState {
         project: this.data.projectFilter ?? undefined,
       });
 
+      await this.syncBranches();
       this.applyStatusFilter();
       if (this.data.cursor >= this.data.tasks.length) {
         this.data.cursor = Math.max(0, this.data.tasks.length - 1);
@@ -907,6 +908,30 @@ export class DashboardState {
     } catch {
       // Pool not initialized yet
     }
+  }
+
+  /** Sync task branch field with actual git branch in workspace. */
+  private async syncBranches(): Promise<void> {
+    const activeTasks = this.data.allTasks.filter(
+      (t) => t.workspace && !TERMINAL_STATUSES.includes(t.status)
+    );
+
+    await Promise.all(
+      activeTasks.map(async (task) => {
+        try {
+          const cwd = getWorkspacePath(this.deps, task.workspace!);
+          const actual = await this.deps.git.currentBranch(cwd);
+          if (actual && actual !== task.branch) {
+            task.branch = actual;
+            task.tmux_session = `${task.project}/${actual}`;
+            task.updated_at = this.deps.clock.now();
+            await saveTask(this.deps, task);
+          }
+        } catch {
+          // Workspace may not exist
+        }
+      })
+    );
   }
 
   private async refreshDiffStats(): Promise<void> {
