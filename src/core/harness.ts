@@ -93,7 +93,7 @@ export const HARNESSES: Record<Harness, HarnessConfig> = {
     // Block gh pr review/comment to prevent reviewer from posting to GitHub.
     // --disallowedTools is variadic, so use = to avoid it consuming the prompt as a tool name.
     reviewSpawnCommand: (prompt) => `claude --dangerously-skip-permissions --disallowedTools="Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh review:*)" "${shellEscape(prompt)}"`,
-    respawnCommand: (prompt) => `claude --permission-mode acceptEdits "${shellEscape(prompt)}"`,
+    respawnCommand: (prompt) => `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`,
     workspaceSetup: async (workspacePath) => {
       // Create .claude/settings.local.json for autonomous agent permissions
       const claudeDir = join(workspacePath, ".claude");
