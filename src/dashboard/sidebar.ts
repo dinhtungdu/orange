@@ -168,7 +168,7 @@ export class Sidebar {
       borderColor: SECTION_BORDER_COLOR,
       title: "Files",
       visible: false,
-      flexShrink: 0,
+      flexGrow: 1,
     });
     this.filesText = new TextRenderable(renderer, {
       id: "sidebar-files",
@@ -583,7 +583,10 @@ export class Sidebar {
     }
 
     this.contentLines.files = lines.length;
-    this.filesText.content = this.joinLines(lines);
+    const visibleLines = this.sectionVisibleLines("files");
+    const offset = Math.min(this.scrollOffset.files, Math.max(0, lines.length - visibleLines));
+    this.scrollOffset.files = offset;
+    this.filesText.content = this.joinLines(lines.slice(offset, offset + visibleLines));
   }
 
   private renderHistory(): void {
