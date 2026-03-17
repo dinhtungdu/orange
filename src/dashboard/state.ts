@@ -12,7 +12,7 @@ import { listTasks } from "../core/db.js";
 import { detectProject } from "../core/cwd.js";
 import { loadProjects, loadTask, saveTask, appendHistory } from "../core/state.js";
 import { createTaskRecord } from "../core/task.js";
-import { getWorkspacePath, loadPoolState, releaseWorkspace } from "../core/workspace.js";
+import { getWorkspacePath, loadPoolState, updatePoolTask, releaseWorkspace } from "../core/workspace.js";
 import { spawnTaskById } from "../core/spawn.js";
 import { refreshTaskPR } from "../core/task.js";
 import { getInstalledHarnesses } from "../core/harness.js";
@@ -916,9 +916,19 @@ export class DashboardState {
       (t) => t.workspace && !TERMINAL_STATUSES.includes(t.status)
     );
 
+    // Load pool state to verify workspace ownership before syncing
+    const poolState = await loadPoolState(this.deps);
+
     await Promise.all(
       activeTasks.map(async (task) => {
         try {
+          // Skip if pool.json says this workspace is bound to a different task
+          const poolEntry = poolState.workspaces[task.workspace!];
+          if (poolEntry?.status === "bound" && poolEntry.task &&
+              poolEntry.task !== `${task.project}/${task.branch}`) {
+            return;
+          }
+
           const cwd = getWorkspacePath(this.deps, task.workspace!);
           const actual = await this.deps.git.currentBranch(cwd);
           if (actual && actual !== task.branch) {
@@ -926,6 +936,8 @@ export class DashboardState {
             task.tmux_session = `${task.project}/${actual}`;
             task.updated_at = this.deps.clock.now();
             await saveTask(this.deps, task);
+            // Keep pool.json task reference in sync
+            await updatePoolTask(this.deps, task.workspace!, `${task.project}/${actual}`);
           }
         } catch {
           // Workspace may not exist

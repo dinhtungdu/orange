@@ -31,7 +31,7 @@ import {
 } from "../../core/state.js";
 import { createTaskRecord } from "../../core/task.js";
 import { listTasks } from "../../core/db.js";
-import { releaseWorkspace } from "../../core/workspace.js";
+import { releaseWorkspace, updatePoolTask } from "../../core/workspace.js";
 import { spawnTaskById } from "../../core/spawn.js";
 import { requireProject, detectProject } from "../../core/cwd.js";
 
@@ -835,6 +835,11 @@ async function updateTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
     }
 
     task.branch = newBranch;
+
+    // Keep pool.json task reference in sync
+    if (task.workspace) {
+      await updatePoolTask(deps, task.workspace, `${task.project}/${newBranch}`);
+    }
   }
 
   // Update summary

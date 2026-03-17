@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import type { Deps, Project, PoolState } from "./types.js";
 import { loadProjects } from "./state.js";
+import { listTasks } from "./db.js";
 import { getAllGitExcludes } from "./harness.js";
 
 const POOL_FILE = ".pool.json";
@@ -237,10 +238,22 @@ export async function acquireWorkspace(
   try {
     const state = await loadPoolState(deps);
 
-    // Find first available workspace for this project
+    // Build set of workspaces still claimed by active tasks (defense against stale pool state)
+    const activeTasks = await listTasks(deps, {});
+    const claimedWorkspaces = new Set(
+      activeTasks
+        .filter((t) => t.workspace && !["done", "cancelled"].includes(t.status))
+        .map((t) => t.workspace!)
+    );
+
+    // Find first available workspace for this project (not claimed by another task)
     const prefix = `${projectName}--`;
     const available = Object.entries(state.workspaces)
-      .find(([name, entry]) => name.startsWith(prefix) && entry.status === "available");
+      .find(([name, entry]) =>
+        name.startsWith(prefix) &&
+        entry.status === "available" &&
+        !claimedWorkspaces.has(name)
+      );
 
     log.debug("Workspace pool state", {
       project: projectName,
@@ -388,6 +401,31 @@ export async function releaseWorkspace(
  */
 export function getWorkspacePath(deps: Deps, workspace: string): string {
   return join(getWorkspacesDir(deps), workspace);
+}
+
+/**
+ * Update the task reference for a bound workspace in pool state.
+ * Used when a task's branch is renamed so pool.json stays in sync.
+ */
+export async function updatePoolTask(
+  deps: Deps,
+  workspace: string,
+  task: string
+): Promise<void> {
+  const lockPath = getLockPath(deps);
+  await writeFile(lockPath, "", { flag: "a" });
+
+  const release = await lock(lockPath, { retries: 5 });
+  try {
+    const state = await loadPoolState(deps);
+    const entry = state.workspaces[workspace];
+    if (entry?.status === "bound") {
+      entry.task = task;
+      await savePoolState(deps, state);
+    }
+  } finally {
+    await release();
+  }
 }
 
 /**

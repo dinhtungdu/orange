@@ -22,7 +22,8 @@ import {
   loadPoolState,
   getPoolStats,
 } from "./workspace.js";
-import { saveProjects } from "./state.js";
+import { saveProjects, saveTask } from "./state.js";
+import type { Task } from "./types.js";
 
 describe("Workspace Pool", () => {
   let tempDir: string;
@@ -305,5 +306,42 @@ describe("Lazy Workspace Initialization", () => {
     const ws2 = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
     expect(ws2).toBe("lazy-project--2");
     expect(consoleLogs.join("\n")).toContain("Creating workspace lazy-project--2");
+  });
+
+  test("acquireWorkspace skips workspace claimed by active task even if pool says available", async () => {
+    // Simulate stale pool state: workspace marked available but still claimed by active task
+    await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-1");
+
+    // Manually mark workspace as available in pool (simulating pool.json corruption)
+    const { writeFile } = await import("node:fs/promises");
+    const poolPath = join(tempDir, "workspaces", ".pool.json");
+    const state = await loadPoolState(deps);
+    state.workspaces["lazy-project--1"] = { status: "available" };
+    await writeFile(poolPath, JSON.stringify(state, null, 2));
+
+    // Create a task that still references this workspace
+    const task: Task = {
+      id: "test-task-1",
+      project: "lazy-project",
+      branch: "feature-1",
+      harness: "claude",
+      review_harness: "claude",
+      status: "reviewing",
+      review_round: 1,
+      crash_count: 0,
+      summary: "test",
+      workspace: "lazy-project--1",
+      tmux_session: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      body: "",
+      pr_url: null,
+      pr_state: null,
+    };
+    await saveTask(deps, task);
+
+    // Acquire should skip lazy-project--1 and create lazy-project--2 instead
+    const ws = await acquireWorkspace(deps, "lazy-project", "lazy-project/feature-2");
+    expect(ws).toBe("lazy-project--2");
   });
 });
