@@ -241,6 +241,14 @@ export class Sidebar {
     const section = this.sectionAtRow(row);
     if (!section) return false;
 
+    return this.scrollSection(section, direction);
+  }
+
+  /**
+   * Scroll a specific section by name.
+   * Returns true if handled.
+   */
+  scrollSection(section: "files" | "history" | "task", direction: "up" | "down"): boolean {
     const delta = direction === "up" ? -1 : 1;
     const maxOffset = Math.max(0, this.contentLines[section] - this.sectionVisibleLines(section));
     this.scrollOffset[section] = Math.max(0, Math.min(maxOffset, this.scrollOffset[section] + delta));

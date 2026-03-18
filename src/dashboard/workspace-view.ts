@@ -353,6 +353,12 @@ export class WorkspaceViewer {
         }
         return true;
       }
+      case "up":
+        if (this.sidebar) this.sidebar.scrollSection(this.sidebarScrollTarget(), "up");
+        return true;
+      case "down":
+        if (this.sidebar) this.sidebar.scrollSection(this.sidebarScrollTarget(), "down");
+        return true;
       case "left":
         this.resizeSidebar(-SIDEBAR_RESIZE_STEP);
         return true;
@@ -364,6 +370,15 @@ export class WorkspaceViewer {
         this.exit();
         return true;
       default:
+        // j/k scroll
+        if (sequence === "j" && this.sidebar) {
+          this.sidebar.scrollSection(this.sidebarScrollTarget(), "down");
+          return true;
+        }
+        if (sequence === "k" && this.sidebar) {
+          this.sidebar.scrollSection(this.sidebarScrollTarget(), "up");
+          return true;
+        }
         // 'r' key: request changes for reviewing tasks
         if (sequence === "r" && this.task.status === "reviewing" && this.onRequestChanges) {
           this.onRequestChanges(this.task);
@@ -450,6 +465,16 @@ export class WorkspaceViewer {
       return "No session — press 's' to spawn";
     }
     return "No active session";
+  }
+
+  /** Determine which sidebar section to scroll with keyboard. */
+  private sidebarScrollTarget(): "files" | "history" | "task" {
+    if (this.sidebar) {
+      if (this.sidebar.taskBox.visible) return "task";
+      if (this.sidebar.filesBox.visible) return "files";
+      if (this.sidebar.historyBox.visible) return "history";
+    }
+    return "task";
   }
 
   // --- Private: Layout ---
