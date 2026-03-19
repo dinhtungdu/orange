@@ -261,7 +261,8 @@ export async function notifyWorkerHook(deps: Deps, task: Task): Promise<void> {
   ].join("\n");
 
   try {
-    await deps.tmux.sendKeys(target, message + "\n");
+    await deps.tmux.sendLiteral(target, message);
+    await deps.tmux.sendKeys(target, "Enter");
   } catch {
     // Worker window may not exist (crashed). Best-effort.
     deps.logger.child("hooks").warn("Failed to notify worker", {
