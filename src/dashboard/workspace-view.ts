@@ -379,6 +379,11 @@ export class WorkspaceViewer {
           this.sidebar.scrollSection(this.sidebarScrollTarget(), "up");
           return true;
         }
+        // 's' key: spawn/respawn from sidebar
+        if (sequence === "s" && this.needsSpawn() && !this.spawning) {
+          await this.handleSpawn();
+          return true;
+        }
         // 'r' key: request changes for reviewing tasks
         if (sequence === "r" && this.task.status === "reviewing" && this.onRequestChanges) {
           this.onRequestChanges(this.task);
@@ -582,8 +587,9 @@ export class WorkspaceViewer {
     } else {
       const hasSession = this.task.tmux_session && this.terminal.isActive() && !this.terminal.isSessionDead();
       const attachHint = hasSession ? "  a:attach" : "";
+      const spawnHint = this.needsSpawn() ? "  s:spawn" : "";
       const fixHint = this.task.status === "reviewing" && this.onRequestChanges ? "  r:request changes" : "";
-      this.footer.content = ` ${focusLabel} H/L:resize  Enter:terminal${attachHint}${fixHint}  Esc:dashboard`;
+      this.footer.content = ` ${focusLabel} H/L:resize  Enter:terminal${attachHint}${spawnHint}${fixHint}  Esc:dashboard`;
     }
   }
 }
