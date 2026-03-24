@@ -50,8 +50,7 @@ Context-aware footer shows available actions for the selected task.
 | v | View TASK.md (scroll j/k, Esc close) | Any task |
 | y | Copy task ID | Any task |
 | c | Create task | Project-scoped only |
-| Enter | Spawn / attach / respawn | Context-dependent |
-| w | Open workspace view | Task has live session |
+| Enter / w | Spawn / attach / respawn | Context-dependent |
 | r | Request changes (optional instructions) | `reviewing` → spawns fix agent |
 | m | Merge | `reviewing` (force confirm from other active) |
 | p | Create or open PR | `reviewing` creates; any with PR opens in browser |

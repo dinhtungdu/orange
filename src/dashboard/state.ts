@@ -149,11 +149,6 @@ export interface ViewModeData {
   scrollOffset: number;
 }
 
-export interface WorkspaceModeData {
-  active: boolean;
-  task: Task | null;
-}
-
 export interface FixModeData {
   active: boolean;
   instructions: string;
@@ -181,13 +176,11 @@ export interface DashboardStateData {
   createMode: CreateModeData;
   confirmMode: ConfirmModeData;
   viewMode: ViewModeData;
-  workspaceMode: WorkspaceModeData;
   fixMode: FixModeData;
 }
 
 type ChangeListener = () => void;
-type AttachListener = () => void;
-type WorkspaceListener = (task: Task) => void;
+type AttachListener = (session: string) => void;
 
 /**
  * Dashboard state machine.
@@ -230,10 +223,6 @@ export class DashboardState {
       task: null,
       scrollOffset: 0,
     },
-    workspaceMode: {
-      active: false,
-      task: null,
-    },
     fixMode: {
       active: false,
       instructions: "",
@@ -244,7 +233,6 @@ export class DashboardState {
   private deps: Deps;
   private listeners: ChangeListener[] = [];
   private attachListeners: AttachListener[] = [];
-  private workspaceListeners: WorkspaceListener[] = [];
   private watcher: ReturnType<typeof watch> | null = null;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -277,24 +265,10 @@ export class DashboardState {
     for (const fn of this.listeners) fn();
   }
 
-  private emitAttach(): void {
-    for (const fn of this.attachListeners) fn();
+  private emitAttach(session: string): void {
+    for (const fn of this.attachListeners) fn(session);
   }
 
-  onWorkspace(fn: WorkspaceListener): () => void {
-    this.workspaceListeners.push(fn);
-    return () => {
-      this.workspaceListeners = this.workspaceListeners.filter((l) => l !== fn);
-    };
-  }
-
-  private emitWorkspace(task: Task): void {
-    for (const fn of this.workspaceListeners) fn(task);
-  }
-
-  isWorkspaceMode(): boolean {
-    return this.data.workspaceMode.active;
-  }
 
   async init(options: DashboardOptions = {}): Promise<void> {
     if (!options.project && !options.all) {
@@ -457,7 +431,7 @@ export class DashboardState {
         }
         break;
       case "enter":
-        this.openWorkspace();
+        this.attachToTask();
         break;
       case "c":
         this.enterCreateMode();
@@ -490,8 +464,7 @@ export class DashboardState {
         this.enterViewMode();
         break;
       case "w":
-        // Legacy: 'w' also opens workspace (Enter is primary)
-        this.openWorkspace();
+        this.attachToTask();
         break;
     }
   }
@@ -630,28 +603,6 @@ export class DashboardState {
       await this.refreshTasks();
       this.emit();
     });
-  }
-
-  // --- Workspace mode ---
-
-  private openWorkspace(): void {
-    const task = this.data.tasks[this.data.cursor];
-    if (!task) return;
-
-    // Terminal tasks: no workspace view
-    if (task.status === "done" || task.status === "cancelled") return;
-
-    // Pending ops: wait
-    if (this.data.pendingOps.has(task.id)) return;
-
-    this.data.workspaceMode = { active: true, task };
-    this.emitWorkspace(task);
-    this.emit();
-  }
-
-  exitWorkspaceMode(): void {
-    this.data.workspaceMode = { active: false, task: null };
-    this.emit();
   }
 
   private handleViewInput(key: string): void {
@@ -1415,9 +1366,12 @@ export class DashboardState {
         this.emit();
         return;
       }
-      this.emitAttach();
+      this.emitAttach(session);
+    } else {
+      // Non-tmux: caller (runDashboard) handles TUI teardown + tmux attach
+      await this.deps.tmux.selectWindowSafe(session, "worker");
+      this.emitAttach(session);
     }
-    // Note: non-tmux attach requires TUI suspend/resume — handled by the view layer
   }
 
   private mergeTask(): void {

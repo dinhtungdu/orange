@@ -23,7 +23,7 @@ import {
   type KeyEvent,
   type PasteEvent,
 } from "@opentui/core";
-import type { Deps, Task, TaskStatus } from "../core/types.js";
+import type { Deps } from "../core/types.js";
 import {
   DashboardState,
   STATUS_COLOR,
@@ -32,7 +32,6 @@ import {
   CHECKS_ICON,
   type DashboardOptions,
 } from "./state.js";
-import { WorkspaceViewer } from "./workspace-view.js";
 import { parseMouse, isLeftClick, isScrollUp, isScrollDown } from "./mouse.js";
 
 // Re-export for external use and tests
@@ -609,12 +608,6 @@ export async function runDashboard(
         const me = parseMouse(sequence);
         if (!me) return false;
 
-        // Workspace mode: forward to workspace viewer
-        if (mouseState.isWorkspaceMode()) {
-          if (workspaceViewer) workspaceViewer.handleMouse(me);
-          return true;
-        }
-
         // Ignore mouse in overlay modes
         if (mouseState.isCreateMode() ||
             mouseState.isConfirmMode() || mouseState.isFixMode()) {
@@ -658,138 +651,38 @@ export async function runDashboard(
   mouseState = state;
   mouseDashboard = dashboard;
 
-  // --- Workspace viewer ---
-  let workspaceViewer: WorkspaceViewer | null = null;
-
-  async function enterWorkspace(task: Task): Promise<void> {
-    // Destroy previous viewer if any
-    if (workspaceViewer) {
-      await workspaceViewer.destroy();
-    }
-
-    workspaceViewer = new WorkspaceViewer(renderer, {
-      deps,
-      task,
-      onExit: () => {
-        exitWorkspace();
-      },
-      onAttach: async (session: string) => {
-        await state.dispose();
-        disableMouse();
-        renderer.destroy();
-
-        // resizePane sets window-size=manual; reset so window fits client
-        await Bun.spawn(
-          ["tmux", "set-option", "-t", session, "window-size", "largest"],
-          { stdout: "pipe", stderr: "pipe" },
-        ).exited;
-
-        const insideTmux = !!process.env.TMUX;
-        if (insideTmux) {
-          // Focus worker window so user lands on main agent, not background reviewer
-          await deps.tmux.selectWindowSafe(session, "worker");
-
-          // Switch client to workspace session, keep orange alive in this pane.
-          // When user switches back to this session, they see the dashboard.
-          await Bun.spawn(["tmux", "switch-client", "-t", session], {
-            stdout: "pipe", stderr: "pipe",
-          }).exited;
-          await Bun.spawn(["tmux", "resize-window", "-A", "-t", session], {
-            stdout: "pipe", stderr: "pipe",
-          }).exited;
-          await runDashboard(deps, options);
-        } else {
-          // Focus worker window so user lands on main agent, not background reviewer
-          await deps.tmux.selectWindowSafe(session, "worker");
-
-          // attach-session will auto-size with window-size=largest
-          const proc = Bun.spawn(["tmux", "attach-session", "-t", session], {
-            stdin: "inherit",
-            stdout: "inherit",
-            stderr: "inherit",
-          });
-          await proc.exited;
-          // Return to dashboard after tmux detach (or server crash)
-          await runDashboard(deps, options);
-        }
-      },
-      onRequestChanges: (t: Task) => {
-        // Exit workspace, enter fix mode on dashboard
-        exitWorkspace().then(() => {
-          // Find the task in dashboard state and select it
-          const idx = state.data.tasks.findIndex((task) => task.id === t.id);
-          if (idx >= 0) state.data.cursor = idx;
-          state.enterFixModeForTask(t.id);
-        });
-      },
-      onSpawn: async (t: Task) => {
-        if (t.status === "pending") {
-          const { spawnTaskById } = await import("../core/spawn.js");
-          await spawnTaskById(deps, t.id);
-        } else {
-          // Shell out to orange task respawn for non-pending tasks
-          const scriptPath = process.argv[1];
-          const cmd = scriptPath.endsWith(".ts")
-            ? ["bun", "run", scriptPath, "task", "respawn", t.id]
-            : [scriptPath, "task", "respawn", t.id];
-          const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-          const exitCode = await proc.exited;
-          if (exitCode !== 0) {
-            const stderr = await new Response(proc.stderr).text();
-            throw new Error(stderr.trim() || `respawn failed (exit code: ${exitCode})`);
-          }
-        }
-      },
-    });
-
-    dashboard.root.visible = false;
-    renderer.root.add(workspaceViewer.getContainer());
-    await workspaceViewer.enter();
-  }
-
-  async function exitWorkspace(): Promise<void> {
-    if (workspaceViewer) {
-      await workspaceViewer.destroy();
-      workspaceViewer = null;
-    }
-    dashboard.root.visible = true;
-    state.exitWorkspaceMode();
-    dashboard.update();
-  }
-
-  state.onWorkspace(async (task: Task) => {
-    await enterWorkspace(task);
-  });
-
   function disableMouse(): void {
     // Temporarily enable so opentui's disableMouse sends the escape codes through zig
     (renderer as unknown as { _useMouse: boolean })._useMouse = true;
     renderer.useMouse = false;
   }
 
-  if (options.exitOnAttach) {
-    state.onAttach(() => {
-      state.dispose().then(() => {
-        disableMouse();
-        renderer.destroy();
-        process.exit(0);
+  state.onAttach(async (session: string) => {
+    await state.dispose();
+    disableMouse();
+    renderer.destroy();
+
+    if (options.exitOnAttach) {
+      process.exit(0);
+    }
+
+    // Outside tmux: attach to session, return to dashboard on detach
+    const insideTmux = !!process.env.TMUX;
+    if (!insideTmux) {
+      const proc = Bun.spawn(["tmux", "attach-session", "-t", session], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
       });
-    });
-  }
+      await proc.exited;
+      await runDashboard(deps, options);
+    }
+  });
 
   // Keyboard handler
   renderer.keyInput.on("keypress", (key: KeyEvent) => {
-    // In workspace mode, forward keys (including Ctrl+C) to workspace viewer
-    if (state.isWorkspaceMode()) {
-      if (workspaceViewer) {
-        workspaceViewer.handleKey(key.name ?? "", !!key.ctrl, key.sequence);
-      }
-      return;
-    }
-
     if (key.ctrl && key.name === "c") {
-      const cleanup = workspaceViewer ? workspaceViewer.destroy() : Promise.resolve();
-      cleanup.then(() => state.dispose()).then(() => {
+      state.dispose().then(() => {
         disableMouse();
         renderer.destroy();
         process.exit(0);
@@ -876,10 +769,6 @@ export async function runDashboard(
   });
 
   renderer.keyInput.on("paste", (event: PasteEvent) => {
-    if (state.isWorkspaceMode()) {
-      workspaceViewer?.handlePaste(event.text);
-      return;
-    }
     if (state.isCreateMode() || state.isFixMode()) {
       for (const ch of event.text) {
         if (ch >= " ") {
@@ -896,9 +785,6 @@ export async function runDashboard(
 
   // Re-render on terminal resize
   renderer.on("resize", () => {
-    if (workspaceViewer?.isActive()) {
-      workspaceViewer.resize();
-    }
     dashboard.update();
   });
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Agent orchestration. Two modules: **Task Manager** (list, create, monitor) and **Workspace** (pool + terminal view). A deterministic workflow engine drives task lifecycle.
+Agent orchestration. Two modules: **Task Manager** (list, create, monitor) and **Workspace** (pool). A deterministic workflow engine drives task lifecycle.
 
 ## Overview
 
@@ -8,13 +8,7 @@ Agent orchestration. Two modules: **Task Manager** (list, create, monitor) and *
 ┌─────────────────────────────────────────────────────┐
 │                   Task Manager                      │
 │  Task list, create, cancel, merge, monitor          │
-│                                                     │
-│  ── w ──▶  Workspace View (per task)                │
-│            ┌────────────┬──────────────────────┐    │
-│            │ Sidebar    │ Terminal              │    │
-│            │ (context)  │ (agent session)       │    │
-│            └────────────┴──────────────────────┘    │
-│         ◀── Esc ──                                  │
+│  Enter/w: attach to task's tmux session             │
 └─────────────────────────────────────────────────────┘
 
 Agents run in parallel tmux sessions:
