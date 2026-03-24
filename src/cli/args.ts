@@ -233,6 +233,8 @@ Task Management (project inferred from cwd):
                                       Create a new task (both optional)
                                       Empty branch: auto-generates from task ID
                                       Empty summary: clarification status (agent asks what to do)
+    --effort <level>                  Reasoning effort for worker (harness-specific)
+    --review-effort <level>           Reasoning effort for reviewer (harness-specific)
   orange task list [options]          List tasks
     --status <status>                 Filter by status
     --all                             Show all projects' tasks

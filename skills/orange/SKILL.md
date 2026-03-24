@@ -180,7 +180,7 @@ This spawns a review agent per PR — no worker involved. Review agents check ou
 orange [--all] [--project <name>]
 
 # Task lifecycle
-orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|agent-review|reviewing] [--project <name>]
+orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|agent-review|reviewing] [--project <name>] [--effort <level>] [--review-effort <level>]
 orange task spawn <task_id>
 orange task respawn <task_id>
 orange task attach <task_id>

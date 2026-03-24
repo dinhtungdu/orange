@@ -49,7 +49,7 @@ describe("Task Queries", () => {
     body: "",
     created_at: "2024-01-01T00:00:00.000Z",
     updated_at: "2024-01-01T00:00:00.000Z",
-    review_harness: "claude",
+    review_harness: "claude", effort: null, review_effort: null,
     review_round: 0,
     crash_count: 0,
     pr_url: null,

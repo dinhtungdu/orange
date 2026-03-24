@@ -28,6 +28,19 @@ When creating a task without explicit `--harness` flag:
 | codex | `codex exec --dangerously-bypass-approvals-and-sandbox "<prompt>"` | `codex exec --full-auto "<prompt>"` |
 | opencode | `opencode run "<prompt>"` | `opencode run "<prompt>"` |
 
+## Effort / Reasoning Level
+
+Tasks can optionally set `effort` (worker) and `review_effort` (reviewer). Each harness maps these to its own CLI flag:
+
+| Harness | Flag | Values |
+|---------|------|--------|
+| `claude` | `--effort <level>` | `low`, `medium`, `high`, `max` |
+| `pi` | `--thinking <level>` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `codex` | (not supported) | — |
+| `opencode` | (not supported) | — |
+
+When set, the flag is appended to the spawn command. When null (default), the harness uses its own default.
+
 ## Workspace Setup
 
 Harness-specific files created at spawn time (in worktree root):

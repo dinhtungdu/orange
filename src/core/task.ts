@@ -20,6 +20,10 @@ export interface CreateTaskOptions {
   status?: "pending" | "clarification" | "agent-review" | "reviewing";
   /** Harness to use. If omitted, auto-detects first installed. */
   harness?: Harness | string;
+  /** Reasoning effort for worker (harness-specific). */
+  effort?: string | null;
+  /** Reasoning effort for reviewer (harness-specific). */
+  review_effort?: string | null;
   /** Task ID. If omitted, auto-generates. */
   id?: string;
 }
@@ -73,6 +77,8 @@ export async function createTaskRecord(
     branch,
     harness,
     review_harness: "claude",
+    effort: options.effort ?? null,
+    review_effort: options.review_effort ?? null,
     status,
     review_round: 0,
     crash_count: 0,

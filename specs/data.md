@@ -48,6 +48,8 @@ YAML frontmatter + markdown body.
 | `branch` | string | `orange-tasks/<id>` | system / agent |
 | `harness` | string | first installed | user |
 | `review_harness` | string | `claude` | user |
+| `effort` | string \| null | `null` | user |
+| `review_effort` | string \| null | `null` | user |
 | `status` | Status | `pending` | workflow engine |
 | `review_round` | number | `0` | workflow engine |
 | `crash_count` | number | `0` | workflow engine |

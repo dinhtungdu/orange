@@ -48,6 +48,10 @@ export interface Task {
   harness: Harness;
   /** Which harness to use for agent review (default: claude) */
   review_harness: Harness;
+  /** Reasoning effort level for worker (harness-specific, null = harness default) */
+  effort: string | null;
+  /** Reasoning effort level for reviewer (harness-specific, null = harness default) */
+  review_effort: string | null;
   /** Current status of the task */
   status: TaskStatus;
   /** Current review round (0 = no review yet, 1-2 = review rounds) */

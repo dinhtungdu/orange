@@ -24,6 +24,8 @@ export interface HarnessConfig {
   respawnCommand: (prompt: string) => string;
   /** Setup harness-specific files in workspace (optional) */
   workspaceSetup?: (workspacePath: string) => Promise<void>;
+  /** Build CLI fragment for effort/reasoning level. Undefined = harness doesn't support it. */
+  effortFlag?: (effort: string) => string;
   /** Directories to add to git excludes */
   gitExcludes: string[];
   /** Skills directory path */
@@ -68,6 +70,7 @@ function shellEscape(str: string): string {
 export const HARNESSES: Record<Harness, HarnessConfig> = {
   pi: {
     binary: "pi",
+    effortFlag: (effort) => `--thinking ${effort}`,
     spawnCommand: (prompt) => `pi "${shellEscape(prompt)}"`,
     respawnCommand: (prompt) => `pi "${shellEscape(prompt)}"`,
     gitExcludes: [".pi/"],
@@ -89,6 +92,7 @@ export const HARNESSES: Record<Harness, HarnessConfig> = {
   },
   claude: {
     binary: "claude",
+    effortFlag: (effort) => `--effort ${effort}`,
     spawnCommand: (prompt) => `claude --dangerously-skip-permissions "${shellEscape(prompt)}"`,
     // Block gh pr review/comment to prevent reviewer from posting to GitHub.
     // --disallowedTools is variadic, so use = to avoid it consuming the prompt as a tool name.

@@ -34,6 +34,8 @@ function createTask(overrides: Partial<Task> = {}): Task {
     branch: "feature-x",
     harness: "claude",
     review_harness: "claude",
+    effort: null,
+    review_effort: null,
     status: "pending",
     review_round: 0,
     crash_count: 0,

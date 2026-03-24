@@ -48,6 +48,13 @@ function harnessForVariant(variant: SpawnAgentVariant, task: Task): Harness {
 }
 
 /**
+ * Variant → effort level selection.
+ */
+function effortForVariant(variant: SpawnAgentVariant, task: Task): string | null {
+  return variant === "reviewer" ? task.review_effort : task.effort;
+}
+
+/**
  * Variant → window name.
  */
 function windowNameForVariant(variant: SpawnAgentVariant, task: Task): string {
@@ -155,13 +162,19 @@ export async function spawnAgentHook(
   // Empty prompt = interactive session
   const isRespawnVariant = variant === "worker_respawn" || variant === "stuck_fix";
   const isReviewer = variant === "reviewer";
-  const command = prompt
+  let command = prompt
     ? (isRespawnVariant
         ? harnessConfig.respawnCommand(prompt)
         : isReviewer
           ? (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt)
           : harnessConfig.spawnCommand(prompt))
     : harnessConfig.binary;
+
+  // Append effort flag if harness supports it and task has effort set
+  const effort = effortForVariant(variant, task);
+  if (effort && harnessConfig.effortFlag) {
+    command = `${command} ${harnessConfig.effortFlag(effort)}`;
+  }
 
   // Kill existing session to clean up stale windows from previous agents
   await deps.tmux.killSessionSafe(tmuxSession);
@@ -205,7 +218,12 @@ export async function spawnReviewerHook(deps: Deps, task: Task): Promise<void> {
   const prompt = buildReviewerPrompt(task);
   const windowName = `review-${task.review_round}`;
 
-  const command = (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt);
+  let command = (harnessConfig.reviewSpawnCommand ?? harnessConfig.spawnCommand)(prompt);
+
+  // Append effort flag if harness supports it and task has review_effort set
+  if (task.review_effort && harnessConfig.effortFlag) {
+    command = `${command} ${harnessConfig.effortFlag(task.review_effort)}`;
+  }
 
   await deps.tmux.newWindow(task.tmux_session, windowName, workspacePath, command);
 

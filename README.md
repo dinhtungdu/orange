@@ -49,7 +49,7 @@ orange project remove <name>
 
 ### Task Management
 ```bash
-orange task create [branch] [summary] [--harness <name>] [--status pending|reviewing]
+orange task create [branch] [summary] [--harness <name>] [--status pending|reviewing] [--effort <level>] [--review-effort <level>]
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>

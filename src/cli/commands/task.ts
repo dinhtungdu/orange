@@ -241,6 +241,10 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
   // Parse --harness flag (optional, auto-detects if not specified)
   const harnessArg = parsed.options.harness as string | undefined;
 
+  // Parse --effort and --review-effort flags (optional, harness-specific)
+  const effortArg = parsed.options.effort as string | undefined;
+  const reviewEffortArg = (parsed.options["review-effort"] as string | undefined);
+
   // Read context from stdin if --context - is passed
   let context: string | null = null;
   if (parsed.options.context === "-") {
@@ -277,7 +281,7 @@ async function createTask(parsed: ParsedArgs, deps: Deps): Promise<void> {
 
   let task: Task;
   try {
-    const result = await createTaskRecord(deps, { id: taskId, project, branch, summary, context, status, harness: harnessArg });
+    const result = await createTaskRecord(deps, { id: taskId, project, branch, summary, context, status, harness: harnessArg, effort: effortArg, review_effort: reviewEffortArg });
     task = result.task;
   } catch (err) {
     log.error("Failed to create task", { error: String(err) });

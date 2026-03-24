@@ -325,7 +325,7 @@ describe("Lazy Workspace Initialization", () => {
       project: "lazy-project",
       branch: "feature-1",
       harness: "claude",
-      review_harness: "claude",
+      review_harness: "claude", effort: null, review_effort: null,
       status: "reviewing",
       review_round: 1,
       crash_count: 0,

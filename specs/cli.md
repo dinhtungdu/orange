@@ -14,9 +14,11 @@ orange project update [name] [--pool-size <n>]  # name inferred from cwd
 orange project remove <name>
 
 # Tasks (project inferred from cwd)
-orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|agent-review|reviewing] [--project <name>]
+orange task create [branch] [summary] [--harness <name>] [--context -] [--no-spawn] [--status pending|clarification|agent-review|reviewing] [--project <name>] [--effort <level>] [--review-effort <level>]
   # branch: optional, auto-generates from task ID if empty
   # summary: optional, empty = clarification status (agent asks what to work on)
+  # --effort: reasoning effort for worker (harness-specific, e.g. claude: low/medium/high/max, pi: off/minimal/low/medium/high/xhigh)
+  # --review-effort: reasoning effort for reviewer (same values as --effort)
 orange task list [--status <status>] [--all]
 orange task spawn <task_id>
 orange task attach <task_id>
@@ -71,6 +73,7 @@ When `--json` is set:
   - If omitted: fallback to first installed (pi → opencode → claude → codex)
   - Skills should pass `--harness <name>` to identify the orchestrator
 - `--context -` reads implementation context from stdin, stored as `## Context` in body
+- `--effort` / `--review-effort` set reasoning effort level (harness-specific, stored on task, passed to spawn command)
 - `--status` sets initial status: `pending` (default), `clarification`, `agent-review`, or `reviewing`
   - `pending`: normal flow, spawns agent
   - `clarification`: for empty/vague summary, spawns agent in clarification mode
